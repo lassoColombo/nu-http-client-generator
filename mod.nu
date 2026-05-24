@@ -62,7 +62,7 @@ def extract-body-fields [schema: record] {
 }
 
 # Build the command model from a parsed+resolved spec
-def build-commands [spec_data: record, schemas: record, version: string] {
+def build-commands [spec_data: record, schemas: record, h: record] {
   $spec_data.paths | transpose path methods | each {|path_entry|
     let url_path = $path_entry.path
     let methods = $path_entry.methods
@@ -91,7 +91,7 @@ def build-commands [spec_data: record, schemas: record, version: string] {
         {
           name: ($p.name | str replace --all '-' '_')
           original_name: $p.name
-          type: (spec get-param-type $p)
+          type: (do $h.get-param-type $p)
           required: ($p.required? | default true)
         }
       }
@@ -99,15 +99,15 @@ def build-commands [spec_data: record, schemas: record, version: string] {
       let query_params = $resolved_params | where {|p| ($p.in? | default "") == "query" } | each {|p|
         {
           name: $p.name
-          type: (spec get-param-type $p)
+          type: (do $h.get-param-type $p)
           required: ($p.required? | default false)
           description: (spec get-param-description $p)
-          enum: (spec get-param-enum $p)
+          enum: (do $h.get-param-enum $p)
         }
       }
 
       # request body via spec helper
-      let body_info = (spec get-body-info $op $schemas $version)
+      let body_info = (do $h.get-body-info $op $schemas)
       let has_body = $body_info.has_body
       let body_schema = $body_info.body_schema
 
@@ -340,10 +340,10 @@ def build-body-code [cmd: record, token_env_var: string] {
 }
 
 # Render the full module file
-def render-module [spec_data: record, commands: table, spec_file: string, module_name: string] {
+def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, h: record] {
   let title = ($spec_data.info?.title? | default "api")
   let version_str = ($spec_data.info?.version? | default "0.0.0")
-  let base_url = (spec get-base-url $spec_data)
+  let base_url = (do $h.get-base-url $spec_data)
   let token_env_var = ($module_name | str upcase | str replace --all '-' '_' | str replace --all ' ' '_') + "_TOKEN"
 
   mut sections = []
@@ -455,8 +455,9 @@ def deduplicate-commands [commands: list] {
 
 # Shared pipeline: parse spec, resolve refs, build commands
 def process-spec [spec_data: record] {
-  let version = (spec detect-version $spec_data)
-  let schemas = (spec get-schemas $spec_data)
+  let info = (spec detect $spec_data)
+  let h = (spec helpers) | get $info.schema | get $info.version
+  let schemas = (do $h.get-schemas $spec_data)
 
   # resolve refs in paths
   let resolved_paths = $spec_data.paths | transpose path methods | each {|entry|
@@ -468,9 +469,9 @@ def process-spec [spec_data: record] {
   } | reduce {|it, acc| $acc | merge $it}
 
   let resolved_spec = $spec_data | upsert paths $resolved_paths
-  let commands = build-commands $resolved_spec $schemas $version
+  let commands = build-commands $resolved_spec $schemas $h
   let deduped = deduplicate-commands $commands
-  {spec: $resolved_spec, commands: $deduped}
+  {spec: $resolved_spec, commands: $deduped, helpers: $h}
 }
 
 # Preview what commands would be generated from a spec
@@ -490,17 +491,14 @@ export def main [
 ] {
   let spec_data = open $file
 
-  # validate — detect-version will error if format is unknown
-  spec detect-version $spec_data | ignore
-
   if ($spec_data.paths? | is-empty) {
     error make { msg: "not a valid spec: missing 'paths' field" }
   }
 
+  let title = if ($name | is-not-empty) { $name } else { $spec_data.info?.title? | default "api" }
   let result = process-spec $spec_data
 
-  let title = if ($name | is-not-empty) { $name } else { $spec_data.info?.title? | default "api" }
-  let output_content = render-module $result.spec $result.commands ($file | path expand | into string) $title
+  let output_content = render-module $result.spec $result.commands ($file | path expand | into string) $title $result.helpers
   let out_path = if ($output | is-not-empty) {
     $output
   } else {
