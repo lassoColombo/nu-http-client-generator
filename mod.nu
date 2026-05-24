@@ -258,6 +258,9 @@ def build-signature [cmd: record, completers: record, mapping: record] {
   $parts = ($parts | append "  --token: string")
   $parts = ($parts | append "  --auth-scheme: string")
   $parts = ($parts | append "  --insecure(-k) # Skip TLS verification")
+  $parts = ($parts | append "  --max-time(-m): duration # Timeout")
+  $parts = ($parts | append "  --raw(-r) # Fetch as text")
+  $parts = ($parts | append "  --allow-errors(-e) # Return full response without error handling")
 
   for q in $cmd.query_params {
     let nu_type = (openapi-to-nu-type $q.type)
@@ -283,13 +286,17 @@ def build-signature [cmd: record, completers: record, mapping: record] {
       let desc = if ($desc_text | is-not-empty) { $" # ($desc_text)" } else { "" }
       let sanitized_name = ($f.name | str replace --all '-' '_')
       let collides = ($sanitized_name in $path_param_names)
-      # required body fields without enum and no name collision → positional params
-      if $f.required and ($f.enum | length) == 0 and (not $collides) and ($nu_type != "bool") {
-        $parts = ($parts | append $"  ($sanitized_name): ($nu_type)($desc)")
+      let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
+      if $f.required and (not $collides) and ($nu_type != "bool") {
+        # required → positional param (with completer if enum)
+        if ($cname | is-not-empty) {
+          $parts = ($parts | append $"  ($sanitized_name): ($nu_type)@\"($cname)\"($desc)")
+        } else {
+          $parts = ($parts | append $"  ($sanitized_name): ($nu_type)($desc)")
+        }
       } else {
-        # optional, enum, bool, or name collision → flag
+        # optional, bool, or name collision → flag
         let flag_name = if $collides { $"body-(to-flag-name $f.name)" } else { to-flag-name $f.name }
-        let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
         if $nu_type == "bool" {
           $parts = ($parts | append $"  --($flag_name)($desc)")
         } else if ($cname | is-not-empty) {
@@ -354,7 +361,7 @@ def build-body-code [cmd: record, token_env_var: string] {
       let sanitized_name = ($f.name | str replace --all '-' '_')
       let collides = ($sanitized_name in $path_param_names)
       let nu_type = (openapi-to-nu-type $f.type)
-      let var_name = if $f.required and ($f.enum | length) == 0 and (not $collides) and ($nu_type != "bool") {
+      let var_name = if $f.required and (not $collides) and ($nu_type != "bool") {
         '$' + $sanitized_name
       } else {
         let flag = if $collides { 'body_' + ((to-flag-name $f.name) | str replace --all '-' '_') } else { (to-flag-name $f.name) | str replace --all '-' '_' }
@@ -366,28 +373,25 @@ def build-body-code [cmd: record, token_env_var: string] {
     $lines = ($lines | append ('  let body = {' + $body_record + '} | transpose k v | where { $in.v != null } | transpose -r -d'))
   }
 
+  $lines = ($lines | append '  let timeout = ($max_time | default 30min)')
+
   let http_method = $cmd.method
   if $http_method in ["post" "put" "patch"] {
-    let body_arg = if $cmd.has_body and ($cmd.body_fields | length) > 0 {
-      " $body"
-    } else if $cmd.has_body {
-      " $body"
-    } else {
-      " {}"
-    }
-    let base_cmd = 'http ' + $http_method + ' --headers $headers --content-type application/json --full --allow-errors'
-    $lines = ($lines | append ('  let resp = if $insecure { ' + $base_cmd + ' --insecure $full_url' + $body_arg + ' } else { ' + $base_cmd + ' $full_url' + $body_arg + ' }'))
+    let body_arg = if $cmd.has_body { " $body" } else { " {}" }
+    let base = 'http ' + $http_method + ' --headers $headers --content-type application/json --full --allow-errors --max-time $timeout'
+    $lines = ($lines | append ('  let resp = if $insecure and $raw { ' + $base + ' --insecure --raw $full_url' + $body_arg + ' } else if $insecure { ' + $base + ' --insecure $full_url' + $body_arg + ' } else if $raw { ' + $base + ' --raw $full_url' + $body_arg + ' } else { ' + $base + ' $full_url' + $body_arg + ' }'))
   } else if $http_method == "delete" {
-    $lines = ($lines | append '  let resp = if $insecure { http delete --headers $headers --full --allow-errors --insecure $full_url } else { http delete --headers $headers --full --allow-errors $full_url }')
+    let base = 'http delete --headers $headers --full --allow-errors --max-time $timeout'
+    $lines = ($lines | append ('  let resp = if $insecure and $raw { ' + $base + ' --insecure --raw $full_url } else if $insecure { ' + $base + ' --insecure $full_url } else if $raw { ' + $base + ' --raw $full_url } else { ' + $base + ' $full_url }'))
   } else {
-    let base_cmd = 'http ' + $http_method + ' --headers $headers --full --allow-errors'
-    $lines = ($lines | append ('  let resp = if $insecure { ' + $base_cmd + ' --insecure $full_url } else { ' + $base_cmd + ' $full_url }'))
+    let base = 'http ' + $http_method + ' --headers $headers --full --allow-errors --max-time $timeout'
+    $lines = ($lines | append ('  let resp = if $insecure and $raw { ' + $base + ' --insecure --raw $full_url } else if $insecure { ' + $base + ' --insecure $full_url } else if $raw { ' + $base + ' --raw $full_url } else { ' + $base + ' $full_url }'))
   }
 
   if not $cmd.returns_body {
-    $lines = ($lines | append '  if $resp.status == 204 { null } else if $resp.status >= 400 { error make { msg: $"HTTP ($resp.status)" } } else { $resp.body }')
+    $lines = ($lines | append '  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make { msg: $"HTTP ($resp.status)" } } else { $resp.body }')
   } else {
-    $lines = ($lines | append '  if $resp.status >= 400 { error make { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }')
+    $lines = ($lines | append '  if $allow_errors { $resp } else if $resp.status >= 400 { error make { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }')
   }
 
   $lines | str join "\n"
