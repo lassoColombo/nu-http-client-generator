@@ -204,7 +204,9 @@ def collect-completers [commands: list] {
   mut name_counts = {}   # flag_name -> count of distinct enum sets seen
 
   for cmd in $commands {
-    for q in $cmd.query_params {
+    # collect from query params and body fields
+    let enum_sources = ($cmd.query_params | append $cmd.body_fields)
+    for q in $enum_sources {
       if ($q.enum | length) > 0 {
         let flag_name = (to-flag-name $q.name)
         let vals = ($q.enum | each { $"($in)" } | sort)
@@ -274,7 +276,33 @@ def build-signature [cmd: record, completers: record, mapping: record] {
   }
 
   if $cmd.has_body {
-    $parts = ($parts | append "  --body: record")
+    let path_param_names = ($cmd.path_params | each {|p| $p.name })
+    for f in $cmd.body_fields {
+      let nu_type = (openapi-to-nu-type $f.type)
+      let desc_text = if ($f.description | is-not-empty) { $f.description | lines | str join " " } else { "" }
+      let desc = if ($desc_text | is-not-empty) { $" # ($desc_text)" } else { "" }
+      let sanitized_name = ($f.name | str replace --all '-' '_')
+      let collides = ($sanitized_name in $path_param_names)
+      # required body fields without enum and no name collision → positional params
+      if $f.required and ($f.enum | length) == 0 and (not $collides) and ($nu_type != "bool") {
+        $parts = ($parts | append $"  ($sanitized_name): ($nu_type)($desc)")
+      } else {
+        # optional, enum, bool, or name collision → flag
+        let flag_name = if $collides { $"body-(to-flag-name $f.name)" } else { to-flag-name $f.name }
+        let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
+        if $nu_type == "bool" {
+          $parts = ($parts | append $"  --($flag_name)($desc)")
+        } else if ($cname | is-not-empty) {
+          $parts = ($parts | append $"  --($flag_name): ($nu_type)@\"($cname)\"($desc)")
+        } else {
+          $parts = ($parts | append $"  --($flag_name): ($nu_type)($desc)")
+        }
+      }
+    }
+    # fallback: if body exists but no fields extracted, accept raw record
+    if ($cmd.body_fields | length) == 0 {
+      $parts = ($parts | append "  --body: record")
+    }
   }
 
   $parts | str join "\n"
@@ -318,9 +346,35 @@ def build-body-code [cmd: record, token_env_var: string] {
     $lines = ($lines | append '  let full_url = $url')
   }
 
+  # build body record from individual params
+  if $cmd.has_body and ($cmd.body_fields | length) > 0 {
+    let path_param_names = ($cmd.path_params | each {|p| $p.name })
+    mut body_parts = []
+    for f in $cmd.body_fields {
+      let sanitized_name = ($f.name | str replace --all '-' '_')
+      let collides = ($sanitized_name in $path_param_names)
+      let nu_type = (openapi-to-nu-type $f.type)
+      let var_name = if $f.required and ($f.enum | length) == 0 and (not $collides) and ($nu_type != "bool") {
+        '$' + $sanitized_name
+      } else {
+        let flag = if $collides { 'body_' + ((to-flag-name $f.name) | str replace --all '-' '_') } else { (to-flag-name $f.name) | str replace --all '-' '_' }
+        '$' + $flag
+      }
+      $body_parts = ($body_parts | append ($f.name + ': ' + $var_name))
+    }
+    let body_record = $body_parts | str join ", "
+    $lines = ($lines | append ('  let body = {' + $body_record + '} | transpose k v | where { $in.v != null } | transpose -r -d'))
+  }
+
   let http_method = $cmd.method
   if $http_method in ["post" "put" "patch"] {
-    let body_arg = if $cmd.has_body { " $body" } else { " {}" }
+    let body_arg = if $cmd.has_body and ($cmd.body_fields | length) > 0 {
+      " $body"
+    } else if $cmd.has_body {
+      " $body"
+    } else {
+      " {}"
+    }
     let base_cmd = 'http ' + $http_method + ' --headers $headers --content-type application/json --full --allow-errors'
     $lines = ($lines | append ('  let resp = if $insecure { ' + $base_cmd + ' --insecure $full_url' + $body_arg + ' } else { ' + $base_cmd + ' $full_url' + $body_arg + ' }'))
   } else if $http_method == "delete" {
@@ -381,18 +435,6 @@ def render-module [spec_data: record, commands: table, spec_file: string, module
     }
     let desc_lines = $desc | lines | each {|l| $"# ($l)" } | str join "\n"
     $cmd_lines = ($cmd_lines | append $desc_lines)
-
-    if $cmd.has_body and ($cmd.body_fields | length) > 0 {
-      let field_docs = $cmd.body_fields | each {|f|
-        let req = if $f.required { " (required)" } else { "" }
-        let enum_info = if ($f.enum | length) > 0 {
-          let vals = ($f.enum | each { $"($in)" } | str join ", ")
-          $" [($vals)]"
-        } else { "" }
-        $"#   ($f.name): ($f.type)($req)($enum_info)"
-      } | str join "\n"
-      $cmd_lines = ($cmd_lines | append $"# Body fields:\n($field_docs)")
-    }
 
     let sig = (build-signature $cmd $completers $mapping)
     $cmd_lines = ($cmd_lines | append $"export def \"($cmd.name)\" [")
