@@ -39,11 +39,11 @@ export def resolve-ref [val: any, schemas: record] {
   }
 }
 
-# Filter parameters: return only path/query params (version-independent)
+# Filter parameters: return path/query/header/cookie params, exclude body (version-independent)
 export def get-non-body-params [params: list] {
   $params | where {|p|
     let loc = ($p.in? | default "")
-    $loc in ["path" "query"]
+    $loc in ["path" "query" "header" "cookie"]
   }
 }
 
@@ -66,8 +66,31 @@ export def detect [spec: record] {
   }
 }
 
+# Determine default auth scheme from root-level security + parsed auth schemes (version-independent)
+export def get-default-auth [spec: record, auth_schemes: list] {
+  # try root-level security array → first referenced scheme name
+  let security = ($spec.security? | default [])
+  if ($security | length) > 0 {
+    let first_req = ($security | first)
+    if (($first_req | describe) | str starts-with "record") {
+      let ref_name = ($first_req | columns | first)
+      # find matching parsed scheme by spec_name
+      let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
+      if ($matched | length) > 0 {
+        return ($matched | first | get name)
+      }
+    }
+  }
+  # fallback: first available scheme, or "bearer"
+  if ($auth_schemes | length) > 0 {
+    $auth_schemes | first | get name
+  } else {
+    "bearer"
+  }
+}
+
 # Return the dispatch table: schema_type -> version -> helper closures.
-# Each helper set provides: get-schemas, get-base-url, get-param-type, get-param-enum, get-body-info.
+# Each helper set provides: get-schemas, get-base-url, get-param-type, get-param-enum, get-body-info, get-auth-schemes.
 export def helpers [] {
   {
     openapi: {
@@ -87,22 +110,80 @@ export def helpers [] {
         get-param-enum: {|param|
           $param.schema?.enum? | default []
         }
+        get-param-collection-style: {|param|
+          let t = ($param.schema?.type? | default "string")
+          if $t != "array" { "scalar" } else {
+            let style = ($param.style? | default "form")
+            let explode = ($param.explode? | default ($style == "form"))
+            match $style {
+              "form" => { if $explode { "multi" } else { "csv" } }
+              "spaceDelimited" => "ssv"
+              "pipeDelimited" => "pipes"
+              _ => "csv"
+            }
+          }
+        }
         get-body-info: {|op, schemas|
           let request_body = $op.requestBody?
           if ($request_body | is-empty) {
-            {has_body: false, body_schema: {}}
+            {has_body: false, body_schema: {}, content_type: "application/json"}
           } else {
             let content = ($request_body.content? | default {})
-            let json_content = ($content | get -o "application/json")
-            if ($json_content | is-not-empty) {
-              let s = $json_content.schema?
-              if ($s | is-not-empty) {
-                {has_body: true, body_schema: (resolve-ref $s $schemas)}
-              } else {
-                {has_body: true, body_schema: {}}
+            # try content types in order of preference
+            let ct_order = ["application/json" "multipart/form-data" "application/x-www-form-urlencoded"]
+            mut found_ct = null
+            mut found_schema = {}
+            for ct in $ct_order {
+              if ($found_ct == null) {
+                let ct_content = ($content | get -o $ct)
+                if ($ct_content | is-not-empty) {
+                  $found_ct = $ct
+                  let s = $ct_content.schema?
+                  if ($s | is-not-empty) {
+                    $found_schema = (resolve-ref $s $schemas)
+                  }
+                }
               }
+            }
+            if ($found_ct != null) {
+              {has_body: true, body_schema: $found_schema, content_type: $found_ct}
             } else {
-              {has_body: true, body_schema: {}}
+              # fallback: use first available content type
+              let first_ct = ($content | columns | first | default "application/json")
+              {has_body: true, body_schema: {}, content_type: $first_ct}
+            }
+          }
+        }
+        get-auth-schemes: {|spec|
+          let schemes = ($spec.components?.securitySchemes? | default {})
+          $schemes | transpose spec_name def | each {|entry|
+            let d = $entry.def
+            let desc = ($d.description? | default "")
+            if ($d.type? == "http") {
+              let s = ($d.scheme? | default "bearer") | str downcase
+              {spec_name: $entry.spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
+            } else if ($d.type? == "apiKey") {
+              let loc = ($d.in? | default "header")
+              let hdr = ($d.name? | default "Authorization")
+              if $loc == "query" {
+                {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
+              } else if $loc == "cookie" {
+                # Cookie-based API key
+                {spec_name: $entry.spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
+              } else if ($hdr | str downcase) == "authorization" {
+                # detect prefix from description
+                let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
+                let scheme_name = ($pfx | str downcase)
+                {spec_name: $entry.spec_name, name: $scheme_name, header_name: "Authorization", prefix: $pfx, in: "header"}
+              } else {
+                # custom header (e.g. PRIVATE-TOKEN)
+                let scheme_name = ($hdr | str downcase)
+                {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
+              }
+            } else if ($d.type? == "oauth2") or ($d.type? == "openIdConnect") {
+              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+            } else {
+              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
             }
           }
         }
@@ -126,17 +207,67 @@ export def helpers [] {
         get-param-enum: {|param|
           $param.enum? | default []
         }
+        get-param-collection-style: {|param|
+          let t = ($param.type? | default "string")
+          if $t != "array" { "scalar" } else {
+            let cf = ($param.collectionFormat? | default "csv")
+            match $cf { "csv" => "csv", "ssv" => "ssv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
+          }
+        }
         get-body-info: {|op, schemas|
           let params = ($op.parameters? | default [])
-          let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first | default null
-          if ($body_param | is-empty) {
-            {has_body: false, body_schema: {}}
+          # check for formData params first
+          let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
+          if ($form_params | length) > 0 {
+            # build a synthetic schema from formData params
+            let has_file = ($form_params | where {|p| ($p.type? | default "") == "file" } | length) > 0
+            let ct = if $has_file { "multipart/form-data" } else { "application/x-www-form-urlencoded" }
+            mut props = {}
+            mut required = []
+            for fp in $form_params {
+              $props = ($props | insert $fp.name {type: ($fp.type? | default "string"), description: ($fp.description? | default ""), enum: ($fp.enum? | default [])})
+              if ($fp.required? | default false) {
+                $required = ($required | append $fp.name)
+              }
+            }
+            {has_body: true, body_schema: {type: "object", properties: $props, required: $required}, content_type: $ct}
           } else {
-            let s = $body_param.schema?
-            if ($s | is-not-empty) {
-              {has_body: true, body_schema: (resolve-ref $s $schemas)}
+            let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first | default null
+            if ($body_param | is-empty) {
+              {has_body: false, body_schema: {}, content_type: "application/json"}
             } else {
-              {has_body: true, body_schema: {}}
+              let s = $body_param.schema?
+              if ($s | is-not-empty) {
+                {has_body: true, body_schema: (resolve-ref $s $schemas), content_type: "application/json"}
+              } else {
+                {has_body: true, body_schema: {}, content_type: "application/json"}
+              }
+            }
+          }
+        }
+        get-auth-schemes: {|spec|
+          let schemes = ($spec.securityDefinitions? | default {})
+          $schemes | transpose spec_name def | each {|entry|
+            let d = $entry.def
+            if ($d.type? == "basic") {
+              {spec_name: $entry.spec_name, name: "basic", header_name: "Authorization", prefix: "Basic", in: "header"}
+            } else if ($d.type? == "apiKey") {
+              let loc = ($d.in? | default "header")
+              let hdr = ($d.name? | default "Authorization")
+              if $loc == "query" {
+                {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
+              } else if ($hdr | str downcase) == "authorization" {
+                let desc = ($d.description? | default "")
+                let pfx = if ($desc =~ '(?i)bearer') { "Bearer" } else { "Bearer" }
+                {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: $pfx, in: "header"}
+              } else {
+                let scheme_name = ($hdr | str downcase)
+                {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
+              }
+            } else if ($d.type? == "oauth2") {
+              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+            } else {
+              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
             }
           }
         }
