@@ -62,19 +62,49 @@ def to-flag-name [name: string] {
 }
 
 # Extract body field info from a resolved request body schema
-def extract-body-fields [schema: record] {
+def extract-body-fields [schema: record, schemas: record] {
   # merge properties from allOf sub-schemas
   mut merged_props = ($schema.properties? | default {})
   mut merged_required = ($schema.required? | default [])
   let all_of = ($schema.allOf? | default [])
   for sub in $all_of {
-    if (($sub | describe) | str starts-with "record") {
-      let sub_props = ($sub.properties? | default {})
-      let sub_req = ($sub.required? | default [])
+    let resolved_sub = (spec resolve-ref $sub $schemas)
+    if (($resolved_sub | describe) | str starts-with "record") {
+      let sub_props = ($resolved_sub.properties? | default {})
+      let sub_req = ($resolved_sub.required? | default [])
       $merged_props = ($merged_props | merge $sub_props)
       $merged_required = ($merged_required | append $sub_req)
     }
   }
+
+  # merge properties from oneOf/anyOf variants (all marked optional)
+  let discriminator = ($schema.discriminator? | default null)
+  let disc_prop = if ($discriminator != null) { $discriminator.propertyName? | default null } else { null }
+  let poly_variants = ($schema.oneOf? | default ($schema.anyOf? | default []))
+  for variant in $poly_variants {
+    let resolved_variant = (spec resolve-ref $variant $schemas)
+    if (($resolved_variant | describe) | str starts-with "record") {
+      let v_props = ($resolved_variant.properties? | default {})
+      # merge variant props without overwriting existing
+      for col in ($v_props | columns) {
+        if not ($col in ($merged_props | columns)) {
+          $merged_props = ($merged_props | insert $col ($v_props | get $col))
+        }
+      }
+      # do NOT merge variant required — variant fields are optional since only one variant applies
+    }
+  }
+
+  # if discriminator exists, make its property required with enum of valid values
+  if ($disc_prop != null) and ($disc_prop in ($merged_props | columns)) {
+    $merged_required = ($merged_required | append $disc_prop | uniq)
+    let disc_mapping = ($discriminator.mapping? | default {})
+    if ($disc_mapping | columns | length) > 0 {
+      # use mapping keys as enum values
+      $merged_props = ($merged_props | upsert $disc_prop ($merged_props | get $disc_prop | upsert enum ($disc_mapping | columns)))
+    }
+  }
+
   let props = $merged_props
   let required = $merged_required
   $props | transpose name field_spec | where {|field|
@@ -229,16 +259,36 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
       let content_type = ($body_info.content_type? | default "application/json")
 
       let body_fields = if ($body_schema | is-not-empty) and (($body_schema | describe) | str starts-with "record") and (($body_schema | columns | length) > 0) {
-        extract-body-fields $body_schema
+        extract-body-fields $body_schema $schemas
       } else {
         []
+      }
+
+      # discriminator info from body and response schemas
+      let body_disc = ($body_schema.discriminator? | default null)
+      let responses = ($op.responses? | default {})
+      let resp_discs = $responses | transpose code resp | where {|r|
+        ($r.code | str starts-with "2") or ($r.code == "default")
+      } | each {|r|
+        # OpenAPI 3: look inside response content schemas
+        let content = ($r.resp.content? | default {})
+        let json_schema = ($content | get -o "application/json" | default {} | get -o schema | default {})
+        let resolved = (spec resolve-ref $json_schema $schemas)
+        $resolved.discriminator? | default null
+      } | where { $in != null }
+      let resp_disc = if ($resp_discs | length) > 0 { $resp_discs | first } else { null }
+      let discriminator = if ($body_disc != null) {
+        {context: "request", propertyName: ($body_disc.propertyName? | default ""), mapping: ($body_disc.mapping? | default {})}
+      } else if ($resp_disc != null) {
+        {context: "response", propertyName: ($resp_disc.propertyName? | default ""), mapping: ($resp_disc.mapping? | default {})}
+      } else {
+        null
       }
 
       # response content types for Accept header
       let accept_types = (do $h.get-response-content-types $op $spec_data)
 
       # response: does it return a body?
-      let responses = ($op.responses? | default {})
       let returns_body = if ($method == "delete") {
         let resp_204 = ($responses | get -o "204")
         ($resp_204 | is-empty)
@@ -317,6 +367,7 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         default_auth: $cmd_default_auth
         base_url: $op_base_url
         accept_types: $accept_types
+        discriminator: $discriminator
       }
     }
   } | flatten
@@ -745,6 +796,17 @@ def render-module [spec_data: record, commands: table, spec_file: string, module
 
     if $cmd.deprecated {
       $cmd_lines = ($cmd_lines | append "# DEPRECATED")
+    }
+
+    if ($cmd.discriminator != null) {
+      let d = $cmd.discriminator
+      let mapping_keys = ($d.mapping | columns)
+      if ($mapping_keys | length) > 0 {
+        let variants = $mapping_keys | str join ", "
+        $cmd_lines = ($cmd_lines | append $"# Discriminator \(($d.context)\): ($d.propertyName) = ($variants)")
+      } else {
+        $cmd_lines = ($cmd_lines | append $"# Discriminator \(($d.context)\): ($d.propertyName)")
+      }
     }
 
     let sig = (build-signature $cmd $completers $mapping)
