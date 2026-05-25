@@ -216,6 +216,9 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         []
       }
 
+      # response content types for Accept header
+      let accept_types = (do $h.get-response-content-types $op $spec_data)
+
       # response: does it return a body?
       let responses = ($op.responses? | default {})
       let returns_body = if ($method == "delete") {
@@ -295,6 +298,7 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         deprecated: $deprecated
         default_auth: $cmd_default_auth
         base_url: $op_base_url
+        accept_types: $accept_types
       }
     }
   } | flatten
@@ -309,8 +313,9 @@ def collect-completers [commands: list] {
   mut name_counts = {}   # flag_name -> count of distinct enum sets seen
 
   for cmd in $commands {
-    # collect from query params and body fields
-    let enum_sources = ($cmd.query_params | append $cmd.body_fields | append $cmd.header_params | append $cmd.cookie_params)
+    # collect from query params, body fields, and accept types
+    let accept_source = if ($cmd.accept_types | length) > 1 { [{name: "accept", enum: $cmd.accept_types}] } else { [] }
+    let enum_sources = ($cmd.query_params | append $cmd.body_fields | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
     for q in $enum_sources {
       if ($q.enum | length) > 0 {
         let flag_name = (to-flag-name $q.name)
@@ -366,6 +371,18 @@ def build-signature [cmd: record, completers: record, mapping: record] {
   $parts = ($parts | append "  --max-time(-m): duration # Timeout")
   $parts = ($parts | append "  --raw(-r) # Fetch as text")
   $parts = ($parts | append "  --allow-errors(-e) # Return full response without error handling")
+
+  # Accept header flag with completer when multiple response types
+  if ($cmd.accept_types | length) > 1 {
+    let cname = resolve-completer {name: "accept", enum: $cmd.accept_types} $mapping
+    if ($cname | is-not-empty) {
+      $parts = ($parts | append $"  --accept: string@\"($cname)\" # Response content type")
+    } else {
+      $parts = ($parts | append "  --accept: string # Response content type")
+    }
+  } else {
+    $parts = ($parts | append "  --accept: string # Response content type")
+  }
 
   for q in $cmd.query_params {
     let nu_type = (openapi-to-nu-type $q.type)
@@ -604,6 +621,11 @@ def build-body-code [cmd: record] {
     $lines = ($lines | append ('  let cookie_str = {' + $cp_record + '} | transpose k v | where { $in.v != null } | each { $"($in.k)=($in.v)" } | str join "; "'))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
+
+  # Accept header: default to first declared response type, allow override
+  let default_accept = ($cmd.accept_types | first)
+  $lines = ($lines | append ('  let accept_val = ($accept | default "' + $default_accept + '")'))
+  $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
 
   # for multipart with file fields, wrap file paths with open -r
   if $cmd.has_body and ($cmd.content_type == "multipart/form-data") and ($cmd.body_fields | length) > 0 {

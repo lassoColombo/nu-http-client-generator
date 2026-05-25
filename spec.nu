@@ -154,6 +154,14 @@ export def helpers [] {
             }
           }
         }
+        get-response-content-types: {|op, _spec|
+          let responses = ($op.responses? | default {})
+          $responses | transpose code resp | where {|r|
+            ($r.code | str starts-with "2") or ($r.code == "default")
+          } | each {|r|
+            $r.resp.content? | default {} | columns
+          } | flatten | uniq | if ($in | is-empty) { ["application/json"] } else { $in }
+        }
         get-auth-schemes: {|spec|
           let schemes = ($spec.components?.securitySchemes? | default {})
           $schemes | transpose spec_name def | each {|entry|
@@ -244,6 +252,12 @@ export def helpers [] {
               }
             }
           }
+        }
+        get-response-content-types: {|op, spec|
+          let op_produces = ($op.produces? | default [])
+          let global_produces = ($spec.produces? | default [])
+          let types = if ($op_produces | is-not-empty) { $op_produces } else { $global_produces }
+          if ($types | is-empty) { ["application/json"] } else { $types | uniq }
         }
         get-auth-schemes: {|spec|
           let schemes = ($spec.securityDefinitions? | default {})
