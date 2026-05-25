@@ -455,9 +455,9 @@ def build-signature [cmd: record, completers: record, mapping: record] {
     $parts = ($parts | append $"  ($p.name): ($nu_type)")
   }
 
-  $parts = ($parts | append "  --base-url(-b): string@\"base-url-completer\"")
-  $parts = ($parts | append "  --token(-t): string")
-  $parts = ($parts | append "  --auth-scheme(-a): string@\"auth-scheme-completer\"")
+  $parts = ($parts | append "  --base-url(-b): string@\"base-url-completer\" # API base URL")
+  $parts = ($parts | append "  --token(-t): string # Auth token")
+  $parts = ($parts | append "  --auth-scheme(-a): string@\"auth-scheme-completer\" # Auth scheme")
   $parts = ($parts | append "  --insecure(-k) # Skip TLS verification")
   $parts = ($parts | append "  --max-time(-m): duration # Timeout")
   $parts = ($parts | append "  --raw(-r) # Fetch as text")
