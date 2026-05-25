@@ -33,8 +33,23 @@ def action-verb [action: string] {
 # Nushell reserved variable names that cannot be used as flags
 const RESERVED_NAMES = [in nu nothing]
 
-# Built-in flag variable names that body/query/header fields must not shadow
-const BUILTIN_FLAGS = [base_url token auth_scheme insecure max_time raw allow_errors accept]
+# Variable names reserved in generated commands — body/query/header fields that
+# match any of these get a "body-" prefix to avoid shadowing.
+# Sources:
+#   - nushell keywords/builtins that cannot be parameter names
+#   - built-in flags from the generated signature (--raw, --token, etc.)
+#   - internal variables from the generated body code (auth, base, url, etc.)
+const RESERVED_VARS = [
+  # nushell language keywords
+  in nu nothing null true false
+  if else match for while loop break continue return
+  let mut const def export use module source overlay
+  where each error try catch not do
+  # generated signature flags
+  base_url token auth_scheme insecure max_time raw allow_errors accept
+  # generated body-code internal variables
+  auth base url qp full_url body extra_headers cookie_str accept_val
+]
 
 # Convert param names to valid nushell flag names
 def to-flag-name [name: string] {
@@ -440,7 +455,7 @@ def build-signature [cmd: record, completers: record, mapping: record] {
       let desc_text = if ($f.description | is-not-empty) { $f.description | lines | str join " " } else { "" }
       let desc = if ($desc_text | is-not-empty) { $" # ($desc_text)" } else { "" }
       let sanitized_name = ($f.name | str replace --all '-' '_' | str replace --all --regex '[\\$()\[\].*/\x27"#!@%^&+=~`]' '' | str replace --regex '_{2,}' '_' | str trim --char '_')
-      let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $BUILTIN_FLAGS) or ($sanitized_name | is-empty)
+      let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($sanitized_name | is-empty)
       let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
       let is_nullable = ($f.nullable? | default false)
       if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
@@ -584,7 +599,7 @@ def build-body-code [cmd: record] {
     mut body_parts = []
     for f in $cmd.body_fields {
       let sanitized_name = ($f.name | str replace --all '-' '_' | str replace --all --regex '[\\$()\[\].*/\x27"#!@%^&+=~`]' '' | str replace --regex '_{2,}' '_' | str trim --char '_')
-      let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $BUILTIN_FLAGS) or ($sanitized_name | is-empty)
+      let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($sanitized_name | is-empty)
       let nu_type = (openapi-to-nu-type $f.type)
       let is_nullable = ($f.nullable? | default false)
       let var_name = if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
