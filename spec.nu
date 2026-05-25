@@ -2,30 +2,51 @@
 # Version-specific logic is encapsulated in closures, looked up by schema type + version.
 # Version-independent helpers are plain exported functions.
 
-# Resolve a $ref pointer against a schemas lookup table (version-independent)
-export def resolve-ref [val: any, schemas: record] {
+# ── Module-level constants ──────────────────────────────────────────
+
+export const CT_JSON      = "application/json"
+export const CT_MULTIPART = "multipart/form-data"
+export const CT_FORM      = "application/x-www-form-urlencoded"
+export const CT_PRIORITY  = [$CT_JSON $CT_MULTIPART $CT_FORM]
+
+export const DEFAULT_HOST = "localhost"
+
+export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
+
+# ── Version-independent helpers ─────────────────────────────────────
+
+# Resolve a $ref pointer against a schemas lookup table (version-independent).
+# Tracks visited refs to break cycles.
+export def resolve-ref [val: any, schemas: record, --visited: list<string> = []] {
   let t = ($val | describe)
   if ($t | str starts-with "record") {
     if ($val | columns | any {|c| $c == "$ref" }) {
       let ref_path = ($val | get "$ref")
+      # guard: $ref must be a string
+      if not (($ref_path | describe) == "string") {
+        return $val
+      }
+      # cycle detection
+      if ($ref_path in $visited) {
+        return $val
+      }
       let schema_name = ($ref_path | split row '/' | last)
       if ($schema_name in ($schemas | columns)) {
-        $schemas | get $schema_name
+        resolve-ref ($schemas | get $schema_name) $schemas --visited ($visited | append $ref_path)
       } else {
         $val
       }
     } else {
-      # resolve refs in each column value in-place
       mut result = $val
       for col in ($val | columns) {
         let v = ($val | get $col)
         let vt = ($v | describe)
         if ($vt | str starts-with "record") {
-          $result = ($result | upsert $col (resolve-ref $v $schemas))
+          $result = ($result | upsert $col (resolve-ref $v $schemas --visited $visited))
         } else if ($vt | str starts-with "list") {
           $result = ($result | upsert $col ($v | each {|item|
             if (($item | describe) | str starts-with "record") {
-              resolve-ref $item $schemas
+              resolve-ref $item $schemas --visited $visited
             } else {
               $item
             }
@@ -39,7 +60,7 @@ export def resolve-ref [val: any, schemas: record] {
   }
 }
 
-# Filter parameters: return path/query/header/cookie params, exclude body (version-independent)
+# Filter parameters: return path/query/header/cookie params, exclude body/formData
 export def get-non-body-params [params: list] {
   $params | where {|p|
     let loc = ($p.in? | default "")
@@ -47,13 +68,12 @@ export def get-non-body-params [params: list] {
   }
 }
 
-# Get the description from a parameter (version-independent)
+# Get the description from a parameter
 export def get-param-description [param: record] {
   $param.description? | default ""
 }
 
 # Detect schema type and major version from a parsed spec.
-# Returns {schema: string, version: string} e.g. {schema: "openapi", version: "3"}
 export def detect [spec: record] {
   if ($spec.openapi? | is-not-empty) {
     let major = ($spec.openapi | split row '.' | first)
@@ -62,26 +82,23 @@ export def detect [spec: record] {
     let major = ($spec.swagger | split row '.' | first)
     {schema: "swagger", version: $major}
   } else {
-    error make { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
+    error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }
 }
 
-# Determine default auth scheme from root-level security + parsed auth schemes (version-independent)
+# Determine default auth scheme from root-level security + parsed auth schemes
 export def get-default-auth [spec: record, auth_schemes: list] {
-  # try root-level security array → first referenced scheme name
   let security = ($spec.security? | default [])
   if ($security | length) > 0 {
     let first_req = ($security | first)
     if (($first_req | describe) | str starts-with "record") {
       let ref_name = ($first_req | columns | first)
-      # find matching parsed scheme by spec_name
       let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
       if ($matched | length) > 0 {
         return ($matched | first | get name)
       }
     }
   }
-  # fallback: first available scheme, or "bearer"
   if ($auth_schemes | length) > 0 {
     $auth_schemes | first | get name
   } else {
@@ -89,8 +106,192 @@ export def get-default-auth [spec: record, auth_schemes: list] {
   }
 }
 
+# Convert an OpenAPI schema to a nushell type string.
+# Recursively builds typed records/tables. Depth-limited to avoid huge types.
+export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
+  if ($schema == null) or (not (($schema | describe) | str starts-with "record")) { return "any" }
+
+  # resolve $ref
+  if ($schema | columns | any { $in == "$ref" }) {
+    let ref_path = ($schema | get "$ref")
+    if not (($ref_path | describe) == "string") { return "any" }
+    if ($ref_path in $visited) { return "any" }  # circular ref
+    let name = ($ref_path | split row '/' | last)
+    if ($name in ($schemas | columns)) {
+      return (schema-to-nu-type ($schemas | get $name) $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
+    }
+    return "any"
+  }
+
+  # if we're past max depth, use simple types
+  let t = ($schema.type? | default null)
+  let has_props = ($schema.properties? | is-not-empty)
+  let has_allof = ($schema.allOf? | is-not-empty)
+  let has_items = ($schema.items? | is-not-empty)
+
+  if $depth >= $max_depth {
+    # simplified: no recursion into fields
+    return (match $t {
+      "array" => "list"
+      "object" => "record"
+      "string" => "string"
+      "integer" => "int"
+      "number" => "float"
+      "boolean" => "bool"
+      _ => {
+        if $has_props or $has_allof { "record" } else if $has_items { "list" } else { "any" }
+      }
+    })
+  }
+
+  match $t {
+    "array" => {
+      let items_schema = ($schema.items? | default {})
+      let item_type = (schema-to-nu-type $items_schema $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)
+      if ($item_type | str starts-with "record<") {
+        # table<fields> is nicer than list<record<fields>>
+        $"table<($item_type | str substring 7..-2)>"
+      } else {
+        $"list<($item_type)>"
+      }
+    }
+    "object" => {
+      if $has_props {
+        let fields = (build-record-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
+        if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+      } else { "record" }
+    }
+    "string" => "string"
+    "integer" => "int"
+    "number" => "float"
+    "boolean" => "bool"
+    _ => {
+      # no explicit type — infer from structure
+      if $has_allof {
+        # merge allOf properties
+        mut merged_props = ($schema.properties? | default {})
+        for sub in ($schema.allOf? | default []) {
+          let resolved = (resolve-ref $sub $schemas --visited $visited)
+          if (($resolved | describe) | str starts-with "record") {
+            $merged_props = ($merged_props | merge ($resolved.properties? | default {}))
+          }
+        }
+        if ($merged_props | columns | length) > 0 {
+          let fields = (build-record-fields $merged_props $schemas ($depth + 1) $max_depth $visited)
+          if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+        } else { "record" }
+      } else if $has_props {
+        let fields = (build-record-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
+        if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+      } else if $has_items {
+        let item_type = (schema-to-nu-type ($schema.items? | default {}) $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)
+        $"list<($item_type)>"
+      } else { "any" }
+    }
+  }
+}
+
+# Build "field1: type1, field2: type2" string from a properties map
+def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
+  $properties | transpose name prop_schema | each {|entry|
+    let field_type = (schema-to-nu-type $entry.prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
+    # sanitize field names: nushell doesn't allow special chars in record type keys
+    let safe_name = ($entry.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
+    $"($safe_name): ($field_type)"
+  } | str join ", "
+}
+
+# Resolve OA3 server URL with variable substitution
+def resolve-server-url [server: record] {
+  let url = ($server.url? | default $"http://($DEFAULT_HOST)")
+  let vars = ($server.variables? | default {})
+  if ($vars | columns | length) == 0 {
+    return $url
+  }
+  mut result = $url
+  for v in ($vars | transpose name def) {
+    let default_val = ($v.def.default? | default "")
+    $result = ($result | str replace $"{($v.name)}" $default_val)
+  }
+  $result
+}
+
+# Collect all server URLs from OA3 spec (root + path + operation level)
+def collect-oa3-urls [spec: record] {
+  mut urls = []
+  # root-level servers
+  let root_servers = ($spec.servers? | default [])
+  for s in $root_servers {
+    $urls = ($urls | append (resolve-server-url $s))
+    # also add enum variants for each variable
+    let vars = ($s.variables? | default {})
+    for v in ($vars | transpose name def) {
+      let enum_vals = ($v.def.enum? | default [])
+      for ev in $enum_vals {
+        let variant_url = ($s.url? | default "" | str replace $"{($v.name)}" $ev)
+        # resolve other vars with defaults
+        mut resolved = $variant_url
+        for v2 in ($vars | transpose name def) {
+          if $v2.name != $v.name {
+            $resolved = ($resolved | str replace $"{($v2.name)}" ($v2.def.default? | default ""))
+          }
+        }
+        $urls = ($urls | append $resolved)
+      }
+    }
+  }
+  # path-level and operation-level servers
+  let paths = ($spec.paths? | default {})
+  for entry in ($paths | transpose path methods) {
+    let path_servers = ($entry.methods.servers? | default [])
+    for s in $path_servers {
+      $urls = ($urls | append (resolve-server-url $s))
+    }
+    for m in ($entry.methods | transpose method op) {
+      if $m.method in [get post put patch delete head options] {
+        let op = $m.op
+        if (($op | describe) | str starts-with "record") {
+          let op_servers = ($op.servers? | default [])
+          for s in $op_servers {
+            $urls = ($urls | append (resolve-server-url $s))
+          }
+        }
+      }
+    }
+  }
+  $urls | uniq
+}
+
+# Build an auth scheme record from a security definition entry.
+# Handles apiKey (header/query/cookie), oauth2, and fallback cases
+# shared by both OA3 and Swagger 2 closures.
+# Returns null when the entry requires version-specific handling.
+def build-auth-scheme [entry: record] {
+  let d = $entry.def
+  let desc = ($d.description? | default "")
+  if ($d.type? == "apiKey") {
+    let loc = ($d.in? | default "header")
+    let hdr = ($d.name? | default "Authorization")
+    if $loc == "query" {
+      {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
+    } else if $loc == "cookie" {
+      {spec_name: $entry.spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
+    } else if ($hdr | str downcase) == "authorization" {
+      let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
+      let scheme_name = ($pfx | str downcase)
+      {spec_name: $entry.spec_name, name: $scheme_name, header_name: "Authorization", prefix: $pfx, in: "header"}
+    } else {
+      let scheme_name = ($hdr | str downcase)
+      {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
+    }
+  } else if ($d.type? == "oauth2") or ($d.type? == "openIdConnect") {
+    {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+  } else {
+    null
+  }
+}
+
 # Return the dispatch table: schema_type -> version -> helper closures.
-# Each helper set provides: get-schemas, get-base-url, get-param-type, get-param-enum, get-body-info, get-auth-schemes.
 export def helpers [] {
   {
     openapi: {
@@ -99,38 +300,60 @@ export def helpers [] {
           let schemas = ($spec.components?.schemas? | default {})
           let params = ($spec.components?.parameters? | default {})
           let responses = ($spec.components?.responses? | default {})
-          $schemas | merge $params | merge $responses
+          let request_bodies = ($spec.components?.requestBodies? | default {})
+          $schemas | merge $params | merge $responses | merge $request_bodies
         }
         get-base-url: {|spec|
-          $spec.servers?.0?.url? | default "http://localhost"
+          let servers = ($spec.servers? | default [])
+          if ($servers | length) > 0 {
+            resolve-server-url ($servers | first)
+          } else {
+            $"http://($DEFAULT_HOST)"
+          }
+        }
+        get-all-urls: {|spec|
+          collect-oa3-urls $spec
         }
         get-param-type: {|param|
-          $param.schema?.type? | default "string"
+          # support `content` field as alternative to `schema` (OA3 5.9)
+          if ($param.content? | is-not-empty) {
+            "string"
+          } else {
+            $param.schema?.type? | default "string"
+          }
         }
         get-param-enum: {|param|
-          $param.schema?.enum? | default []
+          if ($param.content? | is-not-empty) {
+            []
+          } else {
+            $param.schema?.enum? | default []
+          }
         }
         get-param-collection-style: {|param|
-          let t = ($param.schema?.type? | default "string")
-          if $t != "array" { "scalar" } else {
+          if ($param.content? | is-not-empty) {
+            "scalar"
+          } else {
+            let t = ($param.schema?.type? | default "string")
             let style = ($param.style? | default "form")
-            let explode = ($param.explode? | default ($style == "form"))
-            match $style {
-              "form" => { if $explode { "multi" } else { "csv" } }
-              "spaceDelimited" => "ssv"
-              "pipeDelimited" => "pipes"
-              _ => "csv"
+            if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
+              let explode = ($param.explode? | default ($style == "form"))
+              match $style {
+                "form" => { if $explode { "multi" } else { "csv" } }
+                "spaceDelimited" => "ssv"
+                "pipeDelimited" => "pipes"
+                _ => "csv"
+              }
             }
           }
         }
         get-body-info: {|op, schemas|
           let request_body = $op.requestBody?
           if ($request_body | is-empty) {
-            {has_body: false, body_schema: {}, content_type: "application/json"}
+            {has_body: false, body_schema: {}, content_type: $CT_JSON}
           } else {
-            let content = ($request_body.content? | default {})
-            # try content types in order of preference
-            let ct_order = ["application/json" "multipart/form-data" "application/x-www-form-urlencoded"]
+            let rb = (resolve-ref $request_body $schemas)
+            let content = ($rb.content? | default {})
+            let ct_order = $CT_PRIORITY
             mut found_ct = null
             mut found_schema = {}
             for ct in $ct_order {
@@ -148,8 +371,7 @@ export def helpers [] {
             if ($found_ct != null) {
               {has_body: true, body_schema: $found_schema, content_type: $found_ct}
             } else {
-              # fallback: use first available content type
-              let first_ct = ($content | columns | first | default "application/json")
+              let first_ct = ($content | columns | first | default $CT_JSON)
               {has_body: true, body_schema: {}, content_type: $first_ct}
             }
           }
@@ -157,41 +379,41 @@ export def helpers [] {
         get-response-content-types: {|op, _spec|
           let responses = ($op.responses? | default {})
           $responses | transpose code resp | where {|r|
-            ($r.code | str starts-with "2") or ($r.code == "default")
+            ($r.code | str starts-with "2") or ($r.code == "default") or ($r.code =~ '^[12][xX]{2}$')
           } | each {|r|
             $r.resp.content? | default {} | columns
-          } | flatten | uniq | if ($in | is-empty) { ["application/json"] } else { $in }
+          } | flatten | uniq | if ($in | is-empty) { [$CT_JSON] } else { $in }
+        }
+        get-response-type: {|op, spec|
+          let pure_schemas = ($spec.components?.schemas? | default {})
+          let responses = ($op.responses? | default {})
+          mut found_schema = null
+          for code in $RESPONSE_CODE_PRIORITY {
+            if ($found_schema == null) {
+              let resp = ($responses | get -o $code)
+              if ($resp | is-not-empty) {
+                let content = ($resp.content? | default {})
+                let json_media = ($content | get -o "application/json" | default {})
+                let s = ($json_media | get -o schema | default null)
+                if ($s | is-not-empty) { $found_schema = $s }
+              }
+            }
+          }
+          if ($found_schema == null) { return "any" }
+          schema-to-nu-type $found_schema $pure_schemas
         }
         get-auth-schemes: {|spec|
           let schemes = ($spec.components?.securitySchemes? | default {})
           $schemes | transpose spec_name def | each {|entry|
             let d = $entry.def
-            let desc = ($d.description? | default "")
             if ($d.type? == "http") {
               let s = ($d.scheme? | default "bearer") | str downcase
               {spec_name: $entry.spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
-            } else if ($d.type? == "apiKey") {
-              let loc = ($d.in? | default "header")
-              let hdr = ($d.name? | default "Authorization")
-              if $loc == "query" {
-                {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
-              } else if $loc == "cookie" {
-                # Cookie-based API key
-                {spec_name: $entry.spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
-              } else if ($hdr | str downcase) == "authorization" {
-                # detect prefix from description
-                let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
-                let scheme_name = ($pfx | str downcase)
-                {spec_name: $entry.spec_name, name: $scheme_name, header_name: "Authorization", prefix: $pfx, in: "header"}
-              } else {
-                # custom header (e.g. PRIVATE-TOKEN)
-                let scheme_name = ($hdr | str downcase)
-                {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
-              }
-            } else if ($d.type? == "oauth2") or ($d.type? == "openIdConnect") {
-              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
             } else {
-              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+              let shared = (build-auth-scheme $entry)
+              if ($shared != null) { $shared } else {
+                {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+              }
             }
           }
         }
@@ -200,14 +422,23 @@ export def helpers [] {
     swagger: {
       "2": {
         get-schemas: {|spec|
-          $spec.definitions? | default {}
+          let definitions = ($spec.definitions? | default {})
+          let params = ($spec.parameters? | default {})
+          let responses = ($spec.responses? | default {})
+          $definitions | merge $params | merge $responses
         }
         get-base-url: {|spec|
-          let host = ($spec.host? | default "localhost")
+          let host = ($spec.host? | default $DEFAULT_HOST)
           let base_path = ($spec.basePath? | default "")
           let schemes = ($spec.schemes? | default ["https"])
           let scheme = ($schemes | first)
           $"($scheme)://($host)($base_path)"
+        }
+        get-all-urls: {|spec|
+          let host = ($spec.host? | default $DEFAULT_HOST)
+          let base_path = ($spec.basePath? | default "")
+          let schemes = ($spec.schemes? | default ["https"])
+          $schemes | each {|s| $"($s)://($host)($base_path)" }
         }
         get-param-type: {|param|
           $param.type? | default "string"
@@ -219,17 +450,15 @@ export def helpers [] {
           let t = ($param.type? | default "string")
           if $t != "array" { "scalar" } else {
             let cf = ($param.collectionFormat? | default "csv")
-            match $cf { "csv" => "csv", "ssv" => "ssv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
+            match $cf { "csv" => "csv", "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
           }
         }
         get-body-info: {|op, schemas|
           let params = ($op.parameters? | default [])
-          # check for formData params first
           let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
           if ($form_params | length) > 0 {
-            # build a synthetic schema from formData params
             let has_file = ($form_params | where {|p| ($p.type? | default "") == "file" } | length) > 0
-            let ct = if $has_file { "multipart/form-data" } else { "application/x-www-form-urlencoded" }
+            let ct = if $has_file { $CT_MULTIPART } else { $CT_FORM }
             mut props = {}
             mut required = []
             for fp in $form_params {
@@ -242,13 +471,13 @@ export def helpers [] {
           } else {
             let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first | default null
             if ($body_param | is-empty) {
-              {has_body: false, body_schema: {}, content_type: "application/json"}
+              {has_body: false, body_schema: {}, content_type: $CT_JSON}
             } else {
               let s = $body_param.schema?
               if ($s | is-not-empty) {
-                {has_body: true, body_schema: (resolve-ref $s $schemas), content_type: "application/json"}
+                {has_body: true, body_schema: (resolve-ref $s $schemas), content_type: $CT_JSON}
               } else {
-                {has_body: true, body_schema: {}, content_type: "application/json"}
+                {has_body: true, body_schema: {}, content_type: $CT_JSON}
               }
             }
           }
@@ -257,7 +486,23 @@ export def helpers [] {
           let op_produces = ($op.produces? | default [])
           let global_produces = ($spec.produces? | default [])
           let types = if ($op_produces | is-not-empty) { $op_produces } else { $global_produces }
-          if ($types | is-empty) { ["application/json"] } else { $types | uniq }
+          if ($types | is-empty) { [$CT_JSON] } else { $types | uniq }
+        }
+        get-response-type: {|op, spec|
+          let pure_schemas = ($spec.definitions? | default {})
+          let responses = ($op.responses? | default {})
+          mut found_schema = null
+          for code in $RESPONSE_CODE_PRIORITY {
+            if ($found_schema == null) {
+              let resp = ($responses | get -o $code)
+              if ($resp | is-not-empty) {
+                let s = ($resp.schema? | default null)
+                if ($s | is-not-empty) { $found_schema = $s }
+              }
+            }
+          }
+          if ($found_schema == null) { return "any" }
+          schema-to-nu-type $found_schema $pure_schemas
         }
         get-auth-schemes: {|spec|
           let schemes = ($spec.securityDefinitions? | default {})
@@ -265,23 +510,11 @@ export def helpers [] {
             let d = $entry.def
             if ($d.type? == "basic") {
               {spec_name: $entry.spec_name, name: "basic", header_name: "Authorization", prefix: "Basic", in: "header"}
-            } else if ($d.type? == "apiKey") {
-              let loc = ($d.in? | default "header")
-              let hdr = ($d.name? | default "Authorization")
-              if $loc == "query" {
-                {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
-              } else if ($hdr | str downcase) == "authorization" {
-                let desc = ($d.description? | default "")
-                let pfx = if ($desc =~ '(?i)bearer') { "Bearer" } else { "Bearer" }
-                {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: $pfx, in: "header"}
-              } else {
-                let scheme_name = ($hdr | str downcase)
-                {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
-              }
-            } else if ($d.type? == "oauth2") {
-              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
             } else {
-              {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+              let shared = (build-auth-scheme $entry)
+              if ($shared != null) { $shared } else {
+                {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+              }
             }
           }
         }
