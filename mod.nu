@@ -116,10 +116,12 @@ def extract-body-fields [schema: record, schemas: record] {
     let desc_base = ($field.field_spec.description? | default "")
     let default_val = ($field.field_spec.default? | default null)
     let format = ($field.field_spec.format? | default null)
+    let example = ($field.field_spec.example? | default null)
     let extra = [
       (if $nullable { "nullable" } else { null })
       (if ($format != null) { $"format: ($format)" } else { null })
       (if ($default_val != null) { $"default: ($default_val)" } else { null })
+      (if ($example != null) { $"e.g. ($example)" } else { null })
     ] | where { $in != null } | str join ", "
     let desc = if ($extra | is-not-empty) and ($desc_base | is-not-empty) {
       $"($desc_base) \(($extra)\)"
@@ -208,11 +210,13 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
       let query_params = $resolved_params | where {|p| ($p.in? | default "") == "query" } | each {|p|
         let default_val = ($p.schema?.default? | default ($p.default? | default null))
         let format = ($p.schema?.format? | default ($p.format? | default null))
+        let example = ($p.schema?.example? | default ($p.example? | default null))
         let param_type = (do $h.get-param-type $p)
         let collection_style = (do $h.get-param-collection-style $p)
         let extra = [
           (if ($format != null) { $"format: ($format)" } else { null })
           (if ($default_val != null) { $"default: ($default_val)" } else { null })
+          (if ($example != null) { $"e.g. ($example)" } else { null })
         ] | where { $in != null } | str join ", "
         let desc_base = (spec get-param-description $p)
         let description = if ($extra | is-not-empty) and ($desc_base | is-not-empty) {
@@ -233,21 +237,39 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
       }
 
       let header_params = $resolved_params | where {|p| ($p.in? | default "") == "header" } | each {|p|
+        let example = ($p.schema?.example? | default ($p.example? | default null))
+        let desc_base = (spec get-param-description $p)
+        let description = if ($example != null) and ($desc_base | is-not-empty) {
+          $"($desc_base) \(e.g. ($example)\)"
+        } else if ($example != null) {
+          $"e.g. ($example)"
+        } else {
+          $desc_base
+        }
         {
           name: $p.name
           type: (do $h.get-param-type $p)
           required: ($p.required? | default false)
-          description: (spec get-param-description $p)
+          description: $description
           enum: (do $h.get-param-enum $p)
         }
       }
 
       let cookie_params = $resolved_params | where {|p| ($p.in? | default "") == "cookie" } | each {|p|
+        let example = ($p.schema?.example? | default ($p.example? | default null))
+        let desc_base = (spec get-param-description $p)
+        let description = if ($example != null) and ($desc_base | is-not-empty) {
+          $"($desc_base) \(e.g. ($example)\)"
+        } else if ($example != null) {
+          $"e.g. ($example)"
+        } else {
+          $desc_base
+        }
         {
           name: $p.name
           type: (do $h.get-param-type $p)
           required: ($p.required? | default false)
-          description: (spec get-param-description $p)
+          description: $description
           enum: (do $h.get-param-enum $p)
         }
       }
