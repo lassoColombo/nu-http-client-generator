@@ -10,10 +10,23 @@ use render.nu
 
 # Load a spec from a local file or a URL.
 # Returns {data: record, source: string} where source is the resolved path or URL.
+const INTROSPECTION_QUERY = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name description fields(includeDeprecated: true) { name description args { name description type { kind name ofType { kind name ofType { kind name } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } isDeprecated deprecationReason } inputFields { name description type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } defaultValue } interfaces { kind name } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { kind name } } } }'
+
+# Fetch a GraphQL introspection schema from an endpoint via POST.
+def load-graphql-introspection [url: string] {
+  http post --content-type "application/json" $url {query: $INTROSPECTION_QUERY}
+}
+
 def load-spec [source: string] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = (http get $source)
-    {data: $raw, source: $source}
+    let raw = try { http get $source } catch { null }
+    if ($raw != null) and (($raw.openapi? | is-not-empty) or ($raw.swagger? | is-not-empty) or ($raw.data?.__schema? | is-not-empty)) {
+      {data: $raw, source: $source}
+    } else {
+      # GET failed or returned unrecognized format — try GraphQL introspection
+      let intro = (load-graphql-introspection $source)
+      {data: $intro, source: $source}
+    }
   } else {
     {data: (open $source), source: ($source | path expand | into string)}
   }
@@ -162,16 +175,11 @@ def action-verb [action: string] {
 # Resolve PathItem-level $ref. Returns the methods record.
 def resolve-path-item [path_entry: record, schemas: record] {
   if ($path_entry.methods | columns | any {|c| $c == "$ref"}) {
-    let ref_path = ($path_entry.methods | get "$ref")
-    if (($ref_path | describe) == "string") {
-      let schema_name = ($ref_path | split row '/' | last)
-      if ($schema_name in ($schemas | columns)) {
-        $schemas | get $schema_name
-      } else {
-        $path_entry.methods
-      }
-    } else {
+    let resolved = (spec resolve-ref $path_entry.methods $schemas)
+    if ($resolved | columns | any {|c| $c == "$ref"}) {
       $path_entry.methods
+    } else {
+      $resolved
     }
   } else {
     $path_entry.methods
@@ -519,29 +527,147 @@ def deduplicate-commands [commands: list] {
   $result
 }
 
+# Build command records from a GraphQL introspection result.
+# Each top-level field on Query/Mutation becomes one command.
+def build-graphql-commands [spec_data: record, schemas: record, config: record] {
+  let schema = $spec_data.data.__schema
+  let type_index = $schemas.types
+
+  # Collect root operation types
+  mut root_types = []
+  if ($schema.queryType? != null) {
+    $root_types = ($root_types | append {op_type: "query", type_name: $schema.queryType.name})
+  }
+  if ($schema.mutationType? != null) {
+    $root_types = ($root_types | append {op_type: "mutation", type_name: $schema.mutationType.name})
+  }
+
+  mut commands = []
+  for root in $root_types {
+    let root_type = ($type_index | get -o $root.type_name)
+    if ($root_type == null) or ($root_type.fields? == null) { continue }
+
+    # Tag filter: tags for GraphQL are "Query" and "Mutation"
+    let tag = if $root.op_type == "query" { "Query" } else { "Mutation" }
+    if ($config.filter_tags | length) > 0 {
+      if $tag not-in $config.filter_tags { continue }
+    }
+
+    for field in $root_type.fields {
+      # Deprecated filter
+      if $config.exclude_deprecated and ($field.isDeprecated? | default false) { continue }
+
+      # Path/name filter: reinterpret --paths as field name prefix filter
+      let field_name_kebab = ($field.name | str replace --all --regex '([a-z])([A-Z])' '${1}-${2}' | str downcase)
+      if ($config.filter_paths | length) > 0 {
+        let matches = ($config.filter_paths | any {|p| $field_name_kebab | str starts-with $p })
+        if not $matches { continue }
+      }
+
+      # Map args to query_params
+      let args = ($field.args? | default [])
+      let query_params = ($args | each {|arg|
+        let unwrapped = (spec unwrap-gql-type $arg.type)
+        let leaf_kind = (spec gql-leaf-kind $arg.type)
+        let param_type = if $leaf_kind == "INPUT_OBJECT" { "record" } else if $leaf_kind == "ENUM" { "string" } else { spec gql-scalar-to-openapi $unwrapped.name }
+        let enum_vals = if $leaf_kind == "ENUM" {
+          let enum_type = ($type_index | get -o $unwrapped.name)
+          if ($enum_type != null) and ($enum_type.enumValues? != null) { $enum_type.enumValues | get name } else { [] }
+        } else { [] }
+        let is_required = if ($arg.defaultValue? != null) { false } else { $unwrapped.is_required }
+        {
+          name: ($arg.name | str replace --all --regex '([a-z])([A-Z])' '${1}-${2}' | str downcase)
+          original_name: $arg.name
+          type: $param_type
+          required: $is_required
+          description: ($arg.description? | default "")
+          enum: $enum_vals
+          collection_style: (if $unwrapped.is_list { "multi" } else { "scalar" })
+        }
+      })
+
+      # Compute return type
+      let return_unwrapped = (spec unwrap-gql-type $field.type)
+      let return_type = if $return_unwrapped.is_list { "list" } else {
+        let leaf_kind = (spec gql-leaf-kind $field.type)
+        if $leaf_kind == "SCALAR" { spec gql-scalar-to-openapi $return_unwrapped.name } else { "record" }
+      }
+
+      # Check if return type is scalar (no selection set needed)
+      let return_leaf_kind = (spec gql-leaf-kind $field.type)
+      let scalar_return = ($return_leaf_kind == "SCALAR" or $return_leaf_kind == "ENUM")
+
+      # Default selection: scalar fields of the return type
+      let default_selection = if $scalar_return { "" } else { spec compute-default-selection $return_unwrapped.name $type_index }
+
+      # Variable declarations for the GraphQL query header
+      let var_declarations = ($args | each {|arg|
+        $"$($arg.name): (spec gql-type-to-signature $arg.type)"
+      } | str join ", ")
+
+      let cmd_name = $"($root.op_type) ($field_name_kebab)"
+
+      $commands = ($commands | append {
+        name: $cmd_name
+        method: $"graphql-($root.op_type)"
+        path_template: ""
+        path_params: []
+        query_params: $query_params
+        header_params: []
+        cookie_params: []
+        has_body: false
+        content_type: "application/json"
+        body_fields: []
+        returns_body: true
+        description: ($field.description? | default $"GraphQL ($root.op_type): ($field.name)")
+        operation_id: $field.name
+        deprecated: ($field.isDeprecated? | default false)
+        external_docs: null
+        default_auth: "bearer"
+        base_url: null
+        accept_types: ["application/json"]
+        discriminator: null
+        return_type: $return_type
+        tags: [$tag]
+        gql_field_name: $field.name
+        gql_op_type: $root.op_type
+        gql_default_selection: $default_selection
+        gql_var_declarations: $var_declarations
+        gql_scalar_return: $scalar_return
+      })
+    }
+  }
+  $commands
+}
+
 # Shared pipeline: parse spec, resolve refs, build commands
 def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = (spec helpers) | get $info.schema | get $info.version
-  let schemas = (do $h.get-schemas $spec_data)
 
-  # No upfront path resolution — pass raw spec + schemas to build-commands.
-  # $ref resolution happens at the per-operation level inside build-commands.
-  let auth_schemes = (do $h.get-auth-schemes $spec_data)
-  let default_auth = (spec get-default-auth $spec_data $auth_schemes)
-  let base_url = (do $h.get-base-url $spec_data)
-  let all_urls = (do $h.get-all-urls $spec_data)
-  let commands = build-commands $spec_data $schemas $h $auth_schemes $default_auth $config
-  let deduped = deduplicate-commands $commands
-  {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls}
+  if $info.schema == "graphql" {
+    let schemas = (do $h.get-schemas $spec_data)
+    let commands = build-graphql-commands $spec_data $schemas $config
+    let deduped = deduplicate-commands $commands
+    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: [], default_auth: "bearer", base_url: ($config.default_base_url | default ""), all_urls: []}
+  } else {
+    let schemas = (do $h.get-schemas $spec_data)
+    let auth_schemes = (do $h.get-auth-schemes $spec_data)
+    let default_auth = (spec get-default-auth $spec_data $auth_schemes)
+    let base_url = (do $h.get-base-url $spec_data)
+    let all_urls = (do $h.get-all-urls $spec_data)
+    let commands = build-commands $spec_data $schemas $h $auth_schemes $default_auth $config
+    let deduped = deduplicate-commands $commands
+    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls}
+  }
 }
 
 # Preview what commands would be generated from a spec
 export def preview [
   source: string                # OpenAPI spec file path or URL
   --tags: list<string>          # Filter: only operations with these tags
-  --paths: list<string>         # Filter: only paths matching these prefixes
-  --methods: list<string>       # Filter: only these HTTP methods
+  --paths: list<string>         # Filter: path prefixes (REST) or field name prefixes (GraphQL)
+  --methods: list<string>       # Filter: only these HTTP methods (REST only)
   --exclude-deprecated          # Filter: skip deprecated operations
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
 ] {
@@ -550,7 +676,9 @@ export def preview [
     ($tags | default []) ($paths | default []) ($methods | default [])
     $exclude_deprecated $verb_map null null null null false false null)
   let result = process-spec $loaded.data $config
-  $result.commands | select name method path_template
+  $result.commands | each {|c|
+    {name: $c.name, method: $c.method, path_template: (if ($c.path_template | is-empty) { $c.gql_field_name? | default "" } else { $c.path_template })}
+  }
 }
 
 # Generate a Nushell HTTP client module from a spec
@@ -560,8 +688,8 @@ export def main [
   --name: string                # Override module name
   --urls(-u): list<string>      # Additional base URLs for autocompletion
   --tags: list<string>          # Filter: only operations with these tags
-  --paths: list<string>         # Filter: only paths matching these prefixes
-  --methods: list<string>       # Filter: only these HTTP methods
+  --paths: list<string>         # Filter: path prefixes (REST) or field name prefixes (GraphQL)
+  --methods: list<string>       # Filter: only these HTTP methods (REST only)
   --exclude-deprecated          # Filter: skip deprecated operations
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --token-env-var: string       # Override auto-derived token env var name
@@ -574,8 +702,15 @@ export def main [
 ] {
   let loaded = (load-spec $source)
 
-  if ($loaded.data.paths? | is-empty) {
-    error make --unspanned { msg: "not a valid spec: missing 'paths' field" }
+  let info = (spec detect $loaded.data)
+  if $info.schema == "graphql" {
+    if ($loaded.data.data?.__schema?.types? | is-empty) {
+      error make --unspanned { msg: "not a valid GraphQL introspection result: missing types" }
+    }
+  } else {
+    if ($loaded.data.paths? | is-empty) {
+      error make --unspanned { msg: "not a valid spec: missing 'paths' field" }
+    }
   }
 
   let config = (build-config
@@ -583,7 +718,7 @@ export def main [
     $exclude_deprecated $verb_map $token_env_var $default_timeout
     $default_headers $body_threshold $no_introspection $no_descriptions $default_base_url)
 
-  let title = if ($name | is-not-empty) { $name } else { $loaded.data.info?.title? | default "api" }
+  let title = if ($name | is-not-empty) { $name } else { $loaded.data.info?.title? | default ($source | path parse | get stem) }
   let result = process-spec $loaded.data $config
 
   let extra_urls = ($urls | default [] | append $result.all_urls)

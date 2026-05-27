@@ -15,6 +15,36 @@ export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
 
 # ── Version-independent helpers ─────────────────────────────────────
 
+# Look up a $ref target in a nested schemas record (keyed by namespace).
+# Parses the ref path to find the right sub-record, with fallback search.
+# Returns null if not found.
+def ref-lookup [ref_path: string, schemas: record] {
+  let parts = ($ref_path | split row '/')
+  let name = ($parts | last)
+  # OA3: #/components/{ns}/{name} (4 parts) — Swagger 2: #/{ns}/{name} (3 parts)
+  let ns = if ($parts | length) >= 4 {
+    $parts | get 2
+  } else if ($parts | length) == 3 {
+    $parts | get 1
+  } else {
+    null
+  }
+  if ($ns != null) and ($ns in ($schemas | columns)) {
+    let sub = ($schemas | get $ns)
+    if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
+      return ($sub | get $name)
+    }
+  }
+  # Fallback: search all sub-records
+  for col in ($schemas | columns) {
+    let sub = ($schemas | get $col)
+    if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
+      return ($sub | get $name)
+    }
+  }
+  null
+}
+
 # Resolve a $ref pointer against a schemas lookup table (version-independent).
 # Tracks visited refs to break cycles.
 export def resolve-ref [val: any, schemas: record, --visited: list<string> = []] {
@@ -30,9 +60,9 @@ export def resolve-ref [val: any, schemas: record, --visited: list<string> = []]
       if ($ref_path in $visited) {
         return $val
       }
-      let schema_name = ($ref_path | split row '/' | last)
-      if ($schema_name in ($schemas | columns)) {
-        resolve-ref ($schemas | get $schema_name) $schemas --visited ($visited | append $ref_path)
+      let resolved = (ref-lookup $ref_path $schemas)
+      if ($resolved != null) {
+        resolve-ref $resolved $schemas --visited ($visited | append $ref_path)
       } else {
         $val
       }
@@ -81,6 +111,8 @@ export def detect [spec: record] {
   } else if ($spec.swagger? | is-not-empty) {
     let major = ($spec.swagger | split row '.' | first)
     {schema: "swagger", version: $major}
+  } else if ($spec.data?.__schema? | is-not-empty) {
+    {schema: "graphql", version: "introspection"}
   } else {
     error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }
@@ -116,9 +148,9 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
     let ref_path = ($schema | get "$ref")
     if not (($ref_path | describe) == "string") { return "any" }
     if ($ref_path in $visited) { return "any" }  # circular ref
-    let name = ($ref_path | split row '/' | last)
-    if ($name in ($schemas | columns)) {
-      return (schema-to-nu-type ($schemas | get $name) $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
+    let resolved = (ref-lookup $ref_path $schemas)
+    if ($resolved != null) {
+      return (schema-to-nu-type $resolved $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
     }
     return "any"
   }
@@ -203,17 +235,26 @@ def build-record-fields [properties: record, schemas: record, depth: int, max_de
 
 # Resolve OA3 server URL with variable substitution
 def resolve-server-url [server: record] {
-  let url = ($server.url? | default $"http://($DEFAULT_HOST)")
+  let raw = ($server.url? | default $"http://($DEFAULT_HOST)")
   let vars = ($server.variables? | default {})
-  if ($vars | columns | length) == 0 {
-    return $url
+  let substituted = if ($vars | columns | length) == 0 {
+    $raw
+  } else {
+    mut result = $raw
+    for v in ($vars | transpose name def) {
+      let default_val = ($v.def.default? | default "")
+      $result = ($result | str replace $"{($v.name)}" $default_val)
+    }
+    $result
   }
-  mut result = $url
-  for v in ($vars | transpose name def) {
-    let default_val = ($v.def.default? | default "")
-    $result = ($result | str replace $"{($v.name)}" $default_val)
+  # Prepend localhost for relative URLs
+  let absolute = if ($substituted | str starts-with "/") {
+    $"http://($DEFAULT_HOST)($substituted)"
+  } else {
+    $substituted
   }
-  $result
+  # Remove trailing slash to avoid double-slash in constructed URLs
+  $absolute | str trim --right --char '/'
 }
 
 # Collect all server URLs from OA3 spec (root + path + operation level)
@@ -236,7 +277,8 @@ def collect-oa3-urls [spec: record] {
             $resolved = ($resolved | str replace $"{($v2.name)}" ($v2.def.default? | default ""))
           }
         }
-        $urls = ($urls | append $resolved)
+        let resolved_abs = if ($resolved | str starts-with "/") { $"http://($DEFAULT_HOST)($resolved)" } else { $resolved }
+        $urls = ($urls | append ($resolved_abs | str trim --right --char '/'))
       }
     }
   }
@@ -291,17 +333,95 @@ def build-auth-scheme [entry: record] {
   }
 }
 
+# ── GraphQL introspection helpers ───────────────────────────────────
+
+# Recursively peel NON_NULL/LIST wrappers from a GraphQL type reference.
+# Returns {name: string, is_list: bool, is_required: bool}.
+export def unwrap-gql-type [type_ref: record, is_list: bool = false, is_required: bool = false] {
+  if $type_ref.kind == "NON_NULL" {
+    if ($type_ref.ofType? != null) {
+      unwrap-gql-type $type_ref.ofType $is_list true
+    } else {
+      {name: "any", is_list: $is_list, is_required: true}
+    }
+  } else if $type_ref.kind == "LIST" {
+    if ($type_ref.ofType? != null) {
+      unwrap-gql-type $type_ref.ofType true $is_required
+    } else {
+      {name: "any", is_list: true, is_required: $is_required}
+    }
+  } else {
+    {name: $type_ref.name, is_list: $is_list, is_required: $is_required}
+  }
+}
+
+# Reconstruct GraphQL type syntax string from a type_ref for variable declarations.
+# E.g. NON_NULL(LIST(NON_NULL(SCALAR "Country"))) → "[Country!]!"
+export def gql-type-to-signature [type_ref: record] {
+  if $type_ref.kind == "NON_NULL" {
+    if ($type_ref.ofType? != null) {
+      $"(gql-type-to-signature $type_ref.ofType)!"
+    } else {
+      "any!"
+    }
+  } else if $type_ref.kind == "LIST" {
+    if ($type_ref.ofType? != null) {
+      $"[(gql-type-to-signature $type_ref.ofType)]"
+    } else {
+      "[any]"
+    }
+  } else {
+    $type_ref.name? | default "any"
+  }
+}
+
+# Map a GraphQL scalar name to an OpenAPI-style type string.
+export def gql-scalar-to-openapi [name: string] {
+  match $name {
+    "String" => "string"
+    "Int" => "integer"
+    "Float" => "number"
+    "Boolean" => "boolean"
+    "ID" => "string"
+    _ => "string"  # custom scalars default to string
+  }
+}
+
+# Walk the type chain to find the leaf's kind (SCALAR, ENUM, INPUT_OBJECT, etc.)
+export def gql-leaf-kind [type_ref: record] {
+  if $type_ref.kind == "NON_NULL" or $type_ref.kind == "LIST" {
+    if ($type_ref.ofType? != null) { gql-leaf-kind $type_ref.ofType } else { "OBJECT" }
+  } else {
+    $type_ref.kind? | default "OBJECT"
+  }
+}
+
+# Given a type name and a type index, collect scalar/enum field names at depth=1.
+export def compute-default-selection [type_name: string, type_index: record] {
+  let typ = ($type_index | get -o $type_name)
+  if ($typ == null) or ($typ.fields? == null) { return "" }
+  $typ.fields
+  | where {|f|
+    let leaf_kind = (gql-leaf-kind $f.type)
+    # Include only scalar and enum fields (not objects/interfaces/unions that need sub-selection)
+    $leaf_kind == "SCALAR" or $leaf_kind == "ENUM"
+  }
+  | get name
+  | str join " "
+}
+
 # Return the dispatch table: schema_type -> version -> helper closures.
 export def helpers [] {
   {
     openapi: {
       "3": {
         get-schemas: {|spec|
-          let schemas = ($spec.components?.schemas? | default {})
-          let params = ($spec.components?.parameters? | default {})
-          let responses = ($spec.components?.responses? | default {})
-          let request_bodies = ($spec.components?.requestBodies? | default {})
-          $schemas | merge $params | merge $responses | merge $request_bodies
+          {
+            schemas: ($spec.components?.schemas? | default {})
+            parameters: ($spec.components?.parameters? | default {})
+            responses: ($spec.components?.responses? | default {})
+            requestBodies: ($spec.components?.requestBodies? | default {})
+          }
         }
         get-base-url: {|spec|
           let servers = ($spec.servers? | default [])
@@ -385,7 +505,12 @@ export def helpers [] {
           } | flatten | uniq | if ($in | is-empty) { [$CT_JSON] } else { $in }
         }
         get-response-type: {|op, spec|
-          let pure_schemas = ($spec.components?.schemas? | default {})
+          let schemas = {
+            schemas: ($spec.components?.schemas? | default {})
+            parameters: ($spec.components?.parameters? | default {})
+            responses: ($spec.components?.responses? | default {})
+            requestBodies: ($spec.components?.requestBodies? | default {})
+          }
           let responses = ($op.responses? | default {})
           mut found_schema = null
           for code in $RESPONSE_CODE_PRIORITY {
@@ -400,7 +525,7 @@ export def helpers [] {
             }
           }
           if ($found_schema == null) { return "any" }
-          schema-to-nu-type $found_schema $pure_schemas
+          schema-to-nu-type $found_schema $schemas
         }
         get-auth-schemes: {|spec|
           let schemes = ($spec.components?.securitySchemes? | default {})
@@ -422,23 +547,24 @@ export def helpers [] {
     swagger: {
       "2": {
         get-schemas: {|spec|
-          let definitions = ($spec.definitions? | default {})
-          let params = ($spec.parameters? | default {})
-          let responses = ($spec.responses? | default {})
-          $definitions | merge $params | merge $responses
+          {
+            definitions: ($spec.definitions? | default {})
+            parameters: ($spec.parameters? | default {})
+            responses: ($spec.responses? | default {})
+          }
         }
         get-base-url: {|spec|
           let host = ($spec.host? | default $DEFAULT_HOST)
           let base_path = ($spec.basePath? | default "")
           let schemes = ($spec.schemes? | default ["https"])
           let scheme = ($schemes | first)
-          $"($scheme)://($host)($base_path)"
+          $"($scheme)://($host)($base_path)" | str trim --right --char '/'
         }
         get-all-urls: {|spec|
           let host = ($spec.host? | default $DEFAULT_HOST)
           let base_path = ($spec.basePath? | default "")
           let schemes = ($spec.schemes? | default ["https"])
-          $schemes | each {|s| $"($s)://($host)($base_path)" }
+          $schemes | each {|s| $"($s)://($host)($base_path)" | str trim --right --char '/' }
         }
         get-param-type: {|param|
           $param.type? | default "string"
@@ -489,7 +615,11 @@ export def helpers [] {
           if ($types | is-empty) { [$CT_JSON] } else { $types | uniq }
         }
         get-response-type: {|op, spec|
-          let pure_schemas = ($spec.definitions? | default {})
+          let schemas = {
+            definitions: ($spec.definitions? | default {})
+            parameters: ($spec.parameters? | default {})
+            responses: ($spec.responses? | default {})
+          }
           let responses = ($op.responses? | default {})
           mut found_schema = null
           for code in $RESPONSE_CODE_PRIORITY {
@@ -502,7 +632,7 @@ export def helpers [] {
             }
           }
           if ($found_schema == null) { return "any" }
-          schema-to-nu-type $found_schema $pure_schemas
+          schema-to-nu-type $found_schema $schemas
         }
         get-auth-schemes: {|spec|
           let schemes = ($spec.securityDefinitions? | default {})
@@ -518,6 +648,49 @@ export def helpers [] {
             }
           }
         }
+      }
+    }
+    graphql: {
+      introspection: {
+        get-schemas: {|spec|
+          let types = ($spec.data.__schema.types | where { not ($in.name | str starts-with "__") })
+          { types: ($types | reduce -f {} {|t, acc| $acc | insert $t.name $t }) }
+        }
+        get-base-url: {|spec| "" }
+        get-all-urls: {|spec| [] }
+        get-param-type: {|param|
+          # param here is a GraphQL arg record with .type field
+          let unwrapped = (unwrap-gql-type $param.type)
+          if $unwrapped.name == null { "string" }
+          else {
+            let leaf_kind = (gql-leaf-kind $param.type)
+            if $leaf_kind == "INPUT_OBJECT" { "record" }
+            else if $leaf_kind == "ENUM" { "string" }
+            else { gql-scalar-to-openapi $unwrapped.name }
+          }
+        }
+        get-param-enum: {|param, schemas|
+          let unwrapped = (unwrap-gql-type $param.type)
+          let leaf_kind = (gql-leaf-kind $param.type)
+          if $leaf_kind == "ENUM" {
+            let type_index = $schemas.types
+            let enum_type = ($type_index | get -o $unwrapped.name)
+            if ($enum_type != null) and ($enum_type.enumValues? != null) {
+              $enum_type.enumValues | get name
+            } else { [] }
+          } else { [] }
+        }
+        get-param-collection-style: {|param|
+          let unwrapped = (unwrap-gql-type $param.type)
+          if $unwrapped.is_list { "multi" } else { "scalar" }
+        }
+        get-body-info: {|op, schemas| {has_body: false, body_schema: {}, content_type: "application/json"} }
+        get-response-content-types: {|op, spec| ["application/json"] }
+        get-response-type: {|op, spec|
+          # We'll compute this at the mod.nu level instead
+          "record"
+        }
+        get-auth-schemes: {|spec| [] }
       }
     }
   }
