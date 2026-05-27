@@ -8,6 +8,48 @@
 use spec.nu
 use render.nu
 
+# Load a spec from a local file or a URL.
+# Returns {data: record, source: string} where source is the resolved path or URL.
+def load-spec [source: string] {
+  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
+    let raw = (http get $source)
+    {data: $raw, source: $source}
+  } else {
+    {data: (open $source), source: ($source | path expand | into string)}
+  }
+}
+
+# Build a normalized config record from CLI flags
+def build-config [
+  filter_tags: list
+  filter_paths: list
+  filter_methods: list
+  exclude_deprecated: bool
+  verb_map_val  # record or null
+  token_env_var_val  # string or null
+  default_timeout_val  # string or null
+  default_headers_val  # record or null
+  body_threshold_val  # int or null
+  no_introspection: bool
+  no_descriptions: bool
+  default_base_url_val  # string or null
+] {
+  {
+    filter_tags: $filter_tags
+    filter_paths: $filter_paths
+    filter_methods: ($filter_methods | each { $in | str downcase })
+    exclude_deprecated: $exclude_deprecated
+    verb_map: ($verb_map_val | default {})
+    token_env_var: $token_env_var_val
+    default_timeout: ($default_timeout_val | default "30min")
+    default_headers: ($default_headers_val | default {})
+    body_threshold: ($body_threshold_val | default 0)
+    no_introspection: $no_introspection
+    no_descriptions: $no_descriptions
+    default_base_url: $default_base_url_val
+  }
+}
+
 # Merge a base description with a list of nullable metadata annotations.
 # Filters nulls, joins with ", ", and conditionally appends to base description.
 def build-description [desc_base: string, extras: list] {
@@ -301,7 +343,7 @@ def extract-response-info [method: string, op: record, spec_data: record, h: rec
 }
 
 # Derive command name from path, method, operationId, tags, and path params.
-def derive-command-name [url_path: string, method: string, operation_id: string, tags: list, path_params: list] {
+def derive-command-name [url_path: string, method: string, operation_id: string, tags: list, path_params: list, verb_map: record] {
   let path_segments = ($url_path | split row '/' | where {|s|
     ($s | is-not-empty) and ($s != "api") and (not ($s | str starts-with "{")) and (not ($s =~ '^v\d+$'))
   })
@@ -330,8 +372,11 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     $method
   }
 
-  # camelCase operationIds starting with HTTP verb -> fall back to method
-  let action = if ($action_raw =~ '^(get|post|put|patch|delete)[A-Z]') {
+  # Apply custom verb map override, then camelCase check, then default mapping
+  let action_mapped = ($verb_map | get -o $action_raw | default null)
+  let action = if ($action_mapped != null) {
+    $action_mapped
+  } else if ($action_raw =~ '^(get|post|put|patch|delete)[A-Z]') {
     $method
   } else {
     action-verb $action_raw
@@ -355,12 +400,20 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 }
 
 # Build the command model from a parsed+resolved spec
-def build-commands [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string] {
+def build-commands [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
   $spec_data.paths | transpose path methods | each {|path_entry|
+    # PATH PREFIX FILTER
+    if ($config.filter_paths | length) > 0 {
+      let matches = ($config.filter_paths | any {|prefix| $path_entry.path | str starts-with $prefix })
+      if not $matches { return null }
+    }
+
     let methods = (resolve-path-item $path_entry $schemas)
 
     $methods | transpose method op | where {|m|
-      $m.method in [get post put patch delete head options]
+      ($m.method in [get post put patch delete head options]) and (
+        ($config.filter_methods | length) == 0 or ($m.method in $config.filter_methods)
+      )
     } | each {|method_entry|
       let method = $method_entry.method
       let op = $method_entry.op
@@ -370,11 +423,33 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         return null
       }
 
+      # TAG FILTER
+      if ($config.filter_tags | length) > 0 {
+        let op_tags = ($op.tags? | default [])
+        let has_match = ($config.filter_tags | any {|t| $t in $op_tags })
+        if not $has_match { return null }
+      }
+
       let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $methods)
+
+      # DEPRECATED FILTER
+      if $config.exclude_deprecated and $meta.deprecated {
+        return null
+      }
+
       let params = (classify-params $op $methods $schemas $h)
+      # Synthesize path params for undeclared URL template placeholders
+      let declared_originals = ($params.path_params | each {|p| $p.original_name? | default $p.name })
+      let template_placeholders = ($path_entry.path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
+      let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared_originals) } | each {|ph|
+        {name: ($ph | str replace --all '-' '_'), original_name: $ph, type: "any", required: true}
+      }
+      let params = if ($extra_path_params | is-empty) { $params } else {
+        $params | update path_params ($params.path_params | append $extra_path_params)
+      }
       let body = (extract-body-info $op $schemas $h)
       let resp = (extract-response-info $method $op $spec_data $h)
-      let cmd_name = (derive-command-name $path_entry.path $method $meta.operation_id ($op.tags? | default []) $params.path_params)
+      let cmd_name = (derive-command-name $path_entry.path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)
 
       {
         name: $cmd_name
@@ -397,9 +472,10 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         accept_types: $resp.accept_types
         discriminator: $body.discriminator
         return_type: $resp.return_type
+        tags: ($op.tags? | default [])
       }
     }
-  } | flatten | where { $in != null }
+  } | flatten | compact
 }
 
 # Deduplicate command names.
@@ -444,7 +520,7 @@ def deduplicate-commands [commands: list] {
 }
 
 # Shared pipeline: parse spec, resolve refs, build commands
-def process-spec [spec_data: record] {
+def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = (spec helpers) | get $info.schema | get $info.version
   let schemas = (do $h.get-schemas $spec_data)
@@ -455,38 +531,63 @@ def process-spec [spec_data: record] {
   let default_auth = (spec get-default-auth $spec_data $auth_schemes)
   let base_url = (do $h.get-base-url $spec_data)
   let all_urls = (do $h.get-all-urls $spec_data)
-  let commands = build-commands $spec_data $schemas $h $auth_schemes $default_auth
+  let commands = build-commands $spec_data $schemas $h $auth_schemes $default_auth $config
   let deduped = deduplicate-commands $commands
   {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls}
 }
 
 # Preview what commands would be generated from a spec
 export def preview [
-  file: path  # OpenAPI 3.x or Swagger 2.0 spec file
+  source: string                # OpenAPI spec file path or URL
+  --tags: list<string>          # Filter: only operations with these tags
+  --paths: list<string>         # Filter: only paths matching these prefixes
+  --methods: list<string>       # Filter: only these HTTP methods
+  --exclude-deprecated          # Filter: skip deprecated operations
+  --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
 ] {
-  let spec_data = open $file
-  let result = process-spec $spec_data
+  let loaded = (load-spec $source)
+  let config = (build-config
+    ($tags | default []) ($paths | default []) ($methods | default [])
+    $exclude_deprecated $verb_map null null null null false false null)
+  let result = process-spec $loaded.data $config
   $result.commands | select name method path_template
 }
 
 # Generate a Nushell HTTP client module from a spec
 export def main [
-  file: path                    # OpenAPI 3.x or Swagger 2.0 spec file
+  source: string                # OpenAPI spec file path or URL
   --output(-o): path            # Output .nu file (default: ./{title}.nu)
   --name: string                # Override module name
   --urls(-u): list<string>      # Additional base URLs for autocompletion
+  --tags: list<string>          # Filter: only operations with these tags
+  --paths: list<string>         # Filter: only paths matching these prefixes
+  --methods: list<string>       # Filter: only these HTTP methods
+  --exclude-deprecated          # Filter: skip deprecated operations
+  --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
+  --token-env-var: string       # Override auto-derived token env var name
+  --default-timeout: string     # Override default request timeout (default: 30min)
+  --default-headers: record     # Static headers added to every request
+  --body-threshold: int         # Collapse body fields to --body:record above this count
+  --no-introspection            # Omit the commands subcommand
+  --no-descriptions             # Omit parameter descriptions
+  --default-base-url: string    # Override default base URL from spec
 ] {
-  let spec_data = open $file
+  let loaded = (load-spec $source)
 
-  if ($spec_data.paths? | is-empty) {
+  if ($loaded.data.paths? | is-empty) {
     error make --unspanned { msg: "not a valid spec: missing 'paths' field" }
   }
 
-  let title = if ($name | is-not-empty) { $name } else { $spec_data.info?.title? | default "api" }
-  let result = process-spec $spec_data
+  let config = (build-config
+    ($tags | default []) ($paths | default []) ($methods | default [])
+    $exclude_deprecated $verb_map $token_env_var $default_timeout
+    $default_headers $body_threshold $no_introspection $no_descriptions $default_base_url)
+
+  let title = if ($name | is-not-empty) { $name } else { $loaded.data.info?.title? | default "api" }
+  let result = process-spec $loaded.data $config
 
   let extra_urls = ($urls | default [] | append $result.all_urls)
-  let output_content = render render-module $result.spec $result.commands ($file | path expand | into string) $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth
+  let output_content = render render-module $result.spec $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config
   let out_path = if ($output | is-not-empty) {
     $output
   } else {
