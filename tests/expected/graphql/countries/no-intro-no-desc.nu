@@ -1,0 +1,269 @@
+# Auto-generated client for countries v0.0.0
+# Source: <spec>
+# Auth: --token flag or $env.COUNTRIES_TOKEN
+
+const BASE_URL = "https://example.com/graphql"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o COUNTRIES_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
+  if not $is_list { return [$"($name)=($value)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($name)=($v)" } }
+    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
+    _ => { $value | each {|v| $"($name)=($v)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+# Unwrap a GraphQL response: extract data.{field} and surface errors
+def unwrap-graphql [resp: any, field: string] {
+  if ($resp | describe) == "string" { return $resp }
+  let errors = ($resp.errors? | default [])
+  if ($errors | length) > 0 {
+    let msgs = ($errors | each {|e| $e.message? | default "unknown error" } | str join "; ")
+    error make --unspanned { msg: $"GraphQL error: ($msgs)" }
+  }
+  $resp.data? | get -o $field | default $resp.data?
+}
+
+def bool-completer [] { ["'true'" "'false'"] }
+def base-url-completer [] { ["https://example.com/graphql"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+
+# GraphQL query: continent
+#
+# operationId: continent
+export def "query continent" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  code: string
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let variables = {"code": $code} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name" }
+    let body = {query: ("query($code: ID!) { continent(code: $code) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "continent" }
+}
+
+# GraphQL query: continents
+#
+# operationId: continents
+export def "query continents" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  --filter-code: record
+]: any -> list {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let filter = ({"code": $filter_code} | compact | if ($in | is-empty) { null } else { $in })
+  let variables = {"filter": $filter} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name" }
+    let body = {query: ("query($filter: ContinentFilterInput) { continents(filter: $filter) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "continents" }
+}
+
+# GraphQL query: countries
+#
+# operationId: countries
+export def "query countries" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  --filter-code: record
+  --filter-continent: record
+  --filter-currency: record
+  --filter-name: record
+]: any -> list {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let filter = ({"code": $filter_code, "continent": $filter_continent, "currency": $filter_currency, "name": $filter_name} | compact | if ($in | is-empty) { null } else { $in })
+  let variables = {"filter": $filter} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "awsRegion capital code currencies currency emoji emojiU name native phone phones" }
+    let body = {query: ("query($filter: CountryFilterInput) { countries(filter: $filter) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "countries" }
+}
+
+# GraphQL query: country
+#
+# operationId: country
+export def "query country" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  code: string
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let variables = {"code": $code} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "awsRegion capital code currencies currency emoji emojiU name native phone phones" }
+    let body = {query: ("query($code: ID!) { country(code: $code) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "country" }
+}
+
+# GraphQL query: language
+#
+# operationId: language
+export def "query language" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  code: string
+]: any -> record {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let variables = {"code": $code} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name native rtl" }
+    let body = {query: ("query($code: ID!) { language(code: $code) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "language" }
+}
+
+# GraphQL query: languages
+#
+# operationId: languages
+export def "query languages" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --fields: list<string> # Fields to select
+  --query: string # Raw GraphQL query (overrides auto-generated)
+  --filter-code: record
+]: any -> list {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
+  let base = ($base_url | default $BASE_URL)
+  let filter = ({"code": $filter_code} | compact | if ($in | is-empty) { null } else { $in })
+  let variables = {"filter": $filter} | compact
+  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
+  let result = if ($query | is-not-empty) {
+    let body = {query: $query, variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  } else {
+    let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name native rtl" }
+    let body = {query: ("query($filter: LanguageFilterInput) { languages(filter: $filter) { " + $sel + " } }"), variables: $variables}
+    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  }
+  if $raw or $allow_errors { $result } else { unwrap-graphql $result "languages" }
+}

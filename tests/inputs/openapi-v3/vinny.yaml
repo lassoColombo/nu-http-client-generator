@@ -1,0 +1,2541 @@
+openapi: '3.0.3'
+info:
+  title: 'vinny'
+  version: '1.38.0-q1779702605'
+  description: 'Antivirus Configuration API'
+paths:
+  '/avcfg/asset/{id}/':
+    get:
+      operationId: 'avcfg_asset_retrieve'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/Endpoint'
+          description: ''
+  '/avcfg/asset/enable/{id}/':
+    patch:
+      operationId: 'avcfg_asset_enable_partial_update'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/PatchedEndpoint'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/PatchedEndpoint'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/PatchedEndpoint'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/Endpoint'
+          description: ''
+  '/avcfg/chart/endpoints/{idrs}/':
+    get:
+      operationId: 'avcfg_chart_endpoints_list'
+      parameters:
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedChartItemList'
+          description: ''
+  /avcfg/customers/:
+    get:
+      operationId: 'avcfg_customers_list'
+      parameters:
+        - in: 'query'
+          name: 'idrs'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedCustomerList'
+          description: ''
+  '/avcfg/cynet/alerts/acknowledge/{id}/':
+    put:
+      operationId: 'avcfg_cynet_alerts_acknowledge_update'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+          required: true
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/Alert'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/Alert'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/Alert'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/Alert'
+          description: ''
+    patch:
+      operationId: 'avcfg_cynet_alerts_acknowledge_partial_update'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+          required: true
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/PatchedAlert'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/PatchedAlert'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/PatchedAlert'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/Alert'
+          description: ''
+  '/avcfg/cynet/alerts/list/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_alerts_list_list'
+      parameters:
+        - in: 'query'
+          name: 'acknowledged'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'alert_domain'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_ip'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_url'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'command_line'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'created_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'customer'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'date_changed'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'date_in__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'endpoint'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'endpoint_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'endpoint_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'eps_prevention'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'eps_prevention_success'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'file'
+          schema:
+            type: 'string'
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - in: 'query'
+          name: 'incident_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'last_seen'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'last_seen__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'last_seen__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'notified_cardinalis'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'notified_llama'
+          schema:
+            type: 'boolean'
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'path'
+          schema:
+            type: 'string'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'remediation_status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'scan_group_name'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'severity'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'solved'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'tenant'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'uniqueness'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'updated_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'user'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'user_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'username'
+          schema:
+            type: 'string'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAlertList'
+          description: ''
+  '/avcfg/cynet/alerts/list/scangroup/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_alerts_list_scangroup_list'
+      description: 'Return a list of XDR log for given IDRS'
+      summary: 'List all XDR log for a IDRS'
+      parameters:
+        - in: 'query'
+          name: 'acknowledged'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'alert_domain'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_ip'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_url'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'command_line'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'created_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'customer'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'date_changed'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'date_in__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'endpoint'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'endpoint_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'endpoint_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'eps_prevention'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'eps_prevention_success'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'file'
+          schema:
+            type: 'string'
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - in: 'query'
+          name: 'incident_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'last_seen'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'last_seen__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'last_seen__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'notified_cardinalis'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'notified_llama'
+          schema:
+            type: 'boolean'
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'path'
+          schema:
+            type: 'string'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'remediation_status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'scan_group_name'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'severity'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'solved'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'tenant'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'uniqueness'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'updated_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'user'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'user_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'username'
+          schema:
+            type: 'string'
+      tags:
+        - 'Auditing'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedBaseAlertList'
+          description: ''
+  '/avcfg/cynet/alerts/summary/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_alerts_summary_list'
+      parameters:
+        - in: 'query'
+          name: 'acknowledged'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'alert_domain'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_ip'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_url'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'command_line'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'created_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'customer'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'date_changed'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'date_in__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'endpoint'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'endpoint_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'endpoint_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'eps_prevention'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'eps_prevention_success'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'file'
+          schema:
+            type: 'string'
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - in: 'query'
+          name: 'incident_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'last_seen'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'last_seen__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'last_seen__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'notified_cardinalis'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'notified_llama'
+          schema:
+            type: 'boolean'
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'path'
+          schema:
+            type: 'string'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'remediation_status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'scan_group_name'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'severity'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'solved'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'tenant'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'uniqueness'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'updated_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'user'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'user_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'username'
+          schema:
+            type: 'string'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAlertList'
+          description: ''
+  /avcfg/cynet/carpet/active_idrs/:
+    post:
+      operationId: 'avcfg_cynet_carpet_active_idrs_create'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          description: 'No response body'
+  '/avcfg/cynet/carpet/endpoints/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_carpet_endpoints_list'
+      parameters:
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedCynetEndpointList'
+          description: ''
+  '/avcfg/cynet/endpoint/ci/{atlantis_id}/':
+    get:
+      operationId: 'avcfg_cynet_endpoint_ci_retrieve'
+      parameters:
+        - in: 'path'
+          name: 'atlantis_id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/CynetEndpoint'
+          description: ''
+  '/avcfg/cynet/endpoints/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_endpoints_list'
+      parameters:
+        - in: 'query'
+          name: 'cynet_info__last_seen_at__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'cynet_info__last_seen_at__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'hostname'
+          schema:
+            type: 'string'
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'scan_group'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'string'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedCynetEndpointList'
+          description: ''
+  '/avcfg/cynet/endpoints/alerts/summary/{idrs}/':
+    get:
+      operationId: 'avcfg_cynet_endpoints_alerts_summary_list'
+      parameters:
+        - in: 'query'
+          name: 'acknowledged'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'alert_domain'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_ip'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'alert_url'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'command_line'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'created_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'customer'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'date_changed'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'date_in__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'date_in__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'endpoint'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'endpoint_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'endpoint_type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'eps_prevention'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'eps_prevention_success'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'file'
+          schema:
+            type: 'string'
+        - in: 'path'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          required: true
+        - in: 'query'
+          name: 'incident_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'last_seen'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'last_seen__gte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'last_seen__lte'
+          schema:
+            type: 'string'
+            format: 'date'
+        - in: 'query'
+          name: 'notified_cardinalis'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'notified_llama'
+          schema:
+            type: 'boolean'
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'path'
+          schema:
+            type: 'string'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'remediation_status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'scan_group_name'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'severity'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'solved'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'status'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'tenant'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'uniqueness'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'updated_at'
+          schema:
+            type: 'string'
+            format: 'date-time'
+        - in: 'query'
+          name: 'user'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'user_name'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'username'
+          schema:
+            type: 'string'
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAlertList'
+          description: ''
+  '/avcfg/cynet/tenant/{id}/':
+    get:
+      operationId: 'avcfg_cynet_tenant_retrieve'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/CynetTenant'
+          description: ''
+    put:
+      operationId: 'avcfg_cynet_tenant_update'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+        required: true
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/CynetTenant'
+          description: ''
+    patch:
+      operationId: 'avcfg_cynet_tenant_partial_update'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'integer'
+          required: true
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/PatchedCynetTenant'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/PatchedCynetTenant'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/PatchedCynetTenant'
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/CynetTenant'
+          description: ''
+  /avcfg/cynet/tenant/create/:
+    post:
+      operationId: 'avcfg_cynet_tenant_create_create'
+      tags:
+        - 'avcfg'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/CynetTenant'
+        required: true
+      security:
+        - ElmecServiceOIDC: []
+        - ElmecOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/CynetTenant'
+          description: ''
+components:
+  schemas:
+    Alert:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        endpoint_name:
+          type: 'string'
+          readOnly: true
+        endpoint_id:
+          type: 'string'
+          readOnly: true
+        user_name:
+          type: 'string'
+          readOnly: true
+        user_id:
+          type: 'string'
+          readOnly: true
+        mapped_status:
+          type: 'string'
+          readOnly: true
+        endpoint_atlantis_id:
+          type: 'string'
+          readOnly: true
+        solved:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        created_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        updated_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        uniqueness:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        incident_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        eps_prevention:
+          type: 'boolean'
+          nullable: true
+        eps_prevention_success:
+          type: 'string'
+          nullable: true
+          maxLength: 100
+        path:
+          type: 'string'
+          nullable: true
+        command_line:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_ip:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_domain:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_url:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        username:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        severity:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_type:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        date_in:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        date_changed:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        remediation_status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        scan_group_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        file:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        acknowledged:
+          type: 'boolean'
+        notified_llama:
+          type: 'boolean'
+        notified_cardinalis:
+          type: 'boolean'
+        customer:
+          type: 'integer'
+          nullable: true
+      required:
+        - 'created_at'
+        - 'endpoint_atlantis_id'
+        - 'endpoint_id'
+        - 'endpoint_name'
+        - 'id'
+        - 'mapped_status'
+        - 'solved'
+        - 'type'
+        - 'updated_at'
+        - 'user_id'
+        - 'user_name'
+    BaseAlert:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        endpoint_name:
+          type: 'string'
+          readOnly: true
+        mapped_status:
+          type: 'string'
+          readOnly: true
+        solved:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        created_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        updated_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        uniqueness:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        incident_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        eps_prevention:
+          type: 'boolean'
+          nullable: true
+        eps_prevention_success:
+          type: 'string'
+          nullable: true
+          maxLength: 100
+        path:
+          type: 'string'
+          nullable: true
+        command_line:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_ip:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_domain:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_url:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        severity:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_type:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        date_in:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        date_changed:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        remediation_status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        scan_group_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        file:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        notified_cardinalis:
+          type: 'boolean'
+      required:
+        - 'created_at'
+        - 'endpoint_name'
+        - 'id'
+        - 'mapped_status'
+        - 'solved'
+        - 'type'
+        - 'updated_at'
+    ChartItem:
+      type: 'object'
+      properties:
+        key:
+          type: 'string'
+          readOnly: true
+        total:
+          type: 'integer'
+          readOnly: true
+      required:
+        - 'key'
+        - 'total'
+    Customer:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          maxLength: 200
+        enable:
+          type: 'boolean'
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        incharge_group:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+      required:
+        - 'id'
+        - 'idrs'
+    CynetEndpoint:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          enum:
+            - 'SRV'
+            - 'PC'
+            - 'MOB'
+          type: 'string'
+          description: "* `SRV` - server\n* `PC` - computer\n* `MOB` - mobile"
+          x-spec-enum-id: 'd0eed439a8dc77cf'
+        hostname:
+          type: 'string'
+          maxLength: 200
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        health_status:
+          enum:
+            - 'GOOD'
+            - 'WARN'
+            - 'BAD'
+            - null
+          type: 'string'
+          description: "* `GOOD` - good\n* `WARN` - warning\n* `BAD` - bad"
+          x-spec-enum-id: '77426f6c3ffb70b2'
+          nullable: true
+        active_av:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        person_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        via_login:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        atlantis_id:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+      required:
+        - 'additional_info'
+        - 'hostname'
+        - 'id'
+        - 'type'
+    CynetTenant:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+        cynet_info:
+          '$ref': '#/components/schemas/TenantInfo'
+        customer:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'customer'
+        - 'cynet_info'
+        - 'id'
+    CynetTenantList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+        cynet_info:
+          '$ref': '#/components/schemas/TenantInfo'
+        customer:
+          type: 'string'
+          readOnly: true
+        asset_count:
+          type: 'string'
+          readOnly: true
+        created_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+      required:
+        - 'asset_count'
+        - 'created_at'
+        - 'customer'
+        - 'cynet_info'
+        - 'id'
+    Endpoint:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          enum:
+            - 'SRV'
+            - 'PC'
+            - 'MOB'
+          type: 'string'
+          description: "* `SRV` - server\n* `PC` - computer\n* `MOB` - mobile"
+          x-spec-enum-id: 'd0eed439a8dc77cf'
+        hostname:
+          type: 'string'
+          maxLength: 200
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        health_status:
+          enum:
+            - 'GOOD'
+            - 'WARN'
+            - 'BAD'
+            - null
+          type: 'string'
+          description: "* `GOOD` - good\n* `WARN` - warning\n* `BAD` - bad"
+          x-spec-enum-id: '77426f6c3ffb70b2'
+          nullable: true
+        active_av:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        person_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        via_login:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        atlantis_id:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+      required:
+        - 'additional_info'
+        - 'hostname'
+        - 'id'
+        - 'type'
+    JobInfo:
+      type: 'object'
+      properties:
+        job_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        last_run:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+    PaginatedAlertList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Alert'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Alert'
+    PaginatedBaseAlertList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/BaseAlert'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/BaseAlert'
+    PaginatedChartItemList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ChartItem'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ChartItem'
+    PaginatedCustomerList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Customer'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Customer'
+    PaginatedCynetEndpointList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/CynetEndpoint'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/CynetEndpoint'
+    PaginatedCynetTenantListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/CynetTenantList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/CynetTenantList'
+    PaginatedEndpointList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Endpoint'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Endpoint'
+    PaginatedSophosEndpointList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/SophosEndpoint'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/SophosEndpoint'
+    PaginatedTenantList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Tenant'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Tenant'
+    PaginatedThresholdList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Threshold'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Threshold'
+    PatchedAlert:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        endpoint_name:
+          type: 'string'
+          readOnly: true
+        endpoint_id:
+          type: 'string'
+          readOnly: true
+        user_name:
+          type: 'string'
+          readOnly: true
+        user_id:
+          type: 'string'
+          readOnly: true
+        mapped_status:
+          type: 'string'
+          readOnly: true
+        endpoint_atlantis_id:
+          type: 'string'
+          readOnly: true
+        solved:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        created_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        updated_at:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+        uniqueness:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        incident_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        eps_prevention:
+          type: 'boolean'
+          nullable: true
+        eps_prevention_success:
+          type: 'string'
+          nullable: true
+          maxLength: 100
+        path:
+          type: 'string'
+          nullable: true
+        command_line:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_ip:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_domain:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_url:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        username:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        severity:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        alert_type:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        date_in:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        date_changed:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        remediation_status:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        scan_group_name:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        file:
+          type: 'string'
+          nullable: true
+          maxLength: 500
+        acknowledged:
+          type: 'boolean'
+        notified_llama:
+          type: 'boolean'
+        notified_cardinalis:
+          type: 'boolean'
+        customer:
+          type: 'integer'
+          nullable: true
+    PatchedCynetTenant:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+        cynet_info:
+          '$ref': '#/components/schemas/TenantInfo'
+        customer:
+          type: 'string'
+          readOnly: true
+    PatchedEndpoint:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          enum:
+            - 'SRV'
+            - 'PC'
+            - 'MOB'
+          type: 'string'
+          description: "* `SRV` - server\n* `PC` - computer\n* `MOB` - mobile"
+          x-spec-enum-id: 'd0eed439a8dc77cf'
+        hostname:
+          type: 'string'
+          maxLength: 200
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        health_status:
+          enum:
+            - 'GOOD'
+            - 'WARN'
+            - 'BAD'
+            - null
+          type: 'string'
+          description: "* `GOOD` - good\n* `WARN` - warning\n* `BAD` - bad"
+          x-spec-enum-id: '77426f6c3ffb70b2'
+          nullable: true
+        active_av:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        person_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        via_login:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        atlantis_id:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+    PatchedTenant:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        av_provider:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+    SingleInfo:
+      type: 'object'
+      properties:
+        value:
+          type: 'string'
+      required:
+        - 'value'
+    SophosEndpoint:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          enum:
+            - 'SRV'
+            - 'PC'
+            - 'MOB'
+          type: 'string'
+          description: "* `SRV` - server\n* `PC` - computer\n* `MOB` - mobile"
+          x-spec-enum-id: 'd0eed439a8dc77cf'
+        hostname:
+          type: 'string'
+          maxLength: 200
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+          nullable: true
+        health_status:
+          enum:
+            - 'GOOD'
+            - 'WARN'
+            - 'BAD'
+            - null
+          type: 'string'
+          description: "* `GOOD` - good\n* `WARN` - warning\n* `BAD` - bad"
+          x-spec-enum-id: '77426f6c3ffb70b2'
+          nullable: true
+        active_av:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        person_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        via_login:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        atlantis_id:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+      required:
+        - 'additional_info'
+        - 'hostname'
+        - 'id'
+        - 'type'
+    Tenant:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        av_provider:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        additional_info:
+          type: 'string'
+          readOnly: true
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+      required:
+        - 'additional_info'
+        - 'id'
+    TenantInfo:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        tenant_id:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        client_id:
+          type: 'string'
+          maxLength: 200
+        shared:
+          type: 'boolean'
+        source:
+          type: 'string'
+          nullable: true
+          maxLength: 20
+        is_older_item_monitored:
+          type: 'boolean'
+      required:
+        - 'client_id'
+        - 'id'
+    Threshold:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          maxLength: 64
+        chart:
+          type: 'string'
+          maxLength: 64
+        value:
+          type: 'number'
+          format: 'double'
+        label:
+          type: 'string'
+          maxLength: 64
+      required:
+        - 'chart'
+        - 'id'
+        - 'idrs'
+        - 'label'
+        - 'value'
+    ZimperiumTenant:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        enable:
+          type: 'boolean'
+          nullable: true
+        note:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        alert:
+          type: 'boolean'
+          nullable: true
+        discovery:
+          type: 'boolean'
+          nullable: true
+        zimperium_info:
+          '$ref': '#/components/schemas/TenantInfo'
+        customer:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'customer'
+        - 'id'
+        - 'zimperium_info'
+  securitySchemes:
+    ElmecOIDC:
+      type: 'apiKey'
+      in: 'header'
+      name: 'Authorization'
+      description: 'Token-based authentication with required prefix "JWT"'
+    ElmecServiceOIDC:
+      type: 'http'
+      scheme: 'bearer'
+      bearerFormat: 'JWT'
+    ElmecStaticToken:
+      type: 'apiKey'
+      in: 'header'
+      name: 'Authorization'
+      description: 'Token-based authentication with required prefix "STATIC"'
+servers:
+  - url: 'https://avcfg.k8s.elmec.ad'
+    description: 'vinny server'

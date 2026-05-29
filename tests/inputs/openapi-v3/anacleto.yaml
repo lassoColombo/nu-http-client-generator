@@ -1,0 +1,3346 @@
+openapi: '3.0.3'
+info:
+  title: 'anacleto'
+  version: '0.0.0'
+  description: 'Anacleto API for Continuous Vulnerability Assessment (CVA) management'
+paths:
+  /api/carpet/v1/active_idrs/:
+    post:
+      operationId: 'api_carpet_v1_active_idrs_create'
+      summary: 'Get active IDRS list'
+      tags:
+        - 'Carpet'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          description: 'No response body'
+  '/api/carpet/v1/asset_list/idrs/{IDRS}/':
+    get:
+      operationId: 'api_carpet_v1_asset_list_idrs_list'
+      summary: 'Get asset list for customer'
+      parameters:
+        - in: 'path'
+          name: 'IDRS'
+          schema:
+            type: 'string'
+            pattern: '^[^/]+$'
+          required: true
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+      tags:
+        - 'Carpet'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedHostList'
+          description: ''
+  '/api/carpet/v1/host/idrs/{IDRS}/':
+    get:
+      operationId: 'api_carpet_v1_host_idrs_retrieve'
+      summary: 'Get host vulnerabilities for customer'
+      parameters:
+        - in: 'path'
+          name: 'IDRS'
+          schema:
+            type: 'string'
+            pattern: '^[^/]+$'
+          required: true
+      tags:
+        - 'Carpet'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          description: 'No response body'
+  '/api/delivery/v1/apikeys/idrs/{IDRS}/':
+    get:
+      operationId: 'api_delivery_v1_apikeys_idrs_retrieve'
+      summary: 'Return customer api key'
+      parameters:
+        - in: 'path'
+          name: 'IDRS'
+          schema:
+            type: 'string'
+            pattern: '^[^/]+$'
+          required: true
+      tags:
+        - 'API Keys'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          description: 'No response body'
+  /api/delivery/v1/asset/:
+    get:
+      operationId: 'api_delivery_v1_asset_list'
+      summary: 'Asset list'
+      parameters:
+        - in: 'query'
+          name: 'address'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'idrs'
+          schema:
+            type: 'string'
+          description: 'IDRS'
+        - in: 'query'
+          name: 'is_active'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'is_public'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'is_scannable'
+          schema:
+            type: 'boolean'
+        - in: 'query'
+          name: 'name'
+          schema:
+            type: 'string'
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - in: 'query'
+          name: 'scanner_name'
+          schema:
+            type: 'string'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+        - in: 'query'
+          name: 'tag'
+          schema:
+            type: 'string'
+          description: 'Tag'
+        - in: 'query'
+          name: 'type'
+          schema:
+            type: 'array'
+            items:
+              type: 'string'
+              x-spec-enum-id: 'ae4a435707be3114'
+              enum:
+                - 'CI'
+                - 'CUSTOM'
+                - 'DEFAULT'
+                - 'HOSTNAME'
+                - 'NETWORK'
+          description: "* `CI` - CI\n* `NETWORK` - NETWORK\n* `CUSTOM` - CUSTOM\n* `DEFAULT` - DEFAULT\n* `HOSTNAME` - HOSTNAME"
+          explode: true
+          style: 'form'
+      tags:
+        - 'Asset'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAssetListList'
+          description: ''
+  /api/delivery/v1/asset-tag/create/:
+    post:
+      operationId: 'api_delivery_v1_asset_tag_create_create'
+      summary: 'Add new asset tag'
+      tags:
+        - 'Asset Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/AssetTagCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/AssetTagCreate'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/AssetTagCreate'
+        required: true
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetTagCreate'
+          description: ''
+  '/api/delivery/v1/asset-tag/delete/{id}/':
+    delete:
+      operationId: 'api_delivery_v1_asset_tag_delete_destroy'
+      summary: 'Delete asset tag'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset Tag'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '204':
+          description: 'No response body'
+  '/api/delivery/v1/asset-tag/edit/{id}/':
+    put:
+      operationId: 'api_delivery_v1_asset_tag_edit_update'
+      summary: 'Edit asset tag'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset Tag'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/AssetTagEdit'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/AssetTagEdit'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/AssetTagEdit'
+        required: true
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetTagEdit'
+          description: ''
+  '/api/delivery/v1/asset-tag/idrs/{IDRS}/':
+    get:
+      operationId: 'api_delivery_v1_asset_tag_idrs_list'
+      summary: 'Get asset Tag for Customer'
+      parameters:
+        - in: 'path'
+          name: 'IDRS'
+          schema:
+            type: 'string'
+            pattern: '^[^/]+$'
+          required: true
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+      tags:
+        - 'Asset Tag'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAssetTagList'
+          description: ''
+  /api/delivery/v1/asset/create/:
+    post:
+      operationId: 'api_delivery_v1_asset_create_create'
+      summary: 'Add new asset'
+      tags:
+        - 'Asset'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/AssetCreation'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/AssetCreation'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/AssetCreation'
+        required: true
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetCreation'
+          description: ''
+  '/api/delivery/v1/asset/deactivate/{id}/':
+    post:
+      operationId: 'api_delivery_v1_asset_deactivate_create'
+      summary: 'Deactivate asset'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          description: 'No response body'
+  '/api/delivery/v1/asset/delete/{id}/':
+    delete:
+      operationId: 'api_delivery_v1_asset_delete_destroy'
+      summary: 'Delete asset'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '204':
+          description: 'No response body'
+  '/api/delivery/v1/asset/details/{id}/':
+    get:
+      operationId: 'api_delivery_v1_asset_details_retrieve'
+      summary: 'Get asset attribute'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetDetails'
+          description: ''
+    put:
+      operationId: 'api_delivery_v1_asset_details_update'
+      summary: 'Edit asset attribute'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/AssetDetails'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/AssetDetails'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/AssetDetails'
+        required: true
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetDetails'
+          description: ''
+  '/api/delivery/v1/asset/idrs/{IDRS}/':
+    get:
+      operationId: 'api_delivery_v1_asset_idrs_list'
+      summary: 'Get asset for Customer'
+      parameters:
+        - in: 'path'
+          name: 'IDRS'
+          schema:
+            type: 'string'
+            pattern: '^[^/]+$'
+          required: true
+        - name: 'ordering'
+          required: false
+          in: 'query'
+          description: 'Which field to use when ordering the results.'
+          schema:
+            type: 'string'
+        - name: 'page'
+          required: false
+          in: 'query'
+          description: 'A page number within the paginated result set.'
+          schema:
+            type: 'integer'
+        - name: 'per_page'
+          required: false
+          in: 'query'
+          description: 'Number of results to return per page.'
+          schema:
+            type: 'integer'
+        - name: 'search'
+          required: false
+          in: 'query'
+          description: 'A search term.'
+          schema:
+            type: 'string'
+      tags:
+        - 'Asset'
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/PaginatedAssetOptionsList'
+          description: ''
+  '/api/delivery/v1/asset/whitelist/{id}/':
+    post:
+      operationId: 'api_delivery_v1_asset_whitelist_create'
+      summary: 'Add whitelist for the asset'
+      parameters:
+        - in: 'path'
+          name: 'id'
+          schema:
+            type: 'string'
+            pattern: '^\d+$'
+          required: true
+      tags:
+        - 'Asset'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              '$ref': '#/components/schemas/AssetWhitelist'
+          application/x-www-form-urlencoded:
+            schema:
+              '$ref': '#/components/schemas/AssetWhitelist'
+          multipart/form-data:
+            schema:
+              '$ref': '#/components/schemas/AssetWhitelist'
+        required: true
+      security:
+        - ElmecOIDC: []
+        - ElmecServiceOIDC: []
+        - ElmecStaticToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                '$ref': '#/components/schemas/AssetWhitelist'
+          description: ''
+components:
+  schemas:
+    ActiveVulnerabilities:
+      type: 'object'
+      properties:
+        plugin_name:
+          type: 'string'
+        cvss:
+          type: 'number'
+          format: 'double'
+        severity:
+          enum:
+            - 4
+            - 3
+            - 2
+            - 1
+            - 0
+          type: 'integer'
+          description: "* `4` - CRITICAL\n* `3` - HIGH\n* `2` - MEDIUM\n* `1` - LOW\n* `0` - INFO"
+          x-spec-enum-id: '0746085f695ff3fd'
+          minimum: 0
+          maximum: 32767
+        severity_label:
+          type: 'string'
+        host:
+          type: 'string'
+        ip:
+          type: 'string'
+        exploit_available:
+          type: 'boolean'
+        plugin_family_name:
+          type: 'string'
+        first_seen:
+          type: 'string'
+          format: 'date-time'
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+      required:
+        - 'cvss'
+        - 'exploit_available'
+        - 'first_seen'
+        - 'host'
+        - 'ip'
+        - 'last_seen'
+        - 'plugin_family_name'
+        - 'plugin_name'
+        - 'severity'
+        - 'severity_label'
+    Asset:
+      type: 'object'
+      properties:
+        tenable_id:
+          type: 'array'
+          items: {}
+        ip:
+          type: 'string'
+        atlantis_id:
+          type: 'string'
+        has_vulns:
+          type: 'boolean'
+        total:
+          type: 'string'
+        vulns:
+          type: 'object'
+          additionalProperties: {}
+      required:
+        - 'atlantis_id'
+        - 'has_vulns'
+        - 'ip'
+        - 'tenable_id'
+        - 'total'
+        - 'vulns'
+    AssetCreation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+        name:
+          type: 'string'
+        is_scannable:
+          type: 'boolean'
+        scanner_id:
+          type: 'integer'
+        type:
+          enum:
+            - 'HOSTNAME'
+            - 'CUSTOM'
+          type: 'string'
+          description: "* `HOSTNAME` - HOSTNAME\n* `CUSTOM` - CUSTOM"
+          x-spec-enum-id: '0609b99c00db8baf'
+        address:
+          type: 'array'
+          items: {}
+        tag_id:
+          type: 'integer'
+          nullable: true
+      required:
+        - 'address'
+        - 'id'
+        - 'idrs'
+        - 'is_scannable'
+        - 'name'
+        - 'scanner_id'
+        - 'type'
+    AssetDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        name:
+          type: 'string'
+        is_scannable:
+          type: 'boolean'
+        is_public:
+          type: 'boolean'
+          readOnly: true
+        location:
+          type: 'string'
+          readOnly: true
+        atlantis_id:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        is_active:
+          type: 'boolean'
+        type:
+          enum:
+            - 'HOSTNAME'
+            - 'CUSTOM'
+            - 'CI'
+            - 'NETWORK'
+          type: 'string'
+          description: "* `HOSTNAME` - HOSTNAME\n* `CUSTOM` - CUSTOM\n* `CI` - CI\n* `NETWORK` - NETWORK"
+          x-spec-enum-id: '9e55db32fe79b640'
+        address:
+          type: 'array'
+          items: {}
+        has_whitelist:
+          type: 'string'
+          readOnly: true
+        whitelist:
+          type: 'string'
+          readOnly: true
+        scanner_name:
+          type: 'string'
+          readOnly: true
+        scanner_id:
+          type: 'integer'
+        number_of_host:
+          type: 'string'
+          readOnly: true
+        error:
+          type: 'string'
+          nullable: true
+          maxLength: 1000
+        tag:
+          type: 'string'
+          readOnly: true
+        tag_id:
+          type: 'integer'
+          nullable: true
+      required:
+        - 'address'
+        - 'has_whitelist'
+        - 'id'
+        - 'idrs'
+        - 'is_public'
+        - 'is_scannable'
+        - 'location'
+        - 'name'
+        - 'number_of_host'
+        - 'scanner_id'
+        - 'scanner_name'
+        - 'tag'
+        - 'type'
+        - 'whitelist'
+    AssetList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        name:
+          type: 'string'
+        is_scannable:
+          type: 'string'
+          readOnly: true
+        scanner_name:
+          type: 'string'
+          readOnly: true
+        is_public:
+          type: 'boolean'
+        is_active:
+          type: 'boolean'
+          readOnly: true
+        location:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+        address:
+          type: 'array'
+          items: {}
+        has_whitelist:
+          type: 'string'
+          readOnly: true
+        error:
+          type: 'string'
+          nullable: true
+          maxLength: 1000
+        tag:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'address'
+        - 'has_whitelist'
+        - 'id'
+        - 'idrs'
+        - 'is_active'
+        - 'is_scannable'
+        - 'location'
+        - 'name'
+        - 'scanner_name'
+        - 'tag'
+        - 'type'
+    AssetOptions:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+      required:
+        - 'id'
+        - 'name'
+    AssetTag:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        name:
+          type: 'string'
+      required:
+        - 'id'
+        - 'name'
+    AssetTagCreate:
+      type: 'object'
+      properties:
+        idrs:
+          type: 'string'
+        name:
+          type: 'string'
+      required:
+        - 'idrs'
+        - 'name'
+    AssetTagEdit:
+      type: 'object'
+      properties:
+        name:
+          type: 'string'
+      required:
+        - 'name'
+    AssetWhitelist:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        ips:
+          type: 'array'
+          items: {}
+        creation_comment:
+          enum:
+            - 'Under decommissioning'
+            - 'Risk transferred'
+            - 'Risk accepted'
+          type: 'string'
+          description: "* `Under decommissioning` - Under decommissioning\n* `Risk transferred` - Risk transferred\n* `Risk accepted` - Risk accepted"
+          x-spec-enum-id: '5cfbc3ef5b04f3c7'
+        expiration_date:
+          type: 'string'
+          format: 'date'
+        description:
+          type: 'string'
+      required:
+        - 'creation_comment'
+        - 'id'
+        - 'ips'
+    Customer:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          maxLength: 64
+        is_cva_activated:
+          type: 'boolean'
+        licenses:
+          type: 'integer'
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        is_cva_ticket_activated:
+          type: 'boolean'
+        is_cva_report_activated:
+          type: 'boolean'
+        total_vulns:
+          type: 'string'
+          readOnly: true
+        scanned_ip:
+          type: 'string'
+          readOnly: true
+        tenable_instance:
+          type: 'string'
+          readOnly: true
+        tenable_instance_url:
+          type: 'string'
+          readOnly: true
+        report_conf:
+          type: 'integer'
+          nullable: true
+        ticket_conf:
+          type: 'integer'
+          nullable: true
+      required:
+        - 'id'
+        - 'idrs'
+        - 'scanned_ip'
+        - 'tenable_instance'
+        - 'tenable_instance_url'
+        - 'total_vulns'
+    CustomerCreate:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+        licenses:
+          type: 'integer'
+          maximum: 5000
+          minimum: 1
+        is_spot:
+          type: 'boolean'
+      required:
+        - 'id'
+        - 'idrs'
+        - 'is_spot'
+        - 'licenses'
+    CustomerDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        licenses:
+          type: 'integer'
+          maximum: 5000
+          minimum: 1
+        freeze_window:
+          type: 'string'
+          readOnly: true
+        is_cva_activated:
+          type: 'boolean'
+        is_cva_ticket_activated:
+          type: 'boolean'
+        is_cva_report_activated:
+          type: 'boolean'
+        total_vulns:
+          type: 'string'
+          readOnly: true
+        scanned_ip:
+          type: 'string'
+          readOnly: true
+        report_conf:
+          type: 'integer'
+          nullable: true
+        ticket_conf:
+          type: 'integer'
+          nullable: true
+        tenable_instance:
+          type: 'string'
+          readOnly: true
+        tenable_instance_url:
+          type: 'string'
+          readOnly: true
+        is_spot:
+          type: 'boolean'
+      required:
+        - 'freeze_window'
+        - 'id'
+        - 'idrs'
+        - 'is_cva_activated'
+        - 'is_cva_report_activated'
+        - 'is_cva_ticket_activated'
+        - 'licenses'
+        - 'scanned_ip'
+        - 'tenable_instance'
+        - 'tenable_instance_url'
+        - 'total_vulns'
+    CustomerEnrolled:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          maxLength: 64
+      required:
+        - 'id'
+        - 'idrs'
+    Excel:
+      type: 'object'
+      properties:
+        severity:
+          type: 'array'
+          items:
+            type: 'integer'
+        item_list:
+          type: 'array'
+          items:
+            type: 'integer'
+        report_type:
+          enum:
+            - 'G'
+            - 'M'
+          type: 'string'
+          description: "* `G` - G\n* `M` - M"
+          x-spec-enum-id: '40ba0d038258ded7'
+        source:
+          enum:
+            - 'active'
+            - 'patched'
+            - 'whitelisted'
+          type: 'string'
+          description: "* `active` - active\n* `patched` - patched\n* `whitelisted` - whitelisted"
+          x-spec-enum-id: '6f2a612877d88e4f'
+        item_type:
+          enum:
+            - 'SCANNER'
+            - 'TAG'
+          type: 'string'
+          description: "* `SCANNER` - SCANNER\n* `TAG` - TAG"
+          x-spec-enum-id: '70d1a55028c2b4aa'
+      required:
+        - 'item_list'
+        - 'item_type'
+        - 'report_type'
+        - 'severity'
+        - 'source'
+    ExclusionConfCreation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+        scanner_id:
+          type: 'integer'
+        type:
+          enum:
+            - 'DA'
+            - 'DR'
+          type: 'string'
+          description: "* `DA` - Default accept\n* `DR` - Default reject"
+          x-spec-enum-id: '71e24df306b4ea79'
+      required:
+        - 'id'
+        - 'idrs'
+        - 'scanner_id'
+        - 'type'
+    ExclusionConfDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          enum:
+            - 'DA'
+            - 'DR'
+          type: 'string'
+          description: "* `DA` - Default accept\n* `DR` - Default reject"
+          x-spec-enum-id: '71e24df306b4ea79'
+      required:
+        - 'id'
+        - 'type'
+    ExclusionConfList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+        scanner_name:
+          type: 'string'
+        scanner_location:
+          type: 'string'
+      required:
+        - 'id'
+        - 'idrs'
+        - 'type'
+    ExclusionDefCreation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        exclusion_conf_id:
+          type: 'integer'
+        creation_comment:
+          enum:
+            - 'Printer'
+            - 'Critical server'
+            - 'Client'
+            - 'VOIP'
+            - 'Management'
+            - 'IOT'
+            - 'SCADA'
+            - 'Customer Test'
+          type: 'string'
+          description: "* `Printer` - Printer\n* `Critical server` - Critical server\n* `Client` - Client\n* `VOIP` - VOIP\n* `Management` - Management\n* `IOT` - IOT\n* `SCADA` - SCADA\n* `Customer Test` - Customer Test"
+          x-spec-enum-id: '72fcdb30178302b4'
+        definitions:
+          type: 'array'
+          items: {}
+        type:
+          enum:
+            - 'accept'
+            - 'reject'
+          type: 'string'
+          description: "* `accept` - accept\n* `reject` - reject"
+          x-spec-enum-id: '5f16d67796b09e01'
+        description:
+          type: 'string'
+          nullable: true
+      required:
+        - 'creation_comment'
+        - 'definitions'
+        - 'exclusion_conf_id'
+        - 'id'
+        - 'type'
+    ExclusionDefDeactivate:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        deactivation_comment:
+          enum:
+            - 'Change ip destination'
+            - 'Test ended'
+            - 'Server upgraded'
+          type: 'string'
+          description: "* `Change ip destination` - Change ip destination\n* `Test ended` - Test ended\n* `Server upgraded` - Server upgraded"
+          x-spec-enum-id: '156025fac32955d4'
+      required:
+        - 'deactivation_comment'
+        - 'id'
+    ExclusionDefDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        creation_comment:
+          enum:
+            - 'Printer'
+            - 'Critical server'
+            - 'Client'
+            - 'VOIP'
+            - 'Management'
+            - 'IOT'
+            - 'SCADA'
+            - 'Customer Test'
+          type: 'string'
+          description: "* `Printer` - Printer\n* `Critical server` - Critical server\n* `Client` - Client\n* `VOIP` - VOIP\n* `Management` - Management\n* `IOT` - IOT\n* `SCADA` - SCADA\n* `Customer Test` - Customer Test"
+          x-spec-enum-id: '72fcdb30178302b4'
+        deactivation_comment:
+          enum:
+            - 'Change ip destination'
+            - 'Test ended'
+            - 'Server upgraded'
+            - ''
+            - null
+          type: 'string'
+          description: "* `Change ip destination` - Change ip destination\n* `Test ended` - Test ended\n* `Server upgraded` - Server upgraded"
+          x-spec-enum-id: '156025fac32955d4'
+          nullable: true
+        definitions:
+          type: 'array'
+          items: {}
+        type:
+          enum:
+            - 'accept'
+            - 'reject'
+          type: 'string'
+          description: "* `accept` - accept\n* `reject` - reject"
+          x-spec-enum-id: '5f16d67796b09e01'
+        is_active:
+          type: 'boolean'
+        description:
+          type: 'string'
+          nullable: true
+      required:
+        - 'definitions'
+        - 'id'
+    ExclusionDefList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        creation_comment:
+          enum:
+            - 'Printer'
+            - 'Critical server'
+            - 'Client'
+            - 'VOIP'
+            - 'Management'
+            - 'IOT'
+            - 'SCADA'
+            - 'Customer Test'
+          type: 'string'
+          description: "* `Printer` - Printer\n* `Critical server` - Critical server\n* `Client` - Client\n* `VOIP` - VOIP\n* `Management` - Management\n* `IOT` - IOT\n* `SCADA` - SCADA\n* `Customer Test` - Customer Test"
+          x-spec-enum-id: '72fcdb30178302b4'
+        type:
+          enum:
+            - 'accept'
+            - 'reject'
+          type: 'string'
+          description: "* `accept` - accept\n* `reject` - reject"
+          x-spec-enum-id: '5f16d67796b09e01'
+        definitions:
+          type: 'string'
+        is_active:
+          type: 'boolean'
+        description:
+          type: 'string'
+          nullable: true
+      required:
+        - 'creation_comment'
+        - 'definitions'
+        - 'id'
+        - 'type'
+    ExclusionForCustomer:
+      type: 'object'
+      properties:
+        scanner:
+          type: 'string'
+        exclusion_definitions:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'exclusion_definitions'
+        - 'scanner'
+    FreezeWindow:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        type:
+          enum:
+            - 'SCANNER'
+            - 'PUBLIC'
+          type: 'string'
+          description: "* `SCANNER` - SCANNER\n* `PUBLIC` - PUBLIC"
+          x-spec-enum-id: '76991d4a188166b6'
+        days:
+          type: 'string'
+        start_time:
+          type: 'string'
+          format: 'time'
+          readOnly: true
+        end_time:
+          type: 'string'
+          format: 'time'
+          readOnly: true
+        scanner_name:
+          type: 'string'
+          readOnly: true
+        is_active:
+          type: 'boolean'
+        description:
+          type: 'string'
+          nullable: true
+      required:
+        - 'days'
+        - 'end_time'
+        - 'id'
+        - 'idrs'
+        - 'scanner_name'
+        - 'start_time'
+        - 'type'
+    FreezeWindowCreate:
+      type: 'object'
+      properties:
+        idrs:
+          type: 'string'
+        type:
+          enum:
+            - 'SCANNER'
+            - 'PUBLIC'
+          type: 'string'
+          description: "* `SCANNER` - SCANNER\n* `PUBLIC` - PUBLIC"
+          x-spec-enum-id: '76991d4a188166b6'
+        days:
+          type: 'array'
+          items: {}
+        start_time:
+          type: 'string'
+          format: 'time'
+        end_time:
+          type: 'string'
+          format: 'time'
+        scanner_id:
+          type: 'integer'
+        description:
+          type: 'string'
+      required:
+        - 'days'
+        - 'end_time'
+        - 'idrs'
+        - 'start_time'
+        - 'type'
+    FreezeWindowDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        type:
+          enum:
+            - 'SCANNER'
+            - 'PUBLIC'
+          type: 'string'
+          description: "* `SCANNER` - SCANNER\n* `PUBLIC` - PUBLIC"
+          x-spec-enum-id: '76991d4a188166b6'
+        days:
+          type: 'array'
+          items: {}
+        start_time:
+          type: 'string'
+          format: 'time'
+        end_time:
+          type: 'string'
+          format: 'time'
+        scanner_name:
+          type: 'string'
+          readOnly: true
+        is_active:
+          type: 'boolean'
+        description:
+          type: 'string'
+          nullable: true
+      required:
+        - 'days'
+        - 'end_time'
+        - 'id'
+        - 'idrs'
+        - 'scanner_name'
+        - 'start_time'
+        - 'type'
+    Host:
+      type: 'object'
+      properties:
+        host_ip:
+          type: 'string'
+        os:
+          type: 'string'
+        atlantis_id:
+          type: 'integer'
+        netbios:
+          type: 'string'
+        dns:
+          type: 'string'
+        cve_list:
+          type: 'array'
+          items:
+            type: 'string'
+        max_severity:
+          type: 'integer'
+      required:
+        - 'atlantis_id'
+        - 'cve_list'
+        - 'dns'
+        - 'host_ip'
+        - 'max_severity'
+        - 'netbios'
+        - 'os'
+    InChargeOfRules:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        content:
+          type: 'string'
+          readOnly: true
+        type:
+          enum:
+            - 'CPE'
+            - 'OS'
+            - 'PLUGIN_ID'
+            - 'PLUGIN_NAME'
+          type: 'string'
+          description: "* `CPE` - CPE\n* `OS` - OS\n* `PLUGIN_ID` - PLUGIN_ID\n* `PLUGIN_NAME` - PLUGIN_NAME"
+          x-spec-enum-id: '35d4cd0eff468c85'
+        rules:
+          enum:
+            - 'Not linux or windows'
+            - 'Windows'
+            - 'Not legacy'
+            - 'Service Block'
+            - ''
+            - null
+          type: 'string'
+          description: "* `Not linux or windows` - Not linux or windows\n* `Windows` - Windows\n* `Not legacy` - Not legacy\n* `Service Block` - Service Block"
+          x-spec-enum-id: 'f61f22a8b890a378'
+          nullable: true
+        is_active:
+          type: 'boolean'
+      required:
+        - 'content'
+        - 'id'
+        - 'idrs'
+        - 'type'
+    InChargeOfRulesCreation:
+      type: 'object'
+      properties:
+        idrs:
+          type: 'string'
+          nullable: true
+        cpe_name:
+          type: 'string'
+          nullable: true
+        omit_patch_classification:
+          type: 'boolean'
+          nullable: true
+        rules:
+          enum:
+            - 'Not linux or windows'
+            - 'Windows'
+            - 'Not legacy'
+            - 'Service Block'
+            - ''
+            - null
+          type: 'string'
+          description: "* `Not linux or windows` - Not linux or windows\n* `Windows` - Windows\n* `Not legacy` - Not legacy\n* `Service Block` - Service Block"
+          x-spec-enum-id: 'f61f22a8b890a378'
+          nullable: true
+        plugin_id:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        type:
+          enum:
+            - 'CPE'
+            - 'OS'
+            - 'PLUGIN_ID'
+            - 'PLUGIN_NAME'
+          type: 'string'
+          description: "* `CPE` - CPE\n* `OS` - OS\n* `PLUGIN_ID` - PLUGIN_ID\n* `PLUGIN_NAME` - PLUGIN_NAME"
+          x-spec-enum-id: '35d4cd0eff468c85'
+        service_block:
+          type: 'string'
+          nullable: true
+          maxLength: 100
+        os:
+          type: 'string'
+          nullable: true
+          maxLength: 150
+        plugin_name:
+          type: 'string'
+          nullable: true
+          maxLength: 200
+        description:
+          type: 'string'
+          nullable: true
+        creation_comment:
+          enum:
+            - 'Under management'
+            - 'Exception'
+          type: 'string'
+          description: "* `Under management` - Under management\n* `Exception` - Exception"
+          x-spec-enum-id: 'bb2c1da245cd2172'
+      required:
+        - 'creation_comment'
+        - 'type'
+    InChargeOfRulesDeactivation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        deactivation_comment:
+          enum:
+            - 'Error'
+            - 'No longer managed'
+          type: 'string'
+          description: "* `Error` - Error\n* `No longer managed` - No longer managed"
+          x-spec-enum-id: '6a08019a62e9c918'
+      required:
+        - 'deactivation_comment'
+        - 'id'
+    InChargeOfRulesDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        content:
+          type: 'string'
+          readOnly: true
+        type:
+          enum:
+            - 'CPE'
+            - 'OS'
+            - 'PLUGIN_ID'
+            - 'PLUGIN_NAME'
+          type: 'string'
+          description: "* `CPE` - CPE\n* `OS` - OS\n* `PLUGIN_ID` - PLUGIN_ID\n* `PLUGIN_NAME` - PLUGIN_NAME"
+          x-spec-enum-id: '35d4cd0eff468c85'
+        rules:
+          enum:
+            - 'Not linux or windows'
+            - 'Windows'
+            - 'Not legacy'
+            - 'Service Block'
+            - ''
+            - null
+          type: 'string'
+          description: "* `Not linux or windows` - Not linux or windows\n* `Windows` - Windows\n* `Not legacy` - Not legacy\n* `Service Block` - Service Block"
+          x-spec-enum-id: 'f61f22a8b890a378'
+          nullable: true
+        is_active:
+          type: 'boolean'
+        creation_comment:
+          enum:
+            - 'Under management'
+            - 'Exception'
+          type: 'string'
+          description: "* `Under management` - Under management\n* `Exception` - Exception"
+          x-spec-enum-id: 'bb2c1da245cd2172'
+        description:
+          type: 'string'
+          nullable: true
+        deactivation_comment:
+          enum:
+            - 'Error'
+            - 'No longer managed'
+            - ''
+            - null
+          type: 'string'
+          description: "* `Error` - Error\n* `No longer managed` - No longer managed"
+          x-spec-enum-id: '6a08019a62e9c918'
+          nullable: true
+        service_block:
+          type: 'string'
+          nullable: true
+          maxLength: 100
+        omit_patch_classification:
+          type: 'boolean'
+          default: false
+        plugin_id:
+          type: 'integer'
+        plugin_name:
+          type: 'string'
+        cpe_name:
+          type: 'string'
+        os:
+          type: 'string'
+      required:
+        - 'content'
+        - 'id'
+        - 'idrs'
+    LastTrendlineActiveVulnsDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        high_customer:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        high_elmec:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        high_total:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        critical_customer:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        critical_elmec:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        critical_total:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        medium_customer:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        medium_elmec:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        medium_total:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        low_customer:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        low_elmec:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        low_total:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        total_customer:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        total_elmec:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+        total:
+          type: 'integer'
+          maximum: 2147483647
+          minimum: 0
+      required:
+        - 'critical_customer'
+        - 'critical_elmec'
+        - 'critical_total'
+        - 'high_customer'
+        - 'high_elmec'
+        - 'high_total'
+        - 'id'
+        - 'medium_customer'
+        - 'medium_elmec'
+        - 'medium_total'
+        - 'total'
+        - 'total_customer'
+        - 'total_elmec'
+    MostVulnerableAsset:
+      type: 'object'
+      properties:
+        critical:
+          type: 'integer'
+        high:
+          type: 'integer'
+        medium:
+          type: 'integer'
+        low:
+          type: 'integer'
+        host_ip:
+          type: 'string'
+      required:
+        - 'critical'
+        - 'high'
+        - 'host_ip'
+        - 'low'
+        - 'medium'
+    PaginatedActiveVulnerabilitiesList:
+      type: 'object'
+      properties:
+        per_page:
+          type: 'integer'
+          nullable: true
+          example: 123
+        next_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=4'
+        prev_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=2'
+        current_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        from_item:
+          type: 'integer'
+          nullable: true
+          example: 42
+        last_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        data:
+          type: 'array'
+          items:
+            '$ref': '#/components/schemas/ActiveVulnerabilities'
+    PaginatedAssetListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/AssetList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/AssetList'
+    PaginatedAssetOptionsList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/AssetOptions'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/AssetOptions'
+    PaginatedAssetTagList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/AssetTag'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/AssetTag'
+    PaginatedCustomerEnrolledList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/CustomerEnrolled'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/CustomerEnrolled'
+    PaginatedCustomerList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Customer'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Customer'
+    PaginatedExclusionConfListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ExclusionConfList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ExclusionConfList'
+    PaginatedExclusionDefListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ExclusionDefList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ExclusionDefList'
+    PaginatedFreezeWindowList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/FreezeWindow'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/FreezeWindow'
+    PaginatedHostList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Host'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Host'
+    PaginatedInChargeOfRulesList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/InChargeOfRules'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/InChargeOfRules'
+    PaginatedPolicyOptionsList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/PolicyOptions'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/PolicyOptions'
+    PaginatedRecentPatchedList:
+      type: 'object'
+      properties:
+        per_page:
+          type: 'integer'
+          nullable: true
+          example: 123
+        next_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=4'
+        prev_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=2'
+        current_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        from_item:
+          type: 'integer'
+          nullable: true
+          example: 42
+        last_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        data:
+          type: 'array'
+          items:
+            '$ref': '#/components/schemas/RecentPatched'
+    PaginatedRecentVulnerabilityList:
+      type: 'object'
+      properties:
+        per_page:
+          type: 'integer'
+          nullable: true
+          example: 123
+        next_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=4'
+        prev_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=2'
+        current_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        from_item:
+          type: 'integer'
+          nullable: true
+          example: 42
+        last_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        data:
+          type: 'array'
+          items:
+            '$ref': '#/components/schemas/RecentVulnerability'
+    PaginatedReportConfigList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ReportConfig'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ReportConfig'
+    PaginatedScanList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Scan'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Scan'
+    PaginatedScannerListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ScannerList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ScannerList'
+    PaginatedScannerOptionsList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/ScannerOptions'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/ScannerOptions'
+    PaginatedVulnerabilitiesList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/Vulnerabilities'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/Vulnerabilities'
+    PaginatedVulnerabilitiesPerAssetList:
+      type: 'object'
+      properties:
+        per_page:
+          type: 'integer'
+          nullable: true
+          example: 123
+        next_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=4'
+        prev_page_url:
+          type: 'string'
+          nullable: true
+          format: 'uri'
+          example: 'http://api.example.org/accounts/?page=2'
+        current_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        from_item:
+          type: 'integer'
+          nullable: true
+          example: 42
+        last_page:
+          type: 'integer'
+          nullable: true
+          example: 42
+        data:
+          type: 'array'
+          items:
+            '$ref': '#/components/schemas/VulnerabilitiesPerAsset'
+    PaginatedWhitelistListList:
+      oneOf:
+        - type: 'object'
+          title: 'PaginatedInfo'
+          properties:
+            total:
+              type: 'integer'
+              example: 123
+            last_page:
+              type: 'integer'
+              example: 358
+            per_page:
+              type: 'integer'
+              example: 10
+            current_page:
+              type: 'integer'
+              example: 1
+            from:
+              type: 'integer'
+              example: 1
+            to:
+              type: 'integer'
+              example: 1
+            next_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=4'
+            prev_page_url:
+              type: 'string'
+              nullable: true
+              format: 'uri'
+              example: 'http://api.example.org/accounts/?page=2'
+            data:
+              type: 'array'
+              items:
+                '$ref': '#/components/schemas/WhitelistList'
+        - type: 'array'
+          items:
+            '$ref': '#/components/schemas/WhitelistList'
+    PolicyOptions:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        type:
+          type: 'string'
+      required:
+        - 'id'
+        - 'type'
+    PublicOpenPortForCustomer:
+      type: 'object'
+      properties:
+        port:
+          type: 'string'
+        critical_vuln:
+          type: 'string'
+          readOnly: true
+        high_vuln:
+          type: 'string'
+          readOnly: true
+        other_vuln:
+          type: 'string'
+          readOnly: true
+        severity:
+          type: 'integer'
+      required:
+        - 'critical_vuln'
+        - 'high_vuln'
+        - 'other_vuln'
+        - 'port'
+        - 'severity'
+    RecentPatched:
+      type: 'object'
+      properties:
+        plugin_name:
+          type: 'string'
+        severity:
+          enum:
+            - 4
+            - 3
+            - 2
+            - 1
+            - 0
+          type: 'integer'
+          description: "* `4` - CRITICAL\n* `3` - HIGH\n* `2` - MEDIUM\n* `1` - LOW\n* `0` - INFO"
+          x-spec-enum-id: '0746085f695ff3fd'
+          minimum: 0
+          maximum: 32767
+        severity_label:
+          type: 'string'
+        cvss:
+          type: 'number'
+          format: 'double'
+        host:
+          type: 'string'
+        ip:
+          type: 'string'
+        first_seen:
+          type: 'string'
+          format: 'date-time'
+        patched_on:
+          type: 'string'
+          format: 'date-time'
+          readOnly: true
+      required:
+        - 'cvss'
+        - 'first_seen'
+        - 'host'
+        - 'ip'
+        - 'patched_on'
+        - 'plugin_name'
+        - 'severity'
+        - 'severity_label'
+    RecentVulnerability:
+      type: 'object'
+      properties:
+        plugin_name:
+          type: 'string'
+        severity:
+          enum:
+            - 4
+            - 3
+            - 2
+            - 1
+            - 0
+          type: 'integer'
+          description: "* `4` - CRITICAL\n* `3` - HIGH\n* `2` - MEDIUM\n* `1` - LOW\n* `0` - INFO"
+          x-spec-enum-id: '0746085f695ff3fd'
+          minimum: 0
+          maximum: 32767
+        severity_label:
+          type: 'string'
+        host:
+          type: 'string'
+        ip:
+          type: 'string'
+        exploit_available:
+          type: 'boolean'
+        first_seen:
+          type: 'string'
+          format: 'date-time'
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+        cvss:
+          type: 'number'
+          format: 'double'
+      required:
+        - 'cvss'
+        - 'exploit_available'
+        - 'first_seen'
+        - 'host'
+        - 'ip'
+        - 'last_seen'
+        - 'plugin_name'
+        - 'severity'
+        - 'severity_label'
+    ReportConfig:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        send_email:
+          type: 'boolean'
+        severity:
+          type: 'string'
+        report_type:
+          enum:
+            - 'Scanner'
+            - 'Tag'
+            - 'Single file'
+          type: 'string'
+          description: "* `Scanner` - Scanner\n* `Tag` - Tag\n* `Single file` - Single file"
+          x-spec-enum-id: '5922c15f29cc6a8b'
+      required:
+        - 'id'
+        - 'severity'
+    ReportConfigEdit:
+      type: 'object'
+      properties:
+        send_email:
+          type: 'boolean'
+        severity:
+          type: 'array'
+          items:
+            type: 'integer'
+        report_type:
+          enum:
+            - 'Scanner'
+            - 'Tag'
+            - 'Single file'
+          type: 'string'
+          description: "* `Scanner` - Scanner\n* `Tag` - Tag\n* `Single file` - Single file"
+          x-spec-enum-id: '5922c15f29cc6a8b'
+      required:
+        - 'report_type'
+        - 'send_email'
+        - 'severity'
+    Scan:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        is_scheduled:
+          type: 'boolean'
+        is_public:
+          type: 'boolean'
+          readOnly: true
+        is_authenticated:
+          type: 'boolean'
+        is_active:
+          type: 'boolean'
+        location:
+          type: 'string'
+          readOnly: true
+        name:
+          type: 'string'
+        timezone:
+          type: 'string'
+          readOnly: true
+        scan_schedule:
+          type: 'string'
+          readOnly: true
+        asset_id:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'asset_id'
+        - 'id'
+        - 'idrs'
+        - 'is_public'
+        - 'location'
+        - 'name'
+        - 'scan_schedule'
+        - 'timezone'
+    ScanCreation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+        repeat_every:
+          type: 'integer'
+        days:
+          type: 'array'
+          items: {}
+        name:
+          type: 'string'
+        schedule:
+          type: 'string'
+          format: 'date-time'
+        frequency:
+          enum:
+            - 'Once'
+            - 'Weekly'
+          type: 'string'
+          description: "* `Once` - Once\n* `Weekly` - Weekly"
+          x-spec-enum-id: 'c5764578547cd542'
+        policy_id:
+          type: 'integer'
+        asset_id:
+          type: 'integer'
+      required:
+        - 'asset_id'
+        - 'frequency'
+        - 'id'
+        - 'idrs'
+        - 'name'
+        - 'policy_id'
+        - 'schedule'
+    ScanDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        name:
+          type: 'string'
+        asset_id:
+          type: 'integer'
+        is_active:
+          type: 'boolean'
+        days:
+          type: 'array'
+          items: {}
+        repeat_every:
+          type: 'integer'
+        asset_name:
+          type: 'string'
+          readOnly: true
+        is_scheduled:
+          type: 'boolean'
+        frequency:
+          enum:
+            - 'Once'
+            - 'Weekly'
+          type: 'string'
+          description: "* `Once` - Once\n* `Weekly` - Weekly"
+          x-spec-enum-id: 'c5764578547cd542'
+        scan_schedule:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        location:
+          type: 'string'
+          readOnly: true
+        is_public:
+          type: 'boolean'
+          readOnly: true
+        policy_type:
+          type: 'string'
+          readOnly: true
+        policy_id:
+          type: 'integer'
+        timezone:
+          type: 'string'
+        schedule:
+          type: 'string'
+          format: 'date-time'
+      required:
+        - 'asset_id'
+        - 'asset_name'
+        - 'frequency'
+        - 'id'
+        - 'idrs'
+        - 'is_public'
+        - 'is_scheduled'
+        - 'location'
+        - 'name'
+        - 'policy_id'
+        - 'policy_type'
+        - 'scan_schedule'
+        - 'schedule'
+        - 'type'
+    ScannerList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        status:
+          type: 'string'
+        dmilog_name:
+          type: 'string'
+          maxLength: 20
+        location:
+          type: 'string'
+          maxLength: 100
+      required:
+        - 'dmilog_name'
+        - 'id'
+        - 'idrs'
+        - 'location'
+        - 'status'
+    ScannerOptions:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        dmilog_name:
+          type: 'string'
+          maxLength: 20
+        location:
+          type: 'string'
+          maxLength: 100
+      required:
+        - 'dmilog_name'
+        - 'id'
+        - 'location'
+    Ticket:
+      type: 'object'
+      properties:
+        is_customer_active:
+          type: 'boolean'
+        is_elmec_active:
+          type: 'boolean'
+        customer_cvss_level:
+          type: 'number'
+          format: 'double'
+          maximum: 10
+          minimum: 1
+          nullable: true
+        elmec_cvss_level:
+          type: 'number'
+          format: 'double'
+          maximum: 10
+          minimum: 1
+        send_email:
+          type: 'boolean'
+          nullable: true
+        idrs:
+          type: 'string'
+          writeOnly: true
+    TopVulnerabilities:
+      type: 'object'
+      properties:
+        vuln:
+          type: 'integer'
+        asset_list:
+          type: 'string'
+        exploit_available:
+          type: 'boolean'
+        severity:
+          enum:
+            - 4
+            - 3
+            - 2
+            - 1
+            - 0
+          type: 'integer'
+          description: "* `4` - CRITICAL\n* `3` - HIGH\n* `2` - MEDIUM\n* `1` - LOW\n* `0` - INFO"
+          x-spec-enum-id: '0746085f695ff3fd'
+          minimum: 0
+          maximum: 32767
+        plugin_name:
+          type: 'string'
+      required:
+        - 'asset_list'
+        - 'exploit_available'
+        - 'plugin_name'
+        - 'severity'
+        - 'vuln'
+    TrendlineVulnsByMonth:
+      type: 'object'
+      properties:
+        month:
+          type: 'string'
+          format: 'date-time'
+        scanned_ip:
+          type: 'integer'
+        active_high_customer:
+          type: 'integer'
+        active_high_elmec:
+          type: 'integer'
+        active_critical_customer:
+          type: 'integer'
+        active_critical_elmec:
+          type: 'integer'
+        active_medium_customer:
+          type: 'integer'
+        active_medium_elmec:
+          type: 'integer'
+        active_low_customer:
+          type: 'integer'
+        active_low_elmec:
+          type: 'integer'
+        active_total_customer:
+          type: 'integer'
+        active_total_elmec:
+          type: 'integer'
+        patched_high_customer:
+          type: 'integer'
+        patched_high_elmec:
+          type: 'integer'
+        patched_critical_customer:
+          type: 'integer'
+        patched_critical_elmec:
+          type: 'integer'
+        patched_medium_customer:
+          type: 'integer'
+        patched_medium_elmec:
+          type: 'integer'
+        patched_low_customer:
+          type: 'integer'
+        patched_low_elmec:
+          type: 'integer'
+        patched_total_customer:
+          type: 'integer'
+        patched_total_elmec:
+          type: 'integer'
+      required:
+        - 'active_critical_customer'
+        - 'active_critical_elmec'
+        - 'active_high_customer'
+        - 'active_high_elmec'
+        - 'active_low_customer'
+        - 'active_low_elmec'
+        - 'active_medium_customer'
+        - 'active_medium_elmec'
+        - 'active_total_customer'
+        - 'active_total_elmec'
+        - 'month'
+        - 'patched_critical_customer'
+        - 'patched_critical_elmec'
+        - 'patched_high_customer'
+        - 'patched_high_elmec'
+        - 'patched_low_customer'
+        - 'patched_low_elmec'
+        - 'patched_medium_customer'
+        - 'patched_medium_elmec'
+        - 'patched_total_customer'
+        - 'patched_total_elmec'
+        - 'scanned_ip'
+    Vulnerabilities:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        plugin_id:
+          type: 'string'
+          readOnly: true
+        severity:
+          type: 'string'
+        host_ip:
+          type: 'string'
+        cve:
+          type: 'string'
+        plugin_name:
+          type: 'string'
+          readOnly: true
+        location:
+          type: 'string'
+          readOnly: true
+        scanner:
+          type: 'string'
+          readOnly: true
+        in_charge_of:
+          enum:
+            - 'Customer'
+            - 'Elmec'
+          type: 'string'
+          description: "* `Customer` - Customer\n* `Elmec` - Elmec"
+          x-spec-enum-id: '2af3417e69287e37'
+        status:
+          enum:
+            - 'New vulnerability'
+            - 'Active'
+            - 'Patched'
+            - 'Unable to verify'
+            - 'Deleted'
+          type: 'string'
+          description: "* `New vulnerability` - New vulnerability\n* `Active` - Active\n* `Patched` - Patched\n* `Unable to verify` - Unable to verify\n* `Deleted` - Deleted"
+          x-spec-enum-id: 'f065e9e74d1029be'
+        port_protocol:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'cve'
+        - 'host_ip'
+        - 'id'
+        - 'idrs'
+        - 'in_charge_of'
+        - 'location'
+        - 'plugin_id'
+        - 'plugin_name'
+        - 'port_protocol'
+        - 'scanner'
+        - 'severity'
+        - 'status'
+    VulnerabilitiesDetails:
+      type: 'object'
+      properties:
+        ticket:
+          type: 'string'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        id:
+          type: 'integer'
+          readOnly: true
+        plugin_id:
+          type: 'string'
+          readOnly: true
+        severity:
+          type: 'string'
+        host_ip:
+          type: 'string'
+        is_public:
+          type: 'boolean'
+        cve:
+          type: 'string'
+        first_seen:
+          type: 'string'
+          format: 'date-time'
+        last_seen:
+          type: 'string'
+          format: 'date-time'
+        scanner:
+          type: 'string'
+          readOnly: true
+        location:
+          type: 'string'
+          readOnly: true
+        in_charge_of:
+          enum:
+            - 'Customer'
+            - 'Elmec'
+          type: 'string'
+          description: "* `Customer` - Customer\n* `Elmec` - Elmec"
+          x-spec-enum-id: '2af3417e69287e37'
+        patched_port:
+          type: 'string'
+          readOnly: true
+        active_port:
+          type: 'string'
+          readOnly: true
+        dns_name:
+          type: 'string'
+        mac_address:
+          type: 'string'
+        netbios_name:
+          type: 'string'
+        operating_system:
+          type: 'string'
+        description:
+          type: 'string'
+        solution:
+          type: 'string'
+        cpe:
+          type: 'string'
+        exploit_available:
+          type: 'boolean'
+        cvss:
+          type: 'number'
+          format: 'double'
+        link:
+          type: 'string'
+        tag:
+          type: 'string'
+          readOnly: true
+        previously_mitigated:
+          type: 'boolean'
+        atlantis_info:
+          type: 'string'
+          readOnly: true
+        in_charge_of_modified:
+          type: 'boolean'
+        in_charge_of_modified_comment:
+          enum:
+            - 'Out of standard'
+            - 'Customer request'
+          type: 'string'
+          description: "* `Out of standard` - Out of standard\n* `Customer request` - Customer request"
+          x-spec-enum-id: 'f5be2c30028ebc08'
+        is_whitelisted:
+          type: 'boolean'
+        status:
+          type: 'string'
+        notes:
+          type: 'string'
+        plugin_output:
+          type: 'string'
+          nullable: true
+      required:
+        - 'active_port'
+        - 'atlantis_info'
+        - 'id'
+        - 'idrs'
+        - 'location'
+        - 'patched_port'
+        - 'plugin_id'
+        - 'scanner'
+        - 'tag'
+        - 'ticket'
+    VulnerabilitiesList:
+      type: 'object'
+      properties:
+        pluginID:
+          type: 'string'
+        name:
+          type: 'string'
+        severity:
+          type: 'string'
+        count:
+          type: 'string'
+        score:
+          type: 'string'
+      required:
+        - 'count'
+        - 'name'
+        - 'pluginID'
+        - 'score'
+        - 'severity'
+    VulnerabilitiesMultipleRemediationScan:
+      type: 'object'
+      properties:
+        vuln_id_list:
+          type: 'array'
+          items:
+            type: 'integer'
+      required:
+        - 'vuln_id_list'
+    VulnerabilitiesPerAsset:
+      type: 'object'
+      properties:
+        pluginID:
+          type: 'string'
+        pluginName:
+          type: 'string'
+        severity:
+          type: 'string'
+        mitigated:
+          type: 'boolean'
+        cve:
+          type: 'string'
+        exploit_available:
+          type: 'boolean'
+        cvss:
+          type: 'number'
+          format: 'double'
+      required:
+        - 'cve'
+        - 'cvss'
+        - 'exploit_available'
+        - 'mitigated'
+        - 'pluginID'
+        - 'pluginName'
+        - 'severity'
+    WhitelistCreation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+        type:
+          enum:
+            - 'PLUGIN'
+            - 'IP'
+          type: 'string'
+          description: "* `PLUGIN` - PLUGIN\n* `IP` - IP"
+          x-spec-enum-id: '499f3bb50e3b43e6'
+        asset_id:
+          type: 'integer'
+        expiration_date:
+          type: 'string'
+          format: 'date'
+        creation_comment:
+          enum:
+            - 'Under decommissioning'
+            - 'Risk transferred'
+            - 'Risk accepted'
+          type: 'string'
+          description: "* `Under decommissioning` - Under decommissioning\n* `Risk transferred` - Risk transferred\n* `Risk accepted` - Risk accepted"
+          x-spec-enum-id: '5cfbc3ef5b04f3c7'
+        ips:
+          type: 'array'
+          items:
+            type: 'string'
+        plugins:
+          type: 'array'
+          items:
+            type: 'integer'
+        description:
+          type: 'string'
+        scanner_id:
+          type: 'integer'
+      required:
+        - 'creation_comment'
+        - 'id'
+        - 'idrs'
+        - 'type'
+    WhitelistDeactivation:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        deactivation_comment:
+          enum:
+            - 'Customer request'
+            - 'Creation error'
+            - 'Change ip destination'
+            - 'Time expired'
+          type: 'string'
+          description: "* `Customer request` - Customer request\n* `Creation error` - Creation error\n* `Change ip destination` - Change ip destination\n* `Time expired` - Time expired"
+          x-spec-enum-id: 'e20eb1f3f0f76c35'
+        description:
+          type: 'string'
+      required:
+        - 'deactivation_comment'
+        - 'id'
+    WhitelistDetails:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        is_active:
+          type: 'boolean'
+          readOnly: true
+        description:
+          type: 'string'
+          readOnly: true
+        expiration_date:
+          type: 'string'
+          format: 'date'
+          readOnly: true
+        creation_comment:
+          type: 'string'
+          readOnly: true
+        deactivation_comment:
+          type: 'string'
+          readOnly: true
+        scanner:
+          type: 'string'
+          readOnly: true
+        ips:
+          type: 'string'
+          readOnly: true
+        plugin_id:
+          type: 'string'
+          readOnly: true
+        asset:
+          type: 'string'
+          readOnly: true
+        asset_id:
+          type: 'integer'
+          readOnly: true
+        vulnerability_associated:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'asset'
+        - 'asset_id'
+        - 'creation_comment'
+        - 'deactivation_comment'
+        - 'description'
+        - 'expiration_date'
+        - 'id'
+        - 'idrs'
+        - 'ips'
+        - 'is_active'
+        - 'plugin_id'
+        - 'scanner'
+        - 'type'
+        - 'vulnerability_associated'
+    WhitelistList:
+      type: 'object'
+      properties:
+        id:
+          type: 'integer'
+          readOnly: true
+        idrs:
+          type: 'string'
+          readOnly: true
+        type:
+          type: 'string'
+          readOnly: true
+        is_active:
+          type: 'boolean'
+          readOnly: true
+        description:
+          type: 'string'
+          readOnly: true
+        details:
+          type: 'string'
+          readOnly: true
+        expiration_date:
+          type: 'string'
+          format: 'date'
+          readOnly: true
+        vuln_count:
+          type: 'string'
+          readOnly: true
+      required:
+        - 'description'
+        - 'details'
+        - 'expiration_date'
+        - 'id'
+        - 'idrs'
+        - 'is_active'
+        - 'type'
+        - 'vuln_count'
+  securitySchemes:
+    ElmecOIDC:
+      type: 'apiKey'
+      in: 'header'
+      name: 'Authorization'
+      description: 'Token-based authentication with required prefix "JWT"'
+    ElmecServiceOIDC:
+      type: 'http'
+      scheme: 'bearer'
+      bearerFormat: 'JWT'
+    ElmecStaticToken:
+      type: 'apiKey'
+      in: 'header'
+      name: 'Authorization'
+      description: 'Token-based authentication with required prefix "STATIC"'
+servers:
+  - url: 'http://127.0.0.1:8000'
+    description: 'anacleto server'
