@@ -279,6 +279,21 @@ export def build-auth-scheme [entry: record] {
   }
 }
 
+# ── Shared helpers ─────────────────────────────────────────────────
+
+# Merge a base description with a list of nullable metadata annotations.
+# Filters nulls, joins with ", ", and conditionally appends to base description.
+export def build-description [desc_base: string, extras: list] {
+  let extra = $extras | where { $in != null } | str join ", "
+  if ($extra | is-not-empty) and ($desc_base | is-not-empty) {
+    $"($desc_base) \(($extra)\)"
+  } else if ($extra | is-not-empty) {
+    $extra
+  } else {
+    $desc_base
+  }
+}
+
 # ── GraphQL introspection helpers ───────────────────────────────────
 
 # Recursively peel NON_NULL/LIST wrappers from a GraphQL type reference.

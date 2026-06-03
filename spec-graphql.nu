@@ -1,7 +1,7 @@
 # spec-graphql.nu — GraphQL introspection dispatch table.
 # Extracted from spec.nu; returns the closure record for graphql/introspection.
 
-use spec.nu [unwrap-gql-type gql-leaf-kind gql-scalar-to-openapi]
+use spec.nu
 
 # Return the GraphQL introspection helper closures (flat record).
 export def helpers [] {
@@ -14,18 +14,18 @@ export def helpers [] {
     get-all-urls: {|spec| [] }
     get-param-type: {|param|
       # param here is a GraphQL arg record with .type field
-      let unwrapped = (unwrap-gql-type $param.type)
+      let unwrapped = (spec unwrap-gql-type $param.type)
       if $unwrapped.name == null { "string" }
       else {
-        let leaf_kind = (gql-leaf-kind $param.type)
+        let leaf_kind = (spec gql-leaf-kind $param.type)
         if $leaf_kind == "INPUT_OBJECT" { "record" }
         else if $leaf_kind == "ENUM" { "string" }
-        else { gql-scalar-to-openapi $unwrapped.name }
+        else { spec gql-scalar-to-openapi $unwrapped.name }
       }
     }
     get-param-enum: {|param, schemas|
-      let unwrapped = (unwrap-gql-type $param.type)
-      let leaf_kind = (gql-leaf-kind $param.type)
+      let unwrapped = (spec unwrap-gql-type $param.type)
+      let leaf_kind = (spec gql-leaf-kind $param.type)
       if $leaf_kind == "ENUM" {
         let type_index = $schemas.types
         let enum_type = ($type_index | get -o $unwrapped.name)
@@ -35,7 +35,7 @@ export def helpers [] {
       } else { [] }
     }
     get-param-collection-style: {|param|
-      let unwrapped = (unwrap-gql-type $param.type)
+      let unwrapped = (spec unwrap-gql-type $param.type)
       if $unwrapped.is_list { "multi" } else { "scalar" }
     }
     get-body-info: {|op, schemas| {has_body: false, body_schema: {}, content_type: "application/json"} }
