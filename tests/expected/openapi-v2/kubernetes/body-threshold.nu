@@ -94,6 +94,7 @@ export def commands []: nothing -> table {
 
 # get service account issuer OpenID configuration, also known as the 'OIDC discovery doc'
 #
+# GET /.well-known/openid-configuration/
 # operationId: getServiceAccountIssuerOpenIDConfiguration
 export def "well-known-openid-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -114,6 +115,7 @@ export def "well-known-openid-configuration get" [
 
 # get available API versions
 #
+# GET /api/
 # operationId: getCoreAPIVersions
 export def "core get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -135,6 +137,7 @@ export def "core get" [
 
 # get available resources
 #
+# GET /api/v1/
 # operationId: getCoreV1APIResources
 export def "core-v1 get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -156,6 +159,7 @@ export def "core-v1 get" [
 
 # list objects of kind ComponentStatus
 #
+# GET /api/v1/componentstatuses
 # operationId: listCoreV1ComponentStatus
 export def "componentstatuses listCoreV1ComponentStatus" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -190,6 +194,7 @@ export def "componentstatuses listCoreV1ComponentStatus" [
 
 # read the specified ComponentStatus
 #
+# GET /api/v1/componentstatuses/{name}
 # operationId: readCoreV1ComponentStatus
 export def "componentstatuses readCoreV1ComponentStatus" [
   name: string
@@ -214,6 +219,7 @@ export def "componentstatuses readCoreV1ComponentStatus" [
 
 # list or watch objects of kind ConfigMap
 #
+# GET /api/v1/configmaps
 # operationId: listCoreV1ConfigMapForAllNamespaces
 export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -248,6 +254,7 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
 
 # list or watch objects of kind Endpoints
 #
+# GET /api/v1/endpoints
 # operationId: listCoreV1EndpointsForAllNamespaces
 export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,6 +289,7 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
 
 # list or watch objects of kind Event
 #
+# GET /api/v1/events
 # operationId: listCoreV1EventForAllNamespaces
 export def "events listCoreV1EventForAllNamespaces" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -316,6 +324,7 @@ export def "events listCoreV1EventForAllNamespaces" [
 
 # list or watch objects of kind LimitRange
 #
+# GET /api/v1/limitranges
 # operationId: listCoreV1LimitRangeForAllNamespaces
 export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,6 +359,7 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
 
 # list or watch objects of kind Namespace
 #
+# GET /api/v1/namespaces
 # operationId: listCoreV1Namespace
 export def "namespaces listCoreV1Namespace" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -383,6 +393,7 @@ export def "namespaces listCoreV1Namespace" [
 
 # create a Namespace
 #
+# POST /api/v1/namespaces
 # operationId: createCoreV1Namespace
 # --body shape: {apiVersion?: string, kind?: string, metadata?: record, spec?: record, status?: record}
 export def "namespaces createCoreV1Namespace" [
@@ -412,6 +423,7 @@ export def "namespaces createCoreV1Namespace" [
 
 # create a Binding
 #
+# POST /api/v1/namespaces/{namespace}/bindings
 # operationId: createCoreV1NamespacedBinding
 # --body shape: {apiVersion?: string, kind?: string, metadata?: record, target: record}
 export def "namespaces-bindings createCoreV1NamespacedBinding" [
@@ -443,6 +455,7 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
 
 # delete collection of ConfigMap
 #
+# DELETE /api/v1/namespaces/{namespace}/configmaps
 # operationId: deleteCoreV1CollectionNamespacedConfigMap
 export def "namespaces-configmaps delete-by-namespace" [
   namespace: any
@@ -480,6 +493,7 @@ export def "namespaces-configmaps delete-by-namespace" [
 
 # list or watch objects of kind ConfigMap
 #
+# GET /api/v1/namespaces/{namespace}/configmaps
 # operationId: listCoreV1NamespacedConfigMap
 export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
   namespace: any
@@ -514,6 +528,7 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
 
 # create a ConfigMap
 #
+# POST /api/v1/namespaces/{namespace}/configmaps
 # operationId: createCoreV1NamespacedConfigMap
 # --body shape: {apiVersion?: string, binaryData?: record, data?: record, immutable?: bool, kind?: string, metadata?: record}
 export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
@@ -544,6 +559,7 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
 
 # delete a ConfigMap
 #
+# DELETE /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: deleteCoreV1NamespacedConfigMap
 export def "namespaces-configmaps delete-by-name-namespace" [
   name: string
@@ -573,6 +589,7 @@ export def "namespaces-configmaps delete-by-name-namespace" [
 
 # read the specified ConfigMap
 #
+# GET /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: readCoreV1NamespacedConfigMap
 export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
   name: string
@@ -598,6 +615,7 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
 
 # partially update the specified ConfigMap
 #
+# PATCH /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: patchCoreV1NamespacedConfigMap
 export def "namespaces-configmaps patch" [
   name: string
@@ -626,6 +644,7 @@ export def "namespaces-configmaps patch" [
 
 # replace the specified ConfigMap
 #
+# PUT /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: replaceCoreV1NamespacedConfigMap
 # --body shape: {apiVersion?: string, binaryData?: record, data?: record, immutable?: bool, kind?: string, metadata?: record}
 export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
@@ -657,6 +676,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
 
 # delete collection of Endpoints
 #
+# DELETE /api/v1/namespaces/{namespace}/endpoints
 # operationId: deleteCoreV1CollectionNamespacedEndpoints
 export def "namespaces-endpoints delete-by-namespace" [
   namespace: any
@@ -694,6 +714,7 @@ export def "namespaces-endpoints delete-by-namespace" [
 
 # list or watch objects of kind Endpoints
 #
+# GET /api/v1/namespaces/{namespace}/endpoints
 # operationId: listCoreV1NamespacedEndpoints
 export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
   namespace: any
@@ -728,6 +749,7 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
 
 # create Endpoints
 #
+# POST /api/v1/namespaces/{namespace}/endpoints
 # operationId: createCoreV1NamespacedEndpoints
 # --body shape: {apiVersion?: string, kind?: string, metadata?: record, subsets?: list}
 export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
@@ -758,6 +780,7 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
 
 # delete Endpoints
 #
+# DELETE /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: deleteCoreV1NamespacedEndpoints
 export def "namespaces-endpoints delete-by-name-namespace" [
   name: string
@@ -787,6 +810,7 @@ export def "namespaces-endpoints delete-by-name-namespace" [
 
 # read the specified Endpoints
 #
+# GET /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: readCoreV1NamespacedEndpoints
 export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
   name: string
@@ -812,6 +836,7 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
 
 # partially update the specified Endpoints
 #
+# PATCH /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: patchCoreV1NamespacedEndpoints
 export def "namespaces-endpoints patch" [
   name: string
@@ -840,6 +865,7 @@ export def "namespaces-endpoints patch" [
 
 # replace the specified Endpoints
 #
+# PUT /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: replaceCoreV1NamespacedEndpoints
 # --body shape: {apiVersion?: string, kind?: string, metadata?: record, subsets?: list}
 export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [

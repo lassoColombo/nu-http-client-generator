@@ -82,6 +82,7 @@ def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_
 
 # Gets a list of access requests for a group.
 #
+# GET /api/v4/groups/{id}/access_requests
 # operationId: getApiV4GroupsIdAccessRequests
 export def "groups-access-requests get" [
   id: string
@@ -106,6 +107,7 @@ export def "groups-access-requests get" [
 
 # Requests access for the authenticated user to a group.
 #
+# POST /api/v4/groups/{id}/access_requests
 # operationId: postApiV4GroupsIdAccessRequests
 export def "groups-access-requests post" [
   id: string
@@ -127,6 +129,7 @@ export def "groups-access-requests post" [
 
 # Approves an access request for the given user.
 #
+# PUT /api/v4/groups/{id}/access_requests/{user_id}/approve
 # operationId: putApiV4GroupsIdAccessRequestsUserIdApprove
 export def "groups-access-requests-approve put" [
   id: string
@@ -153,6 +156,7 @@ export def "groups-access-requests-approve put" [
 
 # Denies an access request for the given user.
 #
+# DELETE /api/v4/groups/{id}/access_requests/{user_id}
 # operationId: deleteApiV4GroupsIdAccessRequestsUserId
 export def "groups-access-requests delete" [
   id: string
@@ -175,6 +179,7 @@ export def "groups-access-requests delete" [
 
 # List an awardable's emoji reactions for groups
 #
+# GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmoji
 export def "groups-epics-award-emoji list" [
   id: string
@@ -200,6 +205,7 @@ export def "groups-epics-award-emoji list" [
 
 # Add a new emoji reaction
 #
+# POST /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidAwardEmoji
 export def "groups-epics-award-emoji post" [
   id: int
@@ -226,6 +232,7 @@ export def "groups-epics-award-emoji post" [
 
 # Get a single emoji reaction
 #
+# GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
 export def "groups-epics-award-emoji get" [
   award_id: int
@@ -249,6 +256,7 @@ export def "groups-epics-award-emoji get" [
 
 # Delete an emoji reaction
 #
+# DELETE /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
 export def "groups-epics-award-emoji delete" [
   award_id: int
@@ -272,6 +280,7 @@ export def "groups-epics-award-emoji delete" [
 
 # List an awardable's emoji reactions for groups
 #
+# GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
 export def "groups-epics-notes-award-emoji list" [
   id: int
@@ -298,6 +307,7 @@ export def "groups-epics-notes-award-emoji list" [
 
 # Add a new emoji reaction
 #
+# POST /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
 export def "groups-epics-notes-award-emoji post" [
   id: int
@@ -325,6 +335,7 @@ export def "groups-epics-notes-award-emoji post" [
 
 # Get a single emoji reaction
 #
+# GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
 export def "groups-epics-notes-award-emoji get" [
   award_id: int
@@ -349,6 +360,7 @@ export def "groups-epics-notes-award-emoji get" [
 
 # Delete an emoji reaction
 #
+# DELETE /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
 export def "groups-epics-notes-award-emoji delete" [
   award_id: int
@@ -373,6 +385,7 @@ export def "groups-epics-notes-award-emoji delete" [
 
 # Gets a list of group badges viewable by the authenticated user.
 #
+# GET /api/v4/groups/{id}/badges
 # operationId: getApiV4GroupsIdBadges
 export def "groups-badges list" [
   id: string
@@ -398,6 +411,7 @@ export def "groups-badges list" [
 
 # Adds a badge to a group.
 #
+# POST /api/v4/groups/{id}/badges
 # operationId: postApiV4GroupsIdBadges
 export def "groups-badges post" [
   id: string
@@ -425,6 +439,7 @@ export def "groups-badges post" [
 
 # Preview a badge from a group.
 #
+# GET /api/v4/groups/{id}/badges/render
 # operationId: getApiV4GroupsIdBadgesRender
 export def "groups-badges-render get" [
   id: string
@@ -449,6 +464,7 @@ export def "groups-badges-render get" [
 
 # Gets a badge of a group.
 #
+# GET /api/v4/groups/{id}/badges/{badge_id}
 # operationId: getApiV4GroupsIdBadgesBadgeId
 export def "groups-badges get" [
   id: string
@@ -471,6 +487,7 @@ export def "groups-badges get" [
 
 # Updates a badge of a group.
 #
+# PUT /api/v4/groups/{id}/badges/{badge_id}
 # operationId: putApiV4GroupsIdBadgesBadgeId
 export def "groups-badges put" [
   id: string
@@ -499,6 +516,7 @@ export def "groups-badges put" [
 
 # Removes a badge from the group.
 #
+# DELETE /api/v4/groups/{id}/badges/{badge_id}
 # operationId: deleteApiV4GroupsIdBadgesBadgeId
 export def "groups-badges delete" [
   id: string
@@ -521,6 +539,7 @@ export def "groups-badges delete" [
 
 # Get all custom attributes on a group
 #
+# GET /api/v4/groups/{id}/custom_attributes
 # operationId: getApiV4GroupsIdCustomAttributes
 export def "groups-custom-attributes list" [
   id: int
@@ -542,6 +561,7 @@ export def "groups-custom-attributes list" [
 
 # Get a custom attribute on a group
 #
+# GET /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: getApiV4GroupsIdCustomAttributesKey
 export def "groups-custom-attributes get" [
   key: string
@@ -564,6 +584,7 @@ export def "groups-custom-attributes get" [
 
 # Set a custom attribute on a group
 #
+# PUT /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: putApiV4GroupsIdCustomAttributesKey
 export def "groups-custom-attributes put" [
   key: string
@@ -590,6 +611,7 @@ export def "groups-custom-attributes put" [
 
 # Delete a custom attribute on a group
 #
+# DELETE /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: deleteApiV4GroupsIdCustomAttributesKey
 export def "groups-custom-attributes delete" [
   key: string
@@ -612,6 +634,7 @@ export def "groups-custom-attributes delete" [
 
 # Get a groups list
 #
+# GET /api/v4/groups
 # operationId: getApiV4Groups
 export def "groups list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,6 +673,7 @@ export def "groups list" [
 
 # Create a group. Available only for users who can create groups.
 #
+# POST /api/v4/groups
 # operationId: postApiV4Groups
 # --default_branch_protection_defaults shape: {allowed_to_push?: list, allow_force_push?: bool, allowed_to_merge?: list, code_owner_approval_required?: bool, developer_can_initial_push?: bool}
 # --foundational_agents_statuses item shape: {reference: string, enabled: bool}
@@ -717,6 +741,7 @@ export def "groups post" [
 
 # Update a group. Available only for users who can administrate groups.
 #
+# PUT /api/v4/groups/{id}
 # operationId: putApiV4GroupsId
 # --default_branch_protection_defaults shape: {allowed_to_push?: list, allow_force_push?: bool, allowed_to_merge?: list, code_owner_approval_required?: bool, developer_can_initial_push?: bool}
 # --foundational_agents_statuses item shape: {reference: string, enabled: bool}
@@ -814,6 +839,7 @@ export def "groups put" [
 
 # Get a single group, with containing projects.
 #
+# GET /api/v4/groups/{id}
 # operationId: getApiV4GroupsId
 export def "groups get" [
   id: string
@@ -838,6 +864,7 @@ export def "groups get" [
 
 # Remove a group.
 #
+# DELETE /api/v4/groups/{id}
 # operationId: deleteApiV4GroupsId
 export def "groups delete" [
   id: string
@@ -859,6 +886,7 @@ export def "groups delete" [
 
 # Archive a group
 #
+# POST /api/v4/groups/{id}/archive
 # operationId: postApiV4GroupsIdArchive
 export def "groups-archive post" [
   id: string

@@ -96,6 +96,7 @@ export def commands []: nothing -> table {
 
 # Get active IDRS list
 #
+# POST /api/carpet/v1/active_idrs/
 # operationId: api_carpet_v1_active_idrs_create
 export def "carpet-active-idrs create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -116,6 +117,7 @@ export def "carpet-active-idrs create" [
 
 # Get asset list for customer
 #
+# GET /api/carpet/v1/asset_list/idrs/{IDRS}/
 # operationId: api_carpet_v1_asset_list_idrs_list
 export def "carpet-asset-list-idrs list" [
   IDRS: string
@@ -142,6 +144,7 @@ export def "carpet-asset-list-idrs list" [
 
 # Get host vulnerabilities for customer
 #
+# GET /api/carpet/v1/host/idrs/{IDRS}/
 # operationId: api_carpet_v1_host_idrs_retrieve
 export def "carpet-host-idrs get" [
   IDRS: string
@@ -163,6 +166,7 @@ export def "carpet-host-idrs get" [
 
 # Return customer api key
 #
+# GET /api/delivery/v1/apikeys/idrs/{IDRS}/
 # operationId: api_delivery_v1_apikeys_idrs_retrieve
 export def "delivery-apikeys-idrs get" [
   IDRS: string
@@ -184,6 +188,7 @@ export def "delivery-apikeys-idrs get" [
 
 # Asset list
 #
+# GET /api/delivery/v1/asset/
 # operationId: api_delivery_v1_asset_list
 export def "delivery-asset list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,6 +223,7 @@ export def "delivery-asset list" [
 
 # Add new asset tag
 #
+# POST /api/delivery/v1/asset-tag/create/
 # operationId: api_delivery_v1_asset_tag_create_create
 export def "delivery-asset-tag-create create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -243,6 +249,7 @@ export def "delivery-asset-tag-create create" [
 
 # Delete asset tag
 #
+# DELETE /api/delivery/v1/asset-tag/delete/{id}/
 # operationId: api_delivery_v1_asset_tag_delete_destroy
 export def "delivery-asset-tag-delete delete" [
   id: string
@@ -264,6 +271,7 @@ export def "delivery-asset-tag-delete delete" [
 
 # Edit asset tag
 #
+# PUT /api/delivery/v1/asset-tag/edit/{id}/
 # operationId: api_delivery_v1_asset_tag_edit_update
 export def "delivery-asset-tag-edit update" [
   id: string
@@ -289,6 +297,7 @@ export def "delivery-asset-tag-edit update" [
 
 # Get asset Tag for Customer
 #
+# GET /api/delivery/v1/asset-tag/idrs/{IDRS}/
 # operationId: api_delivery_v1_asset_tag_idrs_list
 export def "delivery-asset-tag-idrs list" [
   IDRS: string
@@ -315,6 +324,7 @@ export def "delivery-asset-tag-idrs list" [
 
 # Add new asset
 #
+# POST /api/delivery/v1/asset/create/
 # operationId: api_delivery_v1_asset_create_create
 # --body shape: {idrs: string, name: string, is_scannable: bool, scanner_id: int, type: "HOSTNAME"|"CUSTOM", address: list, tag_id?: int}
 export def "delivery-asset-create create" [
@@ -339,6 +349,7 @@ export def "delivery-asset-create create" [
 
 # Deactivate asset
 #
+# POST /api/delivery/v1/asset/deactivate/{id}/
 # operationId: api_delivery_v1_asset_deactivate_create
 export def "delivery-asset-deactivate create" [
   id: string
@@ -360,6 +371,7 @@ export def "delivery-asset-deactivate create" [
 
 # Delete asset
 #
+# DELETE /api/delivery/v1/asset/delete/{id}/
 # operationId: api_delivery_v1_asset_delete_destroy
 export def "delivery-asset-delete delete" [
   id: string
@@ -381,6 +393,7 @@ export def "delivery-asset-delete delete" [
 
 # Get asset attribute
 #
+# GET /api/delivery/v1/asset/details/{id}/
 # operationId: api_delivery_v1_asset_details_retrieve
 export def "delivery-asset-details get" [
   id: string
@@ -402,6 +415,7 @@ export def "delivery-asset-details get" [
 
 # Edit asset attribute
 #
+# PUT /api/delivery/v1/asset/details/{id}/
 # operationId: api_delivery_v1_asset_details_update
 # --body shape: {name: string, is_scannable: bool, atlantis_id?: int, is_active?: bool, type: "HOSTNAME"|"CUSTOM"|"CI"|"NETWORK", address: list, scanner_id: int, error?: string, tag_id?: int}
 export def "delivery-asset-details update" [
@@ -427,6 +441,7 @@ export def "delivery-asset-details update" [
 
 # Get asset for Customer
 #
+# GET /api/delivery/v1/asset/idrs/{IDRS}/
 # operationId: api_delivery_v1_asset_idrs_list
 export def "delivery-asset-idrs list" [
   IDRS: string
@@ -453,6 +468,7 @@ export def "delivery-asset-idrs list" [
 
 # Add whitelist for the asset
 #
+# POST /api/delivery/v1/asset/whitelist/{id}/
 # operationId: api_delivery_v1_asset_whitelist_create
 # --body shape: {ips: list, creation_comment: "Under decommissioning"|"Risk transferred"|"Risk accepted", expiration_date?: string, description?: string}
 export def "delivery-asset-whitelist create" [

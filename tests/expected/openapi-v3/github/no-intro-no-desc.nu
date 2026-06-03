@@ -74,6 +74,7 @@ def status-completer [] { ["failure" "success"] }
 
 # GitHub API Root
 #
+# GET /
 # Docs: https://docs.github.com/rest/meta/meta#github-api-root — API method documentation
 # operationId: meta/root
 export def "meta meta/root" [
@@ -95,6 +96,7 @@ export def "meta meta/root" [
 
 # List global security advisories
 #
+# GET /advisories
 # Docs: https://docs.github.com/rest/security-advisories/global-advisories#list-global-security-advisories — API method documentation
 # operationId: security-advisories/list-global-advisories
 export def "advisories security-advisories/list-global-advisories" [
@@ -135,6 +137,7 @@ export def "advisories security-advisories/list-global-advisories" [
 
 # Get a global security advisory
 #
+# GET /advisories/{ghsa_id}
 # Docs: https://docs.github.com/rest/security-advisories/global-advisories#get-a-global-security-advisory — API method documentation
 # operationId: security-advisories/get-global-advisory
 export def "advisories security-advisories/get-global-advisory" [
@@ -157,6 +160,7 @@ export def "advisories security-advisories/get-global-advisory" [
 
 # List tasks for repository
 #
+# GET /agents/repos/{owner}/{repo}/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#list-tasks-for-repository — API method documentation
 # operationId: agent-tasks/list-tasks-for-repo
 export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
@@ -189,6 +193,7 @@ export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
 
 # Start a task
 #
+# POST /agents/repos/{owner}/{repo}/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#start-a-task — API method documentation
 # operationId: agent-tasks/create-task-in-repo
 export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
@@ -220,6 +225,7 @@ export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
 
 # Get a task by repo
 #
+# GET /agents/repos/{owner}/{repo}/tasks/{task_id}
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#get-a-task-by-repo — API method documentation
 # operationId: agent-tasks/get-task-by-repo-and-id
 export def "agents-repos-tasks agent-tasks/get-task-by-repo-and-id" [
@@ -244,6 +250,7 @@ export def "agents-repos-tasks agent-tasks/get-task-by-repo-and-id" [
 
 # List tasks
 #
+# GET /agents/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#list-tasks — API method documentation
 # operationId: agent-tasks/list-tasks
 export def "agents-tasks agent-tasks/list-tasks" [
@@ -273,6 +280,7 @@ export def "agents-tasks agent-tasks/list-tasks" [
 
 # Get a task by ID
 #
+# GET /agents/tasks/{task_id}
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#get-a-task-by-id — API method documentation
 # operationId: agent-tasks/get-task-by-id
 export def "agents-tasks agent-tasks/get-task-by-id" [
@@ -295,6 +303,7 @@ export def "agents-tasks agent-tasks/get-task-by-id" [
 
 # Get the authenticated app
 #
+# GET /app
 # Docs: https://docs.github.com/rest/apps/apps#get-the-authenticated-app — API method documentation
 # operationId: apps/get-authenticated
 export def "app apps/get-authenticated" [
@@ -316,6 +325,7 @@ export def "app apps/get-authenticated" [
 
 # Create a GitHub App from a manifest
 #
+# POST /app-manifests/{code}/conversions
 # Docs: https://docs.github.com/rest/apps/apps#create-a-github-app-from-a-manifest — API method documentation
 # operationId: apps/create-from-manifest
 export def "app-manifests-conversions apps/create-from-manifest" [
@@ -338,6 +348,7 @@ export def "app-manifests-conversions apps/create-from-manifest" [
 
 # Get a webhook configuration for an app
 #
+# GET /app/hook/config
 # Docs: https://docs.github.com/rest/apps/webhooks#get-a-webhook-configuration-for-an-app — API method documentation
 # operationId: apps/get-webhook-config-for-app
 export def "app-hook-config apps/get-webhook-config-for-app" [
@@ -359,6 +370,7 @@ export def "app-hook-config apps/get-webhook-config-for-app" [
 
 # Update a webhook configuration for an app
 #
+# PATCH /app/hook/config
 # Docs: https://docs.github.com/rest/apps/webhooks#update-a-webhook-configuration-for-an-app — API method documentation
 # operationId: apps/update-webhook-config-for-app
 export def "app-hook-config apps/update-webhook-config-for-app" [
@@ -387,6 +399,7 @@ export def "app-hook-config apps/update-webhook-config-for-app" [
 
 # List deliveries for an app webhook
 #
+# GET /app/hook/deliveries
 # Docs: https://docs.github.com/rest/apps/webhooks#list-deliveries-for-an-app-webhook — API method documentation
 # operationId: apps/list-webhook-deliveries
 export def "app-hook-deliveries apps/list-webhook-deliveries" [
@@ -412,6 +425,7 @@ export def "app-hook-deliveries apps/list-webhook-deliveries" [
 
 # Get a delivery for an app webhook
 #
+# GET /app/hook/deliveries/{delivery_id}
 # Docs: https://docs.github.com/rest/apps/webhooks#get-a-delivery-for-an-app-webhook — API method documentation
 # operationId: apps/get-webhook-delivery
 export def "app-hook-deliveries apps/get-webhook-delivery" [
@@ -434,6 +448,7 @@ export def "app-hook-deliveries apps/get-webhook-delivery" [
 
 # Redeliver a delivery for an app webhook
 #
+# POST /app/hook/deliveries/{delivery_id}/attempts
 # Docs: https://docs.github.com/rest/apps/webhooks#redeliver-a-delivery-for-an-app-webhook — API method documentation
 # operationId: apps/redeliver-webhook-delivery
 export def "app-hook-deliveries-attempts apps/redeliver-webhook-delivery" [
@@ -456,6 +471,7 @@ export def "app-hook-deliveries-attempts apps/redeliver-webhook-delivery" [
 
 # List installation requests for the authenticated app
 #
+# GET /app/installation-requests
 # Docs: https://docs.github.com/rest/apps/apps#list-installation-requests-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installation-requests-for-authenticated-app
 export def "app-installation-requests apps/list-installation-requests-for-authenticated-app" [
@@ -480,6 +496,7 @@ export def "app-installation-requests apps/list-installation-requests-for-authen
 
 # List installations for the authenticated app
 #
+# GET /app/installations
 # Docs: https://docs.github.com/rest/apps/apps#list-installations-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installations
 export def "app-installations apps/list-installations" [

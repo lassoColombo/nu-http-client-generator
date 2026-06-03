@@ -71,6 +71,7 @@ def actor-type-completer [] { ["anonymous" "asana" "asana_support" "external_adm
 
 # Get access requests
 #
+# GET /access_requests
 # operationId: getAccessRequests
 export def "access-requests get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -96,6 +97,7 @@ export def "access-requests get" [
 
 # Create an access request
 #
+# POST /access_requests
 # operationId: createAccessRequest
 # --data shape: {target: string, message?: string}
 export def "access-requests createAccessRequest" [
@@ -121,6 +123,7 @@ export def "access-requests createAccessRequest" [
 
 # Approve an access request
 #
+# POST /access_requests/{access_request_gid}/approve
 # operationId: approveAccessRequest
 export def "access-requests-approve approveAccessRequest" [
   access_request_gid: string
@@ -142,6 +145,7 @@ export def "access-requests-approve approveAccessRequest" [
 
 # Reject an access request
 #
+# POST /access_requests/{access_request_gid}/reject
 # operationId: rejectAccessRequest
 export def "access-requests-reject rejectAccessRequest" [
   access_request_gid: string
@@ -163,6 +167,7 @@ export def "access-requests-reject rejectAccessRequest" [
 
 # Get a list of agents in a workspace
 #
+# GET /workspaces/{workspace_gid}/agents
 # operationId: getAgentsForWorkspace
 export def "workspaces-agents get" [
   workspace_gid: any
@@ -188,6 +193,7 @@ export def "workspaces-agents get" [
 
 # Get an agent
 #
+# GET /agents/{agent_gid}
 # operationId: getAgent
 export def "agents get" [
   agent_gid: string
@@ -212,6 +218,7 @@ export def "agents get" [
 
 # Get an allocation
 #
+# GET /allocations/{allocation_gid}
 # operationId: getAllocation
 export def "allocations get" [
   allocation_gid: string
@@ -236,6 +243,7 @@ export def "allocations get" [
 
 # Update an allocation
 #
+# PUT /allocations/{allocation_gid}
 # operationId: updateAllocation
 export def "allocations updateAllocation" [
   allocation_gid: string
@@ -264,6 +272,7 @@ export def "allocations updateAllocation" [
 
 # Delete an allocation
 #
+# DELETE /allocations/{allocation_gid}
 # operationId: deleteAllocation
 export def "allocations delete" [
   allocation_gid: string
@@ -287,6 +296,7 @@ export def "allocations delete" [
 
 # Get multiple allocations
 #
+# GET /allocations
 # operationId: getAllocations
 export def "allocations list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,6 +324,7 @@ export def "allocations list" [
 
 # Create an allocation
 #
+# POST /allocations
 # operationId: createAllocation
 export def "allocations createAllocation" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -341,6 +352,7 @@ export def "allocations createAllocation" [
 
 # Get an attachment
 #
+# GET /attachments/{attachment_gid}
 # operationId: getAttachment
 export def "attachments get" [
   attachment_gid: string
@@ -365,6 +377,7 @@ export def "attachments get" [
 
 # Delete an attachment
 #
+# DELETE /attachments/{attachment_gid}
 # operationId: deleteAttachment
 export def "attachments delete" [
   attachment_gid: string
@@ -388,6 +401,7 @@ export def "attachments delete" [
 
 # Get attachments from an object
 #
+# GET /attachments
 # operationId: getAttachmentsForObject
 export def "attachments list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,6 +427,7 @@ export def "attachments list" [
 
 # Upload an attachment
 #
+# POST /attachments
 # operationId: createAttachmentForObject
 export def "attachments createAttachmentForObject" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,6 +460,7 @@ export def "attachments createAttachmentForObject" [
 
 # Get audit log events
 #
+# GET /workspaces/{workspace_gid}/audit_log_events
 # operationId: getAuditLogEvents
 export def "workspaces-audit-log-events get" [
   workspace_gid: string
@@ -475,6 +491,7 @@ export def "workspaces-audit-log-events get" [
 
 # Submit parallel requests
 #
+# POST /batch
 # operationId: createBatchRequest
 # --data shape: {actions?: list}
 export def "batch createBatchRequest" [
@@ -503,6 +520,7 @@ export def "batch createBatchRequest" [
 
 # Get all budgets
 #
+# GET /budgets
 # operationId: getBudgets
 export def "budgets list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,6 +544,7 @@ export def "budgets list" [
 
 # Create a budget
 #
+# POST /budgets
 # operationId: createBudget
 export def "budgets createBudget" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -552,6 +571,7 @@ export def "budgets createBudget" [
 
 # Get a budget
 #
+# GET /budgets/{budget_gid}
 # operationId: getBudget
 export def "budgets get" [
   budget_gid: string
@@ -576,6 +596,7 @@ export def "budgets get" [
 
 # Update a budget
 #
+# PUT /budgets/{budget_gid}
 # operationId: updateBudget
 export def "budgets updateBudget" [
   budget_gid: string
@@ -604,6 +625,7 @@ export def "budgets updateBudget" [
 
 # Delete a budget
 #
+# DELETE /budgets/{budget_gid}
 # operationId: deleteBudget
 export def "budgets delete" [
   budget_gid: string
@@ -627,6 +649,7 @@ export def "budgets delete" [
 
 # Get a project's custom fields
 #
+# GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
 export def "projects-custom-field-settings get" [
   project_gid: string
@@ -653,6 +676,7 @@ export def "projects-custom-field-settings get" [
 
 # Get a portfolio's custom fields
 #
+# GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
 export def "portfolios-custom-field-settings get" [
   portfolio_gid: string

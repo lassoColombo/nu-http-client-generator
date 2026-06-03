@@ -90,6 +90,23 @@ export def resolve-ref [val: any, schemas: record, --visited: list<string> = []]
   }
 }
 
+# Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
+export def normalize-type [type_val: any] {
+  if ($type_val == null) { return null }
+  if ($type_val | describe | str starts-with "list") {
+    $type_val | where { $in != "null" } | first | default "any"
+  } else {
+    $type_val
+  }
+}
+
+# Check if a schema is nullable (OAS 3.0 nullable:true or OAS 3.1 type array containing "null")
+export def is-nullable [schema: record] {
+  if ($schema.nullable? | default false) { return true }
+  let t = ($schema.type? | default null)
+  if ($t != null) and ($t | describe | str starts-with "list") { "null" in $t } else { false }
+}
+
 # Filter parameters: return path/query/header/cookie params, exclude body/formData
 export def get-non-body-params [params: list] {
   $params | where {|p|
@@ -156,7 +173,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
   }
 
   # if we're past max depth, use simple types
-  let t = ($schema.type? | default null)
+  let t = (normalize-type ($schema.type? | default null))
   let has_props = ($schema.properties? | is-not-empty)
   let has_allof = ($schema.allOf? | is-not-empty)
   let has_items = ($schema.items? | is-not-empty)

@@ -109,7 +109,7 @@ export def helpers [] {
       if ($param.content? | is-not-empty) {
         "string"
       } else {
-        $param.schema?.type? | default "string"
+        spec normalize-type ($param.schema?.type? | default "string")
       }
     }
     get-param-enum: {|param|

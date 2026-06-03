@@ -18,25 +18,49 @@ use warn.nu
 # Returns {data: record, source: string} where source is the resolved path or URL.
 const INTROSPECTION_QUERY = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name description specifiedByURL isOneOf fields(includeDeprecated: true) { name description args { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue isDeprecated deprecationReason } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated deprecationReason } inputFields { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue isDeprecated deprecationReason } interfaces { kind name } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { kind name } } } }'
 
-# Fetch a GraphQL introspection schema from an endpoint via POST.
-def load-graphql-introspection [url: string] {
-  http post --content-type "application/json" $url {query: $INTROSPECTION_QUERY}
+# Node.js script that converts GraphQL SDL to introspection JSON via the graphql package.
+const SDL_CONVERT_SCRIPT = 'const g=require("graphql");let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const schema=g.buildSchema(s);const q=g.getIntrospectionQuery({inputValueDeprecation:true});const r=g.graphqlSync({schema,source:q});console.log(JSON.stringify(r))}catch(e){console.error(e.message);process.exit(1)}})'
+
+# Detect whether raw content is GraphQL SDL text.
+def is-sdl [content: any] {
+  (($content | describe) == "string") and ($content =~ '(?m)^\s*(type |input |enum |scalar |schema\s*\{)')
 }
 
-def load-spec [source: string] {
+# Parse GraphQL SDL text into introspection JSON via Node.js + graphql package.
+def parse-sdl [sdl_text: string] {
+  try {
+    $sdl_text | node -e $SDL_CONVERT_SCRIPT | from json
+  } catch {
+    error make --unspanned { msg: "Cannot parse GraphQL SDL: this requires Node.js with the 'graphql' npm package. Install with: npm install -g graphql. Alternatively, convert your .graphql file to introspection JSON first." }
+  }
+}
+
+# Fetch a GraphQL introspection schema from an endpoint via POST.
+def load-graphql-introspection [url: string, headers: record = {}] {
+  http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY}
+}
+
+def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = try { http get $source } catch { null }
+    let raw = try { http get --headers $headers $source } catch { null }
     if ($raw != null) and (($raw.openapi? | is-not-empty) or ($raw.swagger? | is-not-empty) or ($raw.data?.__schema? | is-not-empty)) {
       {data: $raw, source: $source}
+    } else if ($raw != null) and (is-sdl $raw) {
+      {data: (parse-sdl $raw), source: $source}
     } else {
       # GET failed or returned unrecognized format — try GraphQL introspection
       warn fallback $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"
-      let intro = (load-graphql-introspection $source)
+      let intro = (load-graphql-introspection $source $headers)
       {data: $intro, source: $source}
     }
   } else {
     let expanded = ($source | path expand | into string)
-    {data: (open $expanded), source: $expanded}
+    let data = (open $expanded)
+    if (is-sdl $data) {
+      {data: (parse-sdl $data), source: $expanded}
+    } else {
+      {data: $data, source: $expanded}
+    }
   }
 }
 
@@ -154,9 +178,9 @@ def extract-body-fields [schema: record, schemas: record] {
   $props | transpose name field_spec | where {|field|
     not ($field.field_spec.readOnly? | default false)
   } | each {|field|
-    let field_type = ($field.field_spec.type? | default "any")
+    let field_type = (spec normalize-type ($field.field_spec.type? | default "any"))
     let enum_vals = ($field.field_spec.enum? | default [])
-    let nullable = ($field.field_spec.nullable? | default false)
+    let nullable = (spec is-nullable $field.field_spec)
     let desc_base = ($field.field_spec.description? | default "")
     let default_val = ($field.field_spec.default? | default null)
     let format = ($field.field_spec.format? | default null)
@@ -187,7 +211,7 @@ def build-field-shapes [schema: record, schemas: record] {
   let merged = (merge-body-props $schema $schemas)
   $merged.props | transpose name field_spec | each {|field|
     let fs = (spec resolve-ref $field.field_spec $schemas)
-    let ft = ($fs.type? | default "")
+    let ft = (spec normalize-type ($fs.type? | default ""))
     if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
       let sub_fields = (extract-body-fields $fs $schemas)
       if ($sub_fields | is-empty) { null } else {
@@ -520,6 +544,8 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         $body.field_shapes
       }
 
+      let endpoint_line = $"($method | str upcase) ($path_entry.path)"
+
       {
         name: $cmd_name
         method: $method
@@ -534,6 +560,10 @@ def build-commands [spec_data: record, schemas: record, h: record, auth_schemes:
         field_shapes: $field_shapes
         returns_body: $resp.returns_body
         description: $meta.description
+        summary_fallback: $endpoint_line
+        extra_doc_lines: (if ($meta.description | is-not-empty) { [$"# ($endpoint_line)"] } else { [] })
+        accepts_input: $body.has_body
+        extra_enum_sources: []
         operation_id: $meta.operation_id
         deprecated: $meta.deprecated
         deprecation_reason: null
@@ -833,6 +863,8 @@ def build-graphql-commands [spec_data: record, schemas: record, config: record] 
 
       let cmd_name = $"($root.op_type) ($field_name_kebab)"
 
+      let gql_extra_enum_sources = ($expansion.gql_input_fields | each {|g| $g.fields | each {|f| $f | update name $"($g.arg_flag)-($f.name)" }} | flatten)
+
       $commands = ($commands | append {
         name: $cmd_name
         method: $"graphql-($root.op_type)"
@@ -846,6 +878,10 @@ def build-graphql-commands [spec_data: record, schemas: record, config: record] 
         body_fields: []
         returns_body: true
         description: ($field.description? | default $"GraphQL ($root.op_type): ($field.name)")
+        summary_fallback: $"GraphQL ($root.op_type): ($field.name)"
+        extra_doc_lines: []
+        accepts_input: true
+        extra_enum_sources: $gql_extra_enum_sources
         operation_id: $field.name
         deprecated: ($field.isDeprecated? | default false)
         deprecation_reason: ($field.deprecationReason? | default null)
@@ -885,11 +921,16 @@ def process-spec [spec_data: record, config: record] {
     "graphql" => (spec-graphql helpers)
   }
 
+  let strategy = match $info.schema {
+    "graphql" => (render graphql-render-strategy)
+    _ => (render rest-render-strategy)
+  }
+
   if $info.schema == "graphql" {
     let schemas = (do $h.get-schemas $spec_data)
     let commands = build-graphql-commands $spec_data $schemas $config
     let deduped = deduplicate-commands $commands
-    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: [], default_auth: "bearer", base_url: ($config.default_base_url | default ""), all_urls: []}
+    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: [], default_auth: "bearer", base_url: ($config.default_base_url | default ""), all_urls: [], strategy: $strategy}
   } else {
     let schemas = (do $h.get-schemas $spec_data)
     let auth_schemes = (do $h.get-auth-schemes $spec_data)
@@ -898,7 +939,7 @@ def process-spec [spec_data: record, config: record] {
     let all_urls = (do $h.get-all-urls $spec_data)
     let commands = build-commands $spec_data $schemas $h $auth_schemes $default_auth $config
     let deduped = deduplicate-commands $commands
-    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls}
+    {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls, strategy: $strategy}
   }
 }
 
@@ -912,7 +953,7 @@ def generate-module [loaded: record, config: record, name_flag: any, output_flag
     warn config "no commands were generated — check your spec content or filter flags"
   }
   let extra_urls = ($urls_flag | append $result.all_urls)
-  let output_content = render render-module $result.spec $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config
+  let output_content = render render-module $result.spec $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config $result.strategy
   let out_path = if ($output_flag | is-not-empty) { $output_flag } else { $"./($title).nu" }
   $output_content | save --force $out_path
 }
@@ -959,8 +1000,9 @@ export def openapi [
   --no-introspection            # Omit the commands subcommand
   --no-descriptions             # Omit parameter descriptions
   --default-base-url: string    # Override default base URL from spec
+  --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (load-spec $source)
+  let loaded = (load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
     error make --unspanned { msg: "spec is GraphQL, not OpenAPI/Swagger — use `http-gen graphql` instead" }
@@ -984,8 +1026,9 @@ export def "openapi preview" [
   --methods: list<string>       # Filter: only these HTTP methods
   --exclude-deprecated          # Filter: skip deprecated operations
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
+  --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (load-spec $source)
+  let loaded = (load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
     error make --unspanned { msg: "spec is GraphQL, not OpenAPI/Swagger — use `http-gen graphql preview` instead" }
@@ -1012,8 +1055,9 @@ export def graphql [
   --no-introspection            # Omit the commands subcommand
   --no-descriptions             # Omit parameter descriptions
   --default-base-url: string    # Base URL for the GraphQL endpoint
+  --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (load-spec $source)
+  let loaded = (load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not GraphQL — use `http-gen openapi` instead" }
@@ -1038,8 +1082,9 @@ export def "graphql preview" [
   --prefixes: list<string>      # Filter: only fields matching these name prefixes
   --exclude-deprecated          # Filter: skip deprecated fields
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
+  --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (load-spec $source)
+  let loaded = (load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not GraphQL — use `http-gen openapi preview` instead" }

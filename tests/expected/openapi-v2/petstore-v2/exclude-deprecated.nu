@@ -95,6 +95,7 @@ export def commands []: nothing -> table {
 
 # uploads an image
 #
+# POST /pet/{petId}/uploadImage
 # operationId: uploadFile
 export def "pet-upload-image uploadFile" [
   petId: int
@@ -122,6 +123,7 @@ export def "pet-upload-image uploadFile" [
 
 # Add a new pet to the store
 #
+# POST /pet
 # operationId: addPet
 # --category shape: {id?: int, name?: string}
 # --tags item shape: {id?: int, name?: string}
@@ -154,6 +156,7 @@ export def "pet addPet" [
 
 # Update an existing pet
 #
+# PUT /pet
 # operationId: updatePet
 # --category shape: {id?: int, name?: string}
 # --tags item shape: {id?: int, name?: string}
@@ -186,6 +189,7 @@ export def "pet updatePet" [
 
 # Finds Pets by status
 #
+# GET /pet/findByStatus
 # operationId: findPetsByStatus
 export def "pet-find-by-status findPetsByStatus" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,6 +213,7 @@ export def "pet-find-by-status findPetsByStatus" [
 
 # Find pet by ID
 #
+# GET /pet/{petId}
 # operationId: getPetById
 export def "pet get" [
   petId: int
@@ -231,6 +236,7 @@ export def "pet get" [
 
 # Updates a pet in the store with form data
 #
+# POST /pet/{petId}
 # operationId: updatePetWithForm
 export def "pet updatePetWithForm" [
   petId: int
@@ -258,6 +264,7 @@ export def "pet updatePetWithForm" [
 
 # Deletes a pet
 #
+# DELETE /pet/{petId}
 # operationId: deletePet
 export def "pet delete" [
   petId: int
@@ -283,6 +290,7 @@ export def "pet delete" [
 
 # Returns pet inventories by status
 #
+# GET /store/inventory
 # operationId: getInventory
 export def "store-inventory get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -303,6 +311,7 @@ export def "store-inventory get" [
 
 # Place an order for a pet
 #
+# POST /store/order
 # operationId: placeOrder
 export def "store-order placeOrder" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -333,6 +342,7 @@ export def "store-order placeOrder" [
 
 # Find purchase order by ID
 #
+# GET /store/order/{orderId}
 # operationId: getOrderById
 export def "store-order get" [
   orderId: int
@@ -355,6 +365,7 @@ export def "store-order get" [
 
 # Delete purchase order by ID
 #
+# DELETE /store/order/{orderId}
 # operationId: deleteOrder
 export def "store-order delete" [
   orderId: int
@@ -377,6 +388,7 @@ export def "store-order delete" [
 
 # Creates list of users with given input array
 #
+# POST /user/createWithList
 # operationId: createUsersWithListInput
 export def "user-create-with-list createUsersWithListInput" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,6 +413,7 @@ export def "user-create-with-list createUsersWithListInput" [
 
 # Get user by user name
 #
+# GET /user/{username}
 # operationId: getUserByName
 export def "user get" [
   username: string
@@ -423,6 +436,7 @@ export def "user get" [
 
 # Updated user
 #
+# PUT /user/{username}
 # operationId: updateUser
 export def "user updateUser" [
   username: string
@@ -456,6 +470,7 @@ export def "user updateUser" [
 
 # Delete user
 #
+# DELETE /user/{username}
 # operationId: deleteUser
 export def "user delete" [
   username: string
@@ -478,6 +493,7 @@ export def "user delete" [
 
 # Logs user into the system
 #
+# GET /user/login
 # operationId: loginUser
 export def "user-login loginUser" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -502,6 +518,7 @@ export def "user-login loginUser" [
 
 # Logs out current logged in user session
 #
+# GET /user/logout
 # operationId: logoutUser
 export def "user-logout logoutUser" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,6 +540,7 @@ export def "user-logout logoutUser" [
 
 # Creates list of users with given input array
 #
+# POST /user/createWithArray
 # operationId: createUsersWithArrayInput
 export def "user-create-with-array createUsersWithArrayInput" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -547,6 +565,7 @@ export def "user-create-with-array createUsersWithArrayInput" [
 
 # Create user
 #
+# POST /user
 # operationId: createUser
 export def "user createUser" [
   --base-url(-b): string@base-url-completer # API base URL

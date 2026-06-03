@@ -302,6 +302,7 @@ export def "avcfg-cynet-alerts-list list" [
 
 # List all XDR log for a IDRS
 #
+# GET /avcfg/cynet/alerts/list/scangroup/{idrs}/
 # operationId: avcfg_cynet_alerts_list_scangroup_list
 export def "avcfg-cynet-alerts-list-scangroup list" [
   idrs: string

@@ -95,6 +95,7 @@ export def commands []: nothing -> table {
 
 # uploads an image
 #
+# POST /pet/{petId}/uploadImage
 # operationId: uploadFile
 export def "pet-upload-image uploadFile" [
   petId: int
@@ -122,6 +123,7 @@ export def "pet-upload-image uploadFile" [
 
 # Add a new pet to the store
 #
+# POST /pet
 # operationId: addPet
 # --body shape: {id?: int, category?: record, name: string, photoUrls: list, tags?: list, status?: "available"|"pending"|"sold"}
 export def "pet addPet" [
@@ -147,6 +149,7 @@ export def "pet addPet" [
 
 # Update an existing pet
 #
+# PUT /pet
 # operationId: updatePet
 # --body shape: {id?: int, category?: record, name: string, photoUrls: list, tags?: list, status?: "available"|"pending"|"sold"}
 export def "pet updatePet" [
@@ -172,6 +175,7 @@ export def "pet updatePet" [
 
 # Finds Pets by status
 #
+# GET /pet/findByStatus
 # operationId: findPetsByStatus
 export def "pet-find-by-status findPetsByStatus" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,6 +199,7 @@ export def "pet-find-by-status findPetsByStatus" [
 
 # Finds Pets by tags
 #
+# GET /pet/findByTags
 # DEPRECATED
 # operationId: findPetsByTags
 @deprecated
@@ -220,6 +225,7 @@ export def "pet-find-by-tags findPetsByTags" [
 
 # Find pet by ID
 #
+# GET /pet/{petId}
 # operationId: getPetById
 export def "pet get" [
   petId: int
@@ -242,6 +248,7 @@ export def "pet get" [
 
 # Updates a pet in the store with form data
 #
+# POST /pet/{petId}
 # operationId: updatePetWithForm
 export def "pet updatePetWithForm" [
   petId: int
@@ -269,6 +276,7 @@ export def "pet updatePetWithForm" [
 
 # Deletes a pet
 #
+# DELETE /pet/{petId}
 # operationId: deletePet
 export def "pet delete" [
   petId: int
@@ -294,6 +302,7 @@ export def "pet delete" [
 
 # Returns pet inventories by status
 #
+# GET /store/inventory
 # operationId: getInventory
 export def "store-inventory get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,6 +323,7 @@ export def "store-inventory get" [
 
 # Place an order for a pet
 #
+# POST /store/order
 # operationId: placeOrder
 # --body shape: {id?: int, petId?: int, quantity?: int, shipDate?: string, status?: "placed"|"approved"|"delivered", complete?: bool}
 export def "store-order placeOrder" [
@@ -339,6 +349,7 @@ export def "store-order placeOrder" [
 
 # Find purchase order by ID
 #
+# GET /store/order/{orderId}
 # operationId: getOrderById
 export def "store-order get" [
   orderId: int
@@ -361,6 +372,7 @@ export def "store-order get" [
 
 # Delete purchase order by ID
 #
+# DELETE /store/order/{orderId}
 # operationId: deleteOrder
 export def "store-order delete" [
   orderId: int
@@ -383,6 +395,7 @@ export def "store-order delete" [
 
 # Creates list of users with given input array
 #
+# POST /user/createWithList
 # operationId: createUsersWithListInput
 export def "user-create-with-list createUsersWithListInput" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -407,6 +420,7 @@ export def "user-create-with-list createUsersWithListInput" [
 
 # Get user by user name
 #
+# GET /user/{username}
 # operationId: getUserByName
 export def "user get" [
   username: string
@@ -429,6 +443,7 @@ export def "user get" [
 
 # Updated user
 #
+# PUT /user/{username}
 # operationId: updateUser
 # --body shape: {id?: int, username?: string, firstName?: string, lastName?: string, email?: string, password?: string, phone?: string, userStatus?: int}
 export def "user updateUser" [
@@ -455,6 +470,7 @@ export def "user updateUser" [
 
 # Delete user
 #
+# DELETE /user/{username}
 # operationId: deleteUser
 export def "user delete" [
   username: string
@@ -477,6 +493,7 @@ export def "user delete" [
 
 # Logs user into the system
 #
+# GET /user/login
 # operationId: loginUser
 export def "user-login loginUser" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -501,6 +518,7 @@ export def "user-login loginUser" [
 
 # Logs out current logged in user session
 #
+# GET /user/logout
 # operationId: logoutUser
 export def "user-logout logoutUser" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -522,6 +540,7 @@ export def "user-logout logoutUser" [
 
 # Creates list of users with given input array
 #
+# POST /user/createWithArray
 # operationId: createUsersWithArrayInput
 export def "user-create-with-array createUsersWithArrayInput" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,6 +565,7 @@ export def "user-create-with-array createUsersWithArrayInput" [
 
 # Create user
 #
+# POST /user
 # operationId: createUser
 # --body shape: {id?: int, username?: string, firstName?: string, lastName?: string, email?: string, password?: string, phone?: string, userStatus?: int}
 export def "user createUser" [

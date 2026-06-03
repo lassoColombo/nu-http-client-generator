@@ -251,6 +251,7 @@ export def "hooks-dmilog create" [
 
 # Generic endpoint to retrieve status of any RQ job given queue name + job id.
 #
+# GET /api/v1/jobs/{queue_name}/{job_id}/
 # operationId: api_v1_jobs_retrieve
 export def "jobs get" [
   job_id: string

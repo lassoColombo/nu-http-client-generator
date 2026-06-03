@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "https://spec.graphql.org/October2021/#sec-Introspection",
+  "description": "Validation schema for a GraphQL Introspection Query result (October 2021 spec). Describes the JSON shape returned by the standard introspection query and consumed by http-gen.",
+  "type": "object",
+  "required": ["data"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["__schema"],
+      "properties": {
+        "__schema": { "$ref": "#/definitions/__Schema" }
+      }
+    }
+  },
+  "definitions": {
+    "__Schema": {
+      "type": "object",
+      "description": "A GraphQL Schema defines the capabilities of a GraphQL server. It exposes all available types and directives on the server, as well as the entry points for query, mutation, and subscription operations.",
+      "required": ["queryType", "types"],
+      "properties": {
+        "description": { "type": ["string", "null"] },
+        "queryType": { "$ref": "#/definitions/__TypeRef_named" },
+        "mutationType": {
+          "oneOf": [
+            { "$ref": "#/definitions/__TypeRef_named" },
+            { "type": "null" }
+          ]
+        },
+        "subscriptionType": {
+          "oneOf": [
+            { "$ref": "#/definitions/__TypeRef_named" },
+            { "type": "null" }
+          ]
+        },
+        "types": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/__Type" }
+        },
+        "directives": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/__Directive" }
+        }
+      }
+    },
+    "__Type": {
+      "type": "object",
+      "description": "The fundamental unit of any GraphQL Schema. Depending on the kind, certain fields describe information about that type.",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/definitions/__TypeKind" },
+        "name": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "specifiedByURL": { "type": ["string", "null"] },
+        "fields": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/definitions/__Field" } },
+            { "type": "null" }
+          ]
+        },
+        "interfaces": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/definitions/__TypeRef" } },
+            { "type": "null" }
+          ]
+        },
+        "possibleTypes": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/definitions/__TypeRef" } },
+            { "type": "null" }
+          ]
+        },
+        "enumValues": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/definitions/__EnumValue" } },
+            { "type": "null" }
+          ]
+        },
+        "inputFields": {
+          "oneOf": [
+            { "type": "array", "items": { "$ref": "#/definitions/__InputValue" } },
+            { "type": "null" }
+          ]
+        },
+        "ofType": {
+          "oneOf": [
+            { "$ref": "#/definitions/__TypeRef" },
+            { "type": "null" }
+          ]
+        },
+        "isOneOf": { "type": ["boolean", "null"] }
+      }
+    },
+    "__Field": {
+      "type": "object",
+      "description": "Object and Interface types are described by a list of Fields, each of which has a name, potentially a list of arguments, and a return type.",
+      "required": ["name", "type", "isDeprecated"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "args": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/__InputValue" }
+        },
+        "type": { "$ref": "#/definitions/__TypeRef" },
+        "isDeprecated": { "type": "boolean" },
+        "deprecationReason": { "type": ["string", "null"] }
+      }
+    },
+    "__InputValue": {
+      "type": "object",
+      "description": "Arguments provided to Fields or Directives and the input fields of an InputObject are represented as Input Values which describe their type and optionally a default value.",
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "type": { "$ref": "#/definitions/__TypeRef" },
+        "defaultValue": { "type": ["string", "null"] },
+        "isDeprecated": { "type": "boolean" },
+        "deprecationReason": { "type": ["string", "null"] }
+      }
+    },
+    "__EnumValue": {
+      "type": "object",
+      "description": "One possible value for a given Enum. Enum values are unique values, not a placeholder for a string or numeric value.",
+      "required": ["name", "isDeprecated"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "isDeprecated": { "type": "boolean" },
+        "deprecationReason": { "type": ["string", "null"] }
+      }
+    },
+    "__Directive": {
+      "type": "object",
+      "description": "A Directive provides a way to describe alternate runtime execution and type validation behavior in a GraphQL document.",
+      "required": ["name", "locations"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "isRepeatable": { "type": "boolean" },
+        "locations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/__DirectiveLocation" }
+        },
+        "args": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/__InputValue" }
+        }
+      }
+    },
+    "__TypeKind": {
+      "type": "string",
+      "description": "An enum describing what kind of type a given __Type is.",
+      "enum": [
+        "SCALAR",
+        "OBJECT",
+        "INTERFACE",
+        "UNION",
+        "ENUM",
+        "INPUT_OBJECT",
+        "LIST",
+        "NON_NULL"
+      ]
+    },
+    "__DirectiveLocation": {
+      "type": "string",
+      "description": "A Directive can be adjacent to many parts of the GraphQL language.",
+      "enum": [
+        "QUERY",
+        "MUTATION",
+        "SUBSCRIPTION",
+        "FIELD",
+        "FRAGMENT_DEFINITION",
+        "FRAGMENT_SPREAD",
+        "INLINE_FRAGMENT",
+        "VARIABLE_DEFINITION",
+        "SCHEMA",
+        "SCALAR",
+        "OBJECT",
+        "FIELD_DEFINITION",
+        "ARGUMENT_DEFINITION",
+        "INTERFACE",
+        "UNION",
+        "ENUM",
+        "ENUM_VALUE",
+        "INPUT_OBJECT",
+        "INPUT_FIELD_DEFINITION"
+      ]
+    },
+    "__TypeRef": {
+      "type": "object",
+      "description": "A reference to a type, potentially wrapped in LIST/NON_NULL. The ofType chain encodes wrapper types recursively.",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/definitions/__TypeKind" },
+        "name": { "type": ["string", "null"] },
+        "ofType": {
+          "oneOf": [
+            { "$ref": "#/definitions/__TypeRef" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "__TypeRef_named": {
+      "type": "object",
+      "description": "A reference to a named type (used for queryType, mutationType, subscriptionType).",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "$ref": "#/definitions/__TypeKind" }
+      }
+    }
+  }
+}

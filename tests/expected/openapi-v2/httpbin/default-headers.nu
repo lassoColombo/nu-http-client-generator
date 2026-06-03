@@ -91,6 +91,8 @@ export def commands []: nothing -> table {
 }
 
 # Absolutely 302 Redirects n times.
+#
+# GET /absolute-redirect/{n}
 export def "absolute-redirect get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -110,6 +112,8 @@ export def "absolute-redirect get" [
 }
 
 # Returns anything passed in request data.
+#
+# DELETE /anything
 export def "anything delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,6 +132,8 @@ export def "anything delete" [
 }
 
 # Returns anything passed in request data.
+#
+# GET /anything
 export def "anything list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -146,6 +152,8 @@ export def "anything list" [
 }
 
 # Returns anything passed in request data.
+#
+# PATCH /anything
 export def "anything patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,6 +172,8 @@ export def "anything patch" [
 }
 
 # Returns anything passed in request data.
+#
+# POST /anything
 export def "anything post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,6 +192,8 @@ export def "anything post" [
 }
 
 # Returns anything passed in request data.
+#
+# PUT /anything
 export def "anything put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,6 +212,8 @@ export def "anything put" [
 }
 
 # Returns anything passed in request data.
+#
+# DELETE /anything/{anything}
 export def "anything delete-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -219,6 +233,8 @@ export def "anything delete-by-anything" [
 }
 
 # Returns anything passed in request data.
+#
+# GET /anything/{anything}
 export def "anything get" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -238,6 +254,8 @@ export def "anything get" [
 }
 
 # Returns anything passed in request data.
+#
+# PATCH /anything/{anything}
 export def "anything patch-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -257,6 +275,8 @@ export def "anything patch-by-anything" [
 }
 
 # Returns anything passed in request data.
+#
+# POST /anything/{anything}
 export def "anything post-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -276,6 +296,8 @@ export def "anything post-by-anything" [
 }
 
 # Returns anything passed in request data.
+#
+# PUT /anything/{anything}
 export def "anything put-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -295,6 +317,8 @@ export def "anything put-by-anything" [
 }
 
 # Decodes base64url-encoded string.
+#
+# GET /base64/{value}
 export def "base64 get" [
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,6 +338,8 @@ export def "base64 get" [
 }
 
 # Prompts the user for authorization using HTTP Basic Auth.
+#
+# GET /basic-auth/{user}/{passwd}
 export def "basic-auth get" [
   user: string
   passwd: string
@@ -334,6 +360,8 @@ export def "basic-auth get" [
 }
 
 # Prompts the user for authorization using bearer authentication.
+#
+# GET /bearer
 export def "bearer get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,6 +383,8 @@ export def "bearer get" [
 }
 
 # Returns Brotli-encoded data.
+#
+# GET /brotli
 export def "brotli get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,6 +403,8 @@ export def "brotli get" [
 }
 
 # Returns n random bytes generated with given seed
+#
+# GET /bytes/{n}
 export def "bytes get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -392,6 +424,8 @@ export def "bytes get" [
 }
 
 # Returns a 304 if an If-Modified-Since header or If-None-Match is present. Returns the same as a GET otherwise.
+#
+# GET /cache
 export def "cache list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,6 +448,8 @@ export def "cache list" [
 }
 
 # Sets a Cache-Control header for n seconds.
+#
+# GET /cache/{value}
 export def "cache get" [
   value: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,6 +469,8 @@ export def "cache get" [
 }
 
 # Returns cookie data.
+#
+# GET /cookies
 export def "cookies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,6 +489,8 @@ export def "cookies get" [
 }
 
 # Deletes cookie(s) as provided by the query string and redirects to cookie list.
+#
+# GET /cookies/delete
 export def "cookies-delete get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -471,6 +511,8 @@ export def "cookies-delete get" [
 }
 
 # Sets cookie(s) as provided by the query string and redirects to cookie list.
+#
+# GET /cookies/set
 export def "cookies-set get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,6 +533,8 @@ export def "cookies-set get" [
 }
 
 # Sets a cookie and redirects to cookie list.
+#
+# GET /cookies/set/{name}/{value}
 export def "cookies-set get-by-name-value" [
   name: string
   value: string
@@ -511,6 +555,8 @@ export def "cookies-set get-by-name-value" [
 }
 
 # Returns Deflate-encoded data.
+#
+# GET /deflate
 export def "deflate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,6 +575,8 @@ export def "deflate get" [
 }
 
 # Returns a delayed response (max of 10 seconds).
+#
+# DELETE /delay/{delay}
 export def "delay delete" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,6 +596,8 @@ export def "delay delete" [
 }
 
 # Returns a delayed response (max of 10 seconds).
+#
+# GET /delay/{delay}
 export def "delay get" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,6 +617,8 @@ export def "delay get" [
 }
 
 # Returns a delayed response (max of 10 seconds).
+#
+# PATCH /delay/{delay}
 export def "delay patch" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,6 +638,8 @@ export def "delay patch" [
 }
 
 # Returns a delayed response (max of 10 seconds).
+#
+# POST /delay/{delay}
 export def "delay post" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -605,6 +659,8 @@ export def "delay post" [
 }
 
 # Returns a delayed response (max of 10 seconds).
+#
+# PUT /delay/{delay}
 export def "delay put" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,6 +680,8 @@ export def "delay put" [
 }
 
 # The request's DELETE parameters.
+#
+# DELETE /delete
 export def "delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,6 +700,8 @@ export def "delete delete" [
 }
 
 # Returns page denied by robots.txt rules.
+#
+# GET /deny
 export def "deny get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,6 +720,8 @@ export def "deny get" [
 }
 
 # Prompts the user for authorization using Digest Auth.
+#
+# GET /digest-auth/{qop}/{user}/{passwd}
 export def "digest-auth get-by-qop-user-passwd" [
   qop: string
   user: string
@@ -681,6 +743,8 @@ export def "digest-auth get-by-qop-user-passwd" [
 }
 
 # Prompts the user for authorization using Digest Auth + Algorithm.
+#
+# GET /digest-auth/{qop}/{user}/{passwd}/{algorithm}
 export def "digest-auth get-by-qop-user-passwd-algorithm" [
   qop: string
   user: string
@@ -703,6 +767,8 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
 }
 
 # Prompts the user for authorization using Digest Auth + Algorithm.
+#
+# GET /digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}
 export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
   qop: string
   user: string
@@ -726,6 +792,8 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
 }
 
 # Drips data over a duration after an optional initial delay.
+#
+# GET /drip
 export def "drip get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,6 +817,8 @@ export def "drip get" [
 }
 
 # Returns a UTF-8 encoded body.
+#
+# GET /encoding/utf8
 export def "encoding-utf8 get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,6 +837,8 @@ export def "encoding-utf8 get" [
 }
 
 # Assumes the resource has the given etag and responds to If-None-Match and If-Match headers appropriately.
+#
+# GET /etag/{etag}
 export def "etag get" [
   etag: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,6 +862,8 @@ export def "etag get" [
 }
 
 # The request's query parameters.
+#
+# GET /get
 export def "get get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -808,6 +882,8 @@ export def "get get" [
 }
 
 # Returns GZip-encoded data.
+#
+# GET /gzip
 export def "gzip get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,6 +902,8 @@ export def "gzip get" [
 }
 
 # Return the incoming request's HTTP headers.
+#
+# GET /headers
 export def "headers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,6 +922,8 @@ export def "headers get" [
 }
 
 # Prompts the user for authorization using HTTP Basic Auth.
+#
+# GET /hidden-basic-auth/{user}/{passwd}
 export def "hidden-basic-auth get" [
   user: string
   passwd: string
@@ -864,6 +944,8 @@ export def "hidden-basic-auth get" [
 }
 
 # Returns a simple HTML document.
+#
+# GET /html
 export def "html get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,6 +964,8 @@ export def "html get" [
 }
 
 # Returns a simple image of the type suggest by the Accept header.
+#
+# GET /image
 export def "image get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -901,6 +985,8 @@ export def "image get" [
 }
 
 # Returns a simple JPEG image.
+#
+# GET /image/jpeg
 export def "image-jpeg get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,6 +1005,8 @@ export def "image-jpeg get" [
 }
 
 # Returns a simple PNG image.
+#
+# GET /image/png
 export def "image-png get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,6 +1025,8 @@ export def "image-png get" [
 }
 
 # Returns a simple SVG image.
+#
+# GET /image/svg
 export def "image-svg get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -955,6 +1045,8 @@ export def "image-svg get" [
 }
 
 # Returns a simple WEBP image.
+#
+# GET /image/webp
 export def "image-webp get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,6 +1065,8 @@ export def "image-webp get" [
 }
 
 # Returns the requester's IP Address.
+#
+# GET /ip
 export def "ip get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,6 +1085,8 @@ export def "ip get" [
 }
 
 # Returns a simple JSON document.
+#
+# GET /json
 export def "json get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1009,6 +1105,8 @@ export def "json get" [
 }
 
 # Generate a page containing n links to other pages which do the same.
+#
+# GET /links/{n}/{offset}
 export def "links get" [
   n: any
   offset: any
@@ -1029,6 +1127,8 @@ export def "links get" [
 }
 
 # The request's PATCH parameters.
+#
+# PATCH /patch
 export def "patch patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1047,6 +1147,8 @@ export def "patch patch" [
 }
 
 # The request's POST parameters.
+#
+# POST /post
 export def "post post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,6 +1167,8 @@ export def "post post" [
 }
 
 # The request's PUT parameters.
+#
+# PUT /put
 export def "put put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,6 +1187,8 @@ export def "put put" [
 }
 
 # Streams n random bytes generated with given seed, at given chunk size per packet.
+#
+# GET /range/{numbytes}
 export def "range get" [
   numbytes: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1102,6 +1208,8 @@ export def "range get" [
 }
 
 # 302/3XX Redirects to the given URL.
+#
+# DELETE /redirect-to
 export def "redirect-to delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,6 +1228,8 @@ export def "redirect-to delete" [
 }
 
 # 302/3XX Redirects to the given URL.
+#
+# GET /redirect-to
 export def "redirect-to get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,6 +1251,8 @@ export def "redirect-to get" [
 }
 
 # 302/3XX Redirects to the given URL.
+#
+# PATCH /redirect-to
 export def "redirect-to patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,6 +1271,8 @@ export def "redirect-to patch" [
 }
 
 # 302/3XX Redirects to the given URL.
+#
+# POST /redirect-to
 export def "redirect-to post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1182,6 +1296,8 @@ export def "redirect-to post" [
 }
 
 # 302/3XX Redirects to the given URL.
+#
+# PUT /redirect-to
 export def "redirect-to put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1205,6 +1321,8 @@ export def "redirect-to put" [
 }
 
 # 302 Redirects n times.
+#
+# GET /redirect/{n}
 export def "redirect get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1224,6 +1342,8 @@ export def "redirect get" [
 }
 
 # Relatively 302 Redirects n times.
+#
+# GET /relative-redirect/{n}
 export def "relative-redirect get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1243,6 +1363,8 @@ export def "relative-redirect get" [
 }
 
 # Returns a set of response headers from the query string.
+#
+# GET /response-headers
 export def "response-headers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,6 +1385,8 @@ export def "response-headers get" [
 }
 
 # Returns a set of response headers from the query string.
+#
+# POST /response-headers
 export def "response-headers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,6 +1407,8 @@ export def "response-headers post" [
 }
 
 # Returns some robots.txt rules.
+#
+# GET /robots.txt
 export def "robotstxt get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1301,6 +1427,8 @@ export def "robotstxt get" [
 }
 
 # Return status code or random status code if more than one are given
+#
+# DELETE /status/{codes}
 export def "status delete" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,6 +1448,8 @@ export def "status delete" [
 }
 
 # Return status code or random status code if more than one are given
+#
+# GET /status/{codes}
 export def "status get" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1339,6 +1469,8 @@ export def "status get" [
 }
 
 # Return status code or random status code if more than one are given
+#
+# PATCH /status/{codes}
 export def "status patch" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,6 +1490,8 @@ export def "status patch" [
 }
 
 # Return status code or random status code if more than one are given
+#
+# POST /status/{codes}
 export def "status post" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1377,6 +1511,8 @@ export def "status post" [
 }
 
 # Return status code or random status code if more than one are given
+#
+# PUT /status/{codes}
 export def "status put" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,6 +1532,8 @@ export def "status put" [
 }
 
 # Streams n random bytes generated with given seed, at given chunk size per packet.
+#
+# GET /stream-bytes/{n}
 export def "stream-bytes get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1415,6 +1553,8 @@ export def "stream-bytes get" [
 }
 
 # Stream n JSON responses
+#
+# GET /stream/{n}
 export def "stream get" [
   n: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1434,6 +1574,8 @@ export def "stream get" [
 }
 
 # Return the incoming requests's User-Agent header.
+#
+# GET /user-agent
 export def "user-agent get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1452,6 +1594,8 @@ export def "user-agent get" [
 }
 
 # Return a UUID4.
+#
+# GET /uuid
 export def "uuid get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,6 +1614,8 @@ export def "uuid get" [
 }
 
 # Returns a simple XML document.
+#
+# GET /xml
 export def "xml get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
