@@ -7,14 +7,10 @@
 #   http-gen openapi preview ./spec.yaml
 #   http-gen graphql preview ./schema.json
 
-use spec.nu
-use spec-oa3.nu
-use spec-swagger2.nu
-use spec-graphql.nu
-use render.nu
-use warn.nu
-use build-rest.nu
-use build-graphql.nu
+use src/spec
+use src/render
+use src/log
+use src/build
 
 # Build a normalized config record from CLI flags
 def build-config [
@@ -79,11 +75,11 @@ def deduplicate-commands [commands: list] {
 
   if ($list_candidates | length) > 0 {
     let display = if ($list_candidates | length) > 5 { $"($list_candidates | first 5 | each {|n| $n | split row ' ' | first } | str join ', '), ... \(($list_candidates | length) total\)" } else { $list_candidates | each {|n| $n | split row ' ' | first } | str join ", " }
-    warn dedup $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
+    log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
   }
   if ($suffix_candidates | length) > 0 {
     let display = if ($suffix_candidates | length) > 5 { $"($suffix_candidates | first 5 | str join ', '), ... \(($suffix_candidates | length) total\)" } else { $suffix_candidates | str join ", " }
-    warn dedup $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($display)"
+    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($display)"
   }
 
   let pass1 = $commands | each {|cmd|
@@ -114,7 +110,7 @@ def deduplicate-commands [commands: list] {
   }
 
   let display2 = if ($dup_names2 | length) > 5 { $"($dup_names2 | first 5 | str join ', '), ... \(($dup_names2 | length) total\)" } else { $dup_names2 | str join ", " }
-  warn dedup $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($display2)"
+  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($display2)"
 
   mut result = []
   mut seen = {}
@@ -138,9 +134,9 @@ def deduplicate-commands [commands: list] {
 def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = match $info.schema {
-    "openapi" => (spec-oa3 helpers)
-    "swagger" => (spec-swagger2 helpers)
-    "graphql" => (spec-graphql helpers)
+    "openapi" => (spec oa3 helpers)
+    "swagger" => (spec swagger2 helpers)
+    "graphql" => (spec graphql helpers)
   }
   let strategy = match $info.schema {
     "graphql" => (render graphql-render-strategy)
@@ -149,8 +145,8 @@ def process-spec [spec_data: record, config: record] {
   let schemas = (do $h.get-schemas $spec_data)
 
   let built = match $info.schema {
-    "graphql" => (build-graphql build-commands $spec_data $schemas $config)
-    _ => (build-rest build-commands $spec_data $schemas $h $config)
+    "graphql" => (build graphql build-commands $spec_data $schemas $config)
+    _ => (build rest build-commands $spec_data $schemas $h $config)
   }
 
   let deduped = deduplicate-commands $built.commands
@@ -164,7 +160,7 @@ def generate-module [loaded: record, config: record, name_flag: any, output_flag
   }
   let result = process-spec $loaded.data $config
   if ($result.commands | is-empty) {
-    warn config "no commands were generated — check your spec content or filter flags"
+    log error "no commands were generated — check your spec content or filter flags"
   }
   let extra_urls = ($urls_flag | append $result.all_urls)
   let output_content = render render-module $result.spec $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config $result.strategy
@@ -176,7 +172,7 @@ def generate-module [loaded: record, config: record, name_flag: any, output_flag
 def preview-commands [loaded: record, config: record] {
   let result = process-spec $loaded.data $config
   if ($result.commands | is-empty) {
-    warn config "no commands were generated — check your spec content or filter flags"
+    log error "no commands were generated — check your spec content or filter flags"
   }
   $result.commands | each {|c|
     {name: $c.name, method: $c.method, path_template: (if ($c.path_template | is-empty) { $c.gql_field_name? | default "" } else { $c.path_template })}
@@ -203,7 +199,7 @@ export def openapi [
   --default-base-url: string    # Override default base URL from spec
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (build-rest load-spec $source ($spec_headers | default {}))
+  let loaded = (build rest load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
@@ -247,7 +243,7 @@ export def "openapi preview" [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (build-rest load-spec $source ($spec_headers | default {}))
+  let loaded = (build rest load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
@@ -286,7 +282,7 @@ export def graphql [
   --default-base-url: string    # Base URL for the GraphQL endpoint
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (build-graphql load-spec $source ($spec_headers | default {}))
+  let loaded = (build graphql load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }
@@ -295,7 +291,7 @@ export def graphql [
     error make --unspanned { msg: "not a valid GraphQL introspection result: missing types" }
   }
   if ($default_base_url | default "" | is-empty) {
-    warn config "--default-base-url not set for GraphQL spec; generated client will have an empty base URL"
+    log error "--default-base-url not set for GraphQL spec; generated client will have an empty base URL"
   }
   let config = (
     build-config
@@ -331,7 +327,7 @@ export def "graphql preview" [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (build-graphql load-spec $source ($spec_headers | default {}))
+  let loaded = (build graphql load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
     error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }

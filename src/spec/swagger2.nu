@@ -2,7 +2,7 @@
 # Extracted from the unified dispatch table in spec.nu.
 
 use spec.nu
-use warn.nu
+use ../log
 
 # ── Private helpers ───────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ def get-auth-schemes-impl [spec_data: record] {
     } else {
       let shared = (spec build-auth-scheme $entry)
       if ($shared != null) { $shared } else {
-        warn fallback $"unknown security scheme type '($d.type? | default 'unset')' for '($entry.spec_name)', defaulting to bearer"
+        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($entry.spec_name)', defaulting to bearer"
         {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
       }
     }

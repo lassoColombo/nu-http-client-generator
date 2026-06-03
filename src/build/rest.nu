@@ -3,9 +3,9 @@
 # Extracts operations from an OpenAPI 3.x / Swagger 2.0 spec and produces
 # the unified command model consumed by render.nu.
 
-use spec.nu
-use render.nu
-use warn.nu
+use ../spec/spec.nu
+use ../render
+use ../log
 
 # Load an OpenAPI/Swagger spec from a local file or a URL.
 # Returns {data: record, source: string}.
@@ -169,7 +169,7 @@ def resolve-path-item [path_entry: record, schemas: record] {
   if ($path_entry.methods | columns | any {|c| $c == "$ref"}) {
     let resolved = (spec resolve-ref $path_entry.methods $schemas)
     if ($resolved | columns | any {|c| $c == "$ref"}) {
-      warn data $"unresolved PathItem $ref for path '($path_entry.path)', skipping referenced operations"
+      log warn $"unresolved PathItem $ref for path '($path_entry.path)', skipping referenced operations"
       $path_entry.methods
     } else {
       $resolved

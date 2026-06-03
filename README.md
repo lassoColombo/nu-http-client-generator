@@ -4,6 +4,18 @@ Reads an OpenAPI 3.x, Swagger 2.0, or GraphQL introspection schema and generates
 
 [![asciicast](https://asciinema.org/a/IQtLxd5nJoZSf0AW.svg)](https://asciinema.org/a/IQtLxd5nJoZSf0AW)
 
+## Installation
+
+```nushell
+# clone this repository into one of your NU_LIB_DIRS
+let dest = [($env.NU_LIB_DIRS | first) nu-http-client-generator] | path join
+git clone git@github.com:lassoColombo/nu-http-client-generator.git $dest
+
+# use the module
+use nu-http-client-generator
+nu-http-client-generator --help
+```
+
 ## Quick start
 
 ```nushell

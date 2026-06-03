@@ -3,9 +3,9 @@
 # Extracts Query/Mutation fields from a GraphQL introspection schema and
 # produces the unified command model consumed by render.nu.
 
-use spec.nu
-use render.nu
-use warn.nu
+use ../spec/spec.nu
+use ../render
+use ../log
 
 # ── GraphQL spec loading ──────────────────────────────────────────
 
@@ -145,13 +145,13 @@ export def load-introspection [url: string, headers: record = {}] {
       let next_idx = ($tiers | enumerate | where item.0 == $tier_name | first).index + 1
       if $next_idx < ($tiers | length) {
         let next_name = ($tiers | get $next_idx).0
-        warn fallback $"($tier_name) introspection query rejected, retrying with ($next_name) query"
+        log warn $"($tier_name) introspection query rejected, retrying with ($next_name) query"
       }
       continue
     }
     if ($result.ok? | is-not-empty) {
       if $tier_name == "shallow" {
-        warn data "shallow introspection succeeded (3-level ofType depth) — deeply wrapped types will resolve as 'any'"
+        log warn "shallow introspection succeeded (3-level ofType depth) — deeply wrapped types will resolve as 'any'"
       }
       return $result.ok
     }
@@ -162,11 +162,11 @@ export def load-introspection [url: string, headers: record = {}] {
   }
   # GET fallback — some servers (older Apollo/Express-GraphQL) only accept GET with ?query= param
   if ($last_err | is-empty) {
-    warn fallback "all POST introspection tiers rejected, attempting GET fallback"
+    log warn "all POST introspection tiers rejected, attempting GET fallback"
     for tier in $tiers {
       let get_result = (try-introspection-get $url $headers $tier.1)
       if ($get_result != null) and ($get_result.ok? | is-not-empty) {
-        warn data "GET introspection succeeded — POST was rejected by this server"
+        log info "GET introspection succeeded — POST was rejected by this server"
         return $get_result.ok
       }
     }
@@ -192,7 +192,7 @@ export def load-spec [source: string, headers: record = {}] {
       return {data: (parse-sdl $raw), source: $source}
     }
     # GET failed or returned unrecognized format — POST introspection query
-    warn fallback $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"
+    log warn $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"
     {data: (load-introspection $source $headers), source: $source}
   } else {
     let expanded = ($source | path expand | into string)
@@ -458,7 +458,7 @@ def build-command-list [spec_data: record, schemas: record, config: record] {
   let truncated_fields = ($truncated_fields | uniq)
   if ($truncated_fields | length) > 0 {
     let display = if ($truncated_fields | length) > 5 { $"($truncated_fields | first 5 | str join ', '), ... \(($truncated_fields | length) total\)" } else { $truncated_fields | str join ", " }
-    warn data $"($truncated_fields | length) truncated type reference\(s\) detected — these resolve to 'any' due to insufficient ofType depth in introspection: ($display)"
+    log warn $"($truncated_fields | length) truncated type reference\(s\) detected — these resolve to 'any' due to insufficient ofType depth in introspection: ($display)"
   }
 
   $commands
