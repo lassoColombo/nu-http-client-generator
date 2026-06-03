@@ -16,32 +16,6 @@ use warn.nu
 use build-rest.nu
 use build-graphql.nu
 
-# Load a spec from a local file or a URL.
-# Returns {data: record, source: string} where source is the resolved path or URL.
-def load-spec [source: string, headers: record = {}] {
-  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = try { http get --headers $headers $source } catch { null }
-    if ($raw != null) and (($raw.openapi? | is-not-empty) or ($raw.swagger? | is-not-empty) or ($raw.data?.__schema? | is-not-empty)) {
-      {data: $raw, source: $source}
-    } else if ($raw != null) and (build-graphql is-sdl $raw) {
-      {data: (build-graphql parse-sdl $raw), source: $source}
-    } else {
-      # GET failed or returned unrecognized format — try GraphQL introspection
-      warn fallback $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"
-      let intro = (build-graphql load-introspection $source $headers)
-      {data: $intro, source: $source}
-    }
-  } else {
-    let expanded = ($source | path expand | into string)
-    let data = (open $expanded)
-    if (build-graphql is-sdl $data) {
-      {data: (build-graphql parse-sdl $data), source: $expanded}
-    } else {
-      {data: $data, source: $expanded}
-    }
-  }
-}
-
 # Build a normalized config record from CLI flags
 def build-config [
   filter_tags: list = []
@@ -229,20 +203,38 @@ export def openapi [
   --default-base-url: string    # Override default base URL from spec
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (load-spec $source ($spec_headers | default {}))
+  let loaded = (build-rest load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
-    error make --unspanned { msg: "spec is GraphQL, not OpenAPI/Swagger — use `http-gen graphql` instead" }
+    error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
   }
   if ($loaded.data.paths? | is-empty) {
     error make --unspanned { msg: "not a valid OpenAPI/Swagger spec: missing 'paths' field" }
   }
-  let config = (build-config
-    ($tags | default []) ($prefixes | default []) ($methods | default [])
-    $exclude_deprecated ($verb_map | default {}) ($token_env_var | default "")
-    $default_timeout ($default_headers | default {}) $body_threshold
-    $no_introspection $no_descriptions ($default_base_url | default ""))
-  generate-module $loaded $config ($name | default "") $output ($urls | default [])
+  let config = (
+    build-config
+    ($tags | default [])
+    ($prefixes | default [])
+    ($methods | default [])
+    $exclude_deprecated
+    ($verb_map | default {})
+    ($token_env_var | default "")
+    $default_timeout
+    ($default_headers | default {})
+    $body_threshold
+    $no_introspection
+    $no_descriptions
+    ($default_base_url | default "")
+  )
+
+  (
+    generate-module
+    $loaded
+    $config
+    ($name | default "")
+    $output
+    ($urls | default [])
+  )
 }
 
 # Preview what commands would be generated from an OpenAPI/Swagger spec
@@ -255,15 +247,25 @@ export def "openapi preview" [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (load-spec $source ($spec_headers | default {}))
+  let loaded = (build-rest load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema == "graphql" {
-    error make --unspanned { msg: "spec is GraphQL, not OpenAPI/Swagger — use `http-gen graphql preview` instead" }
+    error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
   }
-  let config = (build-config
-    ($tags | default []) ($prefixes | default []) ($methods | default [])
-    $exclude_deprecated ($verb_map | default {}))
-  preview-commands $loaded $config
+  let config = (
+    build-config
+    ($tags | default [])
+    ($prefixes | default [])
+    ($methods | default [])
+    $exclude_deprecated
+    ($verb_map | default {})
+  )
+
+  (
+    preview-commands 
+    $loaded 
+    $config
+  )
 }
 
 # Generate a Nushell HTTP client module from a GraphQL schema
@@ -284,10 +286,10 @@ export def graphql [
   --default-base-url: string    # Base URL for the GraphQL endpoint
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (load-spec $source ($spec_headers | default {}))
+  let loaded = (build-graphql load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL — use `http-gen openapi` instead" }
+    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }
   }
   if ($loaded.data.data?.__schema?.types? | is-empty) {
     error make --unspanned { msg: "not a valid GraphQL introspection result: missing types" }
@@ -295,12 +297,30 @@ export def graphql [
   if ($default_base_url | default "" | is-empty) {
     warn config "--default-base-url not set for GraphQL spec; generated client will have an empty base URL"
   }
-  let config = (build-config
-    [] ($prefixes | default []) []
-    $exclude_deprecated ($verb_map | default {}) ($token_env_var | default "")
-    $default_timeout ($default_headers | default {}) $body_threshold
-    $no_introspection $no_descriptions ($default_base_url | default ""))
-  generate-module $loaded $config ($name | default "") $output ($urls | default [])
+  let config = (
+    build-config
+    []
+    ($prefixes | default [])
+    []
+    $exclude_deprecated
+    ($verb_map | default {})
+    ($token_env_var | default "")
+    $default_timeout
+    ($default_headers | default {})
+    $body_threshold
+    $no_introspection
+    $no_descriptions
+    ($default_base_url | default "")
+  )
+
+  (
+    generate-module 
+    $loaded 
+    $config 
+    ($name | default "") 
+    $output 
+    ($urls | default [])
+  )
 }
 
 # Preview what commands would be generated from a GraphQL schema
@@ -311,13 +331,23 @@ export def "graphql preview" [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (load-spec $source ($spec_headers | default {}))
+  let loaded = (build-graphql load-spec $source ($spec_headers | default {}))
   let info = (spec detect $loaded.data)
   if $info.schema != "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL — use `http-gen openapi preview` instead" }
+    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }
   }
-  let config = (build-config
-    [] ($prefixes | default []) []
-    $exclude_deprecated ($verb_map | default {}))
-  preview-commands $loaded $config
+  let config = (
+    build-config
+    []
+    ($prefixes | default []) 
+    []
+    $exclude_deprecated 
+    ($verb_map | default {})
+  )
+
+  (
+    preview-commands
+    $loaded
+    $config
+  )
 }

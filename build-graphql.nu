@@ -9,7 +9,12 @@ use warn.nu
 
 # ── GraphQL spec loading ──────────────────────────────────────────
 
+# Full introspection query including specifiedByURL and isOneOf (Oct 2021+ spec).
 const INTROSPECTION_QUERY = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name description specifiedByURL isOneOf fields(includeDeprecated: true) { name description args { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue isDeprecated deprecationReason } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated deprecationReason } inputFields { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue isDeprecated deprecationReason } interfaces { kind name } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { kind name } } } }'
+
+# Compat query: no specifiedByURL, isOneOf, or input-value deprecation fields.
+# Works with Hasura, older Apollo, and other pre-Oct 2021 servers.
+const INTROSPECTION_QUERY_COMPAT = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name description fields(includeDeprecated: true) { name description args { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated deprecationReason } inputFields { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } interfaces { kind name } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { kind name } } } }'
 
 # Node.js script that converts GraphQL SDL to introspection JSON via the graphql package.
 const SDL_CONVERT_SCRIPT = 'const g=require("graphql");let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const schema=g.buildSchema(s);const q=g.getIntrospectionQuery({inputValueDeprecation:true});const r=g.graphqlSync({schema,source:q});console.log(JSON.stringify(r))}catch(e){console.error(e.message);process.exit(1)}})'
@@ -29,8 +34,43 @@ export def parse-sdl [sdl_text: string] {
 }
 
 # Fetch a GraphQL introspection schema from an endpoint via POST.
+# Tries the full query first; falls back to the compat query if the server
+# rejects specifiedByURL / isOneOf (common on Hasura, older Apollo, etc.).
 export def load-introspection [url: string, headers: record = {}] {
-  http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY}
+  let full = try { http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY} } catch { null }
+  if ($full != null) and ($full.data?.__schema? | is-not-empty) {
+    return $full
+  }
+  if ($full != null) and ($full.errors? | is-not-empty) {
+    warn fallback "full introspection query rejected, retrying with compat query"
+  }
+  http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY_COMPAT}
+}
+
+# Load a GraphQL spec from a local file or a URL.
+# Handles introspection JSON, SDL text, and live endpoint introspection via POST.
+# Returns {data: record, source: string}.
+export def load-spec [source: string, headers: record = {}] {
+  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
+    let raw = try { http get --headers $headers $source } catch { null }
+    if ($raw != null) and ($raw.data?.__schema? | is-not-empty) {
+      return {data: $raw, source: $source}
+    }
+    if ($raw != null) and (is-sdl $raw) {
+      return {data: (parse-sdl $raw), source: $source}
+    }
+    # GET failed or returned unrecognized format — POST introspection query
+    warn fallback $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"
+    {data: (load-introspection $source $headers), source: $source}
+  } else {
+    let expanded = ($source | path expand | into string)
+    let data = (open $expanded)
+    if (is-sdl $data) {
+      {data: (parse-sdl $data), source: $expanded}
+    } else {
+      {data: $data, source: $expanded}
+    }
+  }
 }
 
 # ── Command model builder ─────────────────────────────────────────

@@ -1,6 +1,7 @@
 # Integration tests: generate clients from specs and call real APIs.
-# These tests hit live endpoints (httpbin.org, countries.trevorblades.com).
+# These tests hit live endpoints (httpbin.org, countries.trevorblades.com, petstore3.swagger.io).
 # They will fail if the APIs are unreachable.
+# Clients are generated from both local files and remote URLs to cover both load paths.
 
 use std/assert
 use std/testing *
@@ -8,6 +9,9 @@ use std/testing *
 use ../mod.nu
 
 const COUNTRIES_URL = "https://countries.trevorblades.com/graphql"
+const PETSTORE_SPEC_URL = "https://petstore3.swagger.io/api/v3/openapi.json"
+const PETSTORE_BASE_URL = "https://petstore3.swagger.io/api/v3"
+const POKEAPI_URL = "https://beta.pokeapi.co/graphql/v1beta"
 
 # Run a command using a generated client module and return parsed output.
 # Shells out to a clean nu process to avoid polluting the test environment.
@@ -23,13 +27,20 @@ def run-cmd [client: string, cmd: string]: nothing -> any {
 def setup []: nothing -> record {
     let temp = mktemp --directory
 
+    # file inputs
     mod openapi ./tests/inputs/openapi-v2/httpbin.json -o ($temp | path join "httpbin.nu")
     mod graphql ./tests/inputs/graphql/countries.json -o ($temp | path join "countries.nu") --default-base-url $COUNTRIES_URL
+
+    # url inputs
+    mod openapi $PETSTORE_SPEC_URL -o ($temp | path join "petstore.nu") --default-base-url $PETSTORE_BASE_URL
+    mod graphql $POKEAPI_URL -o ($temp | path join "pokeapi.nu") --default-base-url $POKEAPI_URL --name pokeapi
 
     {
         temp: $temp
         httpbin: ($temp | path join "httpbin.nu")
         countries: ($temp | path join "countries.nu")
+        petstore: ($temp | path join "petstore.nu")
+        pokeapi: ($temp | path join "pokeapi.nu")
     }
 }
 
@@ -105,4 +116,35 @@ def "graphql countries filtered by code" [] {
     let resp = run-cmd $in.countries $"countries query countries --base-url ($COUNTRIES_URL) --max-time 15sec --filter-code {eq: US} --fields [name code]"
     assert equal ($resp | length) 1
     assert equal ($resp | first | get name) "United States"
+}
+
+# --- petstore REST tests (loaded from URL) ---
+
+@test
+def "petstore find pets by status" [] {
+    let resp = run-cmd $in.petstore "petstore pet-find-by-status findPetsByStatus --status available --max-time 15sec"
+    assert (($resp | length) > 0) "should return at least one pet"
+}
+
+@test
+def "petstore get pet by id" [] {
+    let resp = run-cmd $in.petstore "petstore pet get 987654321 --max-time 15sec"
+    assert ($resp.id != null) "pet should have an id"
+    assert ($resp.name | is-not-empty) "pet should have a name"
+}
+
+# --- pokeapi GraphQL tests (loaded from URL) ---
+
+@test
+def "pokeapi query abilities" [] {
+    let resp = run-cmd $in.pokeapi $"pokeapi query pokemon-v2-ability --base-url ($POKEAPI_URL) --max-time 15sec --limit 3 --fields [id name]"
+    assert equal ($resp | length) 3
+    assert equal ($resp | first | get name) "stench"
+}
+
+@test
+def "pokeapi query ability by pk" [] {
+    let resp = run-cmd $in.pokeapi $"pokeapi query pokemon-v2-ability-by-pk 1 --base-url ($POKEAPI_URL) --max-time 15sec --fields [id name is_main_series]"
+    assert equal $resp.id 1
+    assert equal $resp.name "stench"
 }

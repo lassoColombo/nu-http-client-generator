@@ -7,6 +7,18 @@ use spec.nu
 use render.nu
 use warn.nu
 
+# Load an OpenAPI/Swagger spec from a local file or a URL.
+# Returns {data: record, source: string}.
+export def load-spec [source: string, headers: record = {}] {
+  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
+    let data = http get --headers $headers $source
+    {data: $data, source: $source}
+  } else {
+    let expanded = ($source | path expand | into string)
+    {data: (open $expanded), source: $expanded}
+  }
+}
+
 # Build command model + metadata from a REST spec.
 # Returns {commands, auth_schemes, default_auth, base_url, all_urls}.
 export def build-commands [spec_data: record, schemas: record, h: record, config: record] {

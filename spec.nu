@@ -463,4 +463,3 @@ export def extract-gql-input-fields [type_name: string, type_index: record] {
     }
   }
 }
-
