@@ -28,25 +28,25 @@ nu-http-client-generator --help
 ## Quick start
 
 ```nushell
-use http-gen
+use nu-http-client-generator
 
 # Generate a client from a spec file
-http-gen openapi ./gitlab.yaml -o ./gitlab.nu --name gitlab
+nu-http-client-generator openapi ./gitlab.yaml -o ./gitlab.nu --name gitlab
 
 # Generate from a URL
-http-gen openapi "https://gitlab.com/gitlab-org/gitlab/-/raw/master/doc/api/openapi/openapi_v2.yaml" -o ./gitlab.nu --name gitlab
+nu-http-client-generator openapi "https://gitlab.com/gitlab-org/gitlab/-/raw/master/doc/api/openapi/openapi_v2.yaml" -o ./gitlab.nu --name gitlab
 
 # Preview what commands would be generated (no file written)
-http-gen openapi preview ./gitlab.yaml
+nu-http-client-generator openapi preview ./gitlab.yaml
 
 # Generate only specific endpoints
-http-gen openapi ./gitlab.yaml -o ./gitlab.nu --name gitlab --prefixes ["/api/v4/projects/{id}/merge_requests"]
+nu-http-client-generator openapi ./gitlab.yaml -o ./gitlab.nu --name gitlab --prefixes ["/api/v4/projects/{id}/merge_requests"]
 
 # Generate from a GraphQL endpoint (auto-introspects)
-http-gen graphql "https://countries.trevorblades.com/graphql" -o ./countries.nu --default-base-url "https://countries.trevorblades.com/graphql"
+nu-http-client-generator graphql "https://countries.trevorblades.com/graphql" -o ./countries.nu --default-base-url "https://countries.trevorblades.com/graphql"
 
 # Generate from a GraphQL endpoint that requires authentication
-http-gen graphql "https://gitlab.com/-/graphql" -o ./gitlab-gql.nu --default-base-url "https://gitlab.com/-/graphql" --name gitlab-gql --spec-headers {Authorization: "Bearer ghp_xxx"}
+nu-http-client-generator graphql "https://gitlab.com/-/graphql" -o ./gitlab-gql.nu --default-base-url "https://gitlab.com/-/graphql" --name gitlab-gql --spec-headers {Authorization: "Bearer ghp_xxx"}
 ```
 
 Then use the generated client:
@@ -75,10 +75,10 @@ countries query countries --filter {code: {eq: "IT"}} --fields [name capital]
 
 | Command | Description |
 |---------|-------------|
-| `http-gen openapi <spec> -o <output>` | Generate from OpenAPI/Swagger |
-| `http-gen openapi preview <spec>` | Preview OpenAPI commands |
-| `http-gen graphql <spec> -o <output>` | Generate from GraphQL schema |
-| `http-gen graphql preview <spec>` | Preview GraphQL commands |
+| `nu-http-client-generator openapi <spec> -o <output>` | Generate from OpenAPI/Swagger |
+| `nu-http-client-generator openapi preview <spec>` | Preview OpenAPI commands |
+| `nu-http-client-generator graphql <spec> -o <output>` | Generate from GraphQL schema |
+| `nu-http-client-generator graphql preview <spec>` | Preview GraphQL commands |
 
 ## Flags
 
