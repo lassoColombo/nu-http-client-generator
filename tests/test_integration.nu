@@ -128,7 +128,11 @@ def "petstore find pets by status" [] {
 
 @test
 def "petstore get pet by id" [] {
-    let resp = run-cmd $in.petstore "petstore pet get 987654321 --max-time 15sec"
+    # First find an existing pet, then fetch it by ID
+    let pets = run-cmd $in.petstore "petstore pet-find-by-status findPetsByStatus --status available --max-time 15sec"
+    assert (($pets | length) > 0) "should find at least one pet to test with"
+    let pet_id = ($pets | first | get id)
+    let resp = run-cmd $in.petstore $"petstore pet get ($pet_id) --max-time 15sec"
     assert ($resp.id != null) "pet should have an id"
     assert ($resp.name | is-not-empty) "pet should have a name"
 }

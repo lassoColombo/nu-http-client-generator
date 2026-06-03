@@ -20,6 +20,12 @@ const INTROSPECTION_QUERY_COMPAT = '{ __schema { queryType { name } mutationType
 # query complexity limits (Shopify, locked-down GitHub).
 const INTROSPECTION_QUERY_MINIMAL = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name fields(includeDeprecated: true) { name args { name type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated } inputFields { name type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } interfaces { kind name } enumValues(includeDeprecated: true) { name isDeprecated } possibleTypes { kind name } } } }'
 
+# Shallow query: no descriptions/deprecation, asymmetric ofType depth to stay
+# within depth-7 limits. fields.type gets 3 levels (depth 7 from root), while
+# args.type and inputFields.type get 2 levels (depth 7 and 6 respectively).
+# Types beyond these depths resolve as 'any'.
+const INTROSPECTION_QUERY_SHALLOW = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name fields(includeDeprecated: true) { name args { name type { kind name ofType { kind name ofType { kind name } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name } } } } isDeprecated } inputFields { name type { kind name ofType { kind name ofType { kind name } } } defaultValue } enumValues(includeDeprecated: true) { name isDeprecated } possibleTypes { kind name } } } }'
+
 # Node.js script that converts GraphQL SDL to introspection JSON via the graphql package.
 const SDL_CONVERT_SCRIPT = 'const g=require("graphql");let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const schema=g.buildSchema(s);const q=g.getIntrospectionQuery({inputValueDeprecation:true});const r=g.graphqlSync({schema,source:q});console.log(JSON.stringify(r))}catch(e){console.error(e.message);process.exit(1)}})'
 
@@ -98,14 +104,36 @@ def try-introspection-post [url: string, headers: record, query: string] {
   null
 }
 
-# Fetch a GraphQL introspection schema from an endpoint via POST.
-# Three-tier cascade: full → compat → minimal. Falls through on recoverable
-# rejections; stops on success or terminal errors (auth, introspection disabled).
+# Try a single introspection GET with ?query= param. Same return convention
+# as try-introspection-post: {ok: record}, {err: string}, or null.
+def try-introspection-get [url: string, headers: record, query: string] {
+  let full_url = $"($url)?query=($query | url encode)"
+  let result = try {
+    http get --headers $headers --full --allow-errors $full_url
+  } catch {|e|
+    return {err: $"GraphQL GET introspection failed: ($e.msg)"}
+  }
+  let resp = $result.body
+  if ($resp | describe | str starts-with "record") {
+    let normalized = (normalize-gql-response $resp)
+    if (has-valid-schema $normalized) {
+      return {ok: $normalized}
+    }
+  }
+  null
+}
+
+# Fetch a GraphQL introspection schema from an endpoint.
+# Four-tier POST cascade: full → compat → minimal → shallow. Falls through on
+# recoverable rejections; stops on success or terminal errors (auth, disabled).
+# If all POST tiers fail with recoverable errors, retries the cascade via GET
+# with ?query= param (for servers that only accept GET, e.g. older Apollo).
 export def load-introspection [url: string, headers: record = {}] {
   let tiers = [
     [full $INTROSPECTION_QUERY]
     [compat $INTROSPECTION_QUERY_COMPAT]
     [minimal $INTROSPECTION_QUERY_MINIMAL]
+    [shallow $INTROSPECTION_QUERY_SHALLOW]
   ]
   mut last_err = ""
   for tier in $tiers {
@@ -122,6 +150,9 @@ export def load-introspection [url: string, headers: record = {}] {
       continue
     }
     if ($result.ok? | is-not-empty) {
+      if $tier_name == "shallow" {
+        warn data "shallow introspection succeeded (3-level ofType depth) — deeply wrapped types will resolve as 'any'"
+      }
       return $result.ok
     }
     if ($result.err? | is-not-empty) {
@@ -129,7 +160,16 @@ export def load-introspection [url: string, headers: record = {}] {
       break
     }
   }
+  # GET fallback — some servers (older Apollo/Express-GraphQL) only accept GET with ?query= param
   if ($last_err | is-empty) {
+    warn fallback "all POST introspection tiers rejected, attempting GET fallback"
+    for tier in $tiers {
+      let get_result = (try-introspection-get $url $headers $tier.1)
+      if ($get_result != null) and ($get_result.ok? | is-not-empty) {
+        warn data "GET introspection succeeded — POST was rejected by this server"
+        return $get_result.ok
+      }
+    }
     let body = try { http post --content-type "application/json" --headers $headers $url {query: "{ __typename }"} | to text | str substring 0..1000 } catch { "no response" }
     $last_err = $"All introspection queries rejected by ($url). The server may not support introspection. Use a pre-downloaded schema file instead.\n\nLast response body:\n($body)"
   }

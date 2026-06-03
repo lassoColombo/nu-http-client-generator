@@ -124,4 +124,4 @@ Supported schemes: `jwt`, `bearer`, `basic`, `private-token`, `query-*`, `cookie
 
 ## Acknowledgments
 
-Golden-file tests are powered by [nutest](https://github.com/vyadh/nutest), a testing framework for Nushell.
+Tests are powered by [nutest](https://github.com/vyadh/nutest), a testing framework for Nushell.
