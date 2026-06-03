@@ -2,6 +2,8 @@
 
 Reads an OpenAPI 3.x, Swagger 2.0, or GraphQL introspection schema and generates a typed Nushell HTTP client module.
 
+[![asciicast](https://asciinema.org/a/IQtLxd5nJoZSf0AW.svg)](https://asciinema.org/a/IQtLxd5nJoZSf0AW)
+
 ## Quick start
 
 ```nushell
