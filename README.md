@@ -1,8 +1,17 @@
 # nu-http-client-generator
 
-Reads an OpenAPI 3.x, Swagger 2.0, or GraphQL introspection schema and generates a typed Nushell HTTP client module.
+Reads an API specification and generates a typed Nushell HTTP client module.
 
 [![asciicast](https://asciinema.org/a/IQtLxd5nJoZSf0AW.svg)](https://asciinema.org/a/IQtLxd5nJoZSf0AW)
+
+## Supported specs
+
+| Format | Version |
+|--------|---------|
+| OpenAPI | 3.0.x |
+| Swagger | 2.0 |
+| GraphQL | Introspection |
+
 
 ## Installation
 
@@ -61,15 +70,6 @@ countries query country "IT" --fields [name capital emoji]
 countries query countries --filter {code: {eq: "IT"}} --fields [name capital]
 ```
 
-## Supported specs
-
-| Format | Version |
-|--------|---------|
-| OpenAPI | 3.0.x |
-| Swagger | 2.0 |
-| GraphQL | Introspection |
-
-The format is auto-detected. The source can be a local file or a URL. For GraphQL URLs, `http-gen` automatically POSTs an introspection query if needed.
 
 ## Subcommands
 
