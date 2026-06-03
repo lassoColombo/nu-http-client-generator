@@ -16,6 +16,10 @@ const INTROSPECTION_QUERY = '{ __schema { queryType { name } mutationType { name
 # Works with Hasura, older Apollo, and other pre-Oct 2021 servers.
 const INTROSPECTION_QUERY_COMPAT = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name description fields(includeDeprecated: true) { name description args { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated deprecationReason } inputFields { name description type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } interfaces { kind name } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { kind name } } } }'
 
+# Minimal query: no descriptions, no deprecationReason. For servers with strict
+# query complexity limits (Shopify, locked-down GitHub).
+const INTROSPECTION_QUERY_MINIMAL = '{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { kind name fields(includeDeprecated: true) { name args { name type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } isDeprecated } inputFields { name type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } } } } defaultValue } interfaces { kind name } enumValues(includeDeprecated: true) { name isDeprecated } possibleTypes { kind name } } } }'
+
 # Node.js script that converts GraphQL SDL to introspection JSON via the graphql package.
 const SDL_CONVERT_SCRIPT = 'const g=require("graphql");let s="";process.stdin.setEncoding("utf8");process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const schema=g.buildSchema(s);const q=g.getIntrospectionQuery({inputValueDeprecation:true});const r=g.graphqlSync({schema,source:q});console.log(JSON.stringify(r))}catch(e){console.error(e.message);process.exit(1)}})'
 
@@ -33,18 +37,103 @@ export def parse-sdl [sdl_text: string] {
   }
 }
 
+# Normalize a GraphQL response: unwrapped {__schema: ...} → {data: {__schema: ...}}.
+def normalize-gql-response [resp: record] {
+  if ($resp.__schema? | is-not-empty) {
+    {data: $resp}
+  } else {
+    $resp
+  }
+}
+
+# Check whether a GraphQL response has a valid __schema (even if errors are also present).
+def has-valid-schema [resp: record] {
+  ($resp | is-not-empty) and ($resp.data?.__schema? | is-not-empty)
+}
+
+# Classify a failed introspection response into an actionable error message.
+# Returns null if the error is a recoverable rejection (should cascade to next tier).
+def classify-introspection-error [resp: any, status: any] {
+  let body = ($resp | to text | str substring 0..1000)
+  if ($status == 401) or ($status == 403) {
+    return ($"GraphQL introspection failed: server requires authentication.\nPass --spec-headers \{Authorization: \"Bearer <token>\"\}\n\nResponse body:\n($body)")
+  }
+  let error_text = (if ($resp | describe | str starts-with "record") and ($resp.errors? | is-not-empty) {
+    $resp.errors | to text
+  } else {
+    $body
+  } | str downcase)
+  if ("introspection" in $error_text) and (("not allowed" in $error_text) or ("disabled" in $error_text) or ("forbidden" in $error_text)) {
+    return ($"GraphQL introspection is disabled on this server. Use a pre-downloaded schema file instead.\n\nResponse body:\n($body)")
+  }
+  null
+}
+
+# Try a single introspection POST. Returns {ok: record} on success, {err: string} on
+# terminal failure, or null on recoverable rejection (cascade to next tier).
+def try-introspection-post [url: string, headers: record, query: string] {
+  let result = try {
+    http post --content-type "application/json" --headers $headers --full --allow-errors $url {query: $query}
+  } catch {|e|
+    return {err: $"GraphQL introspection failed: ($e.msg)"}
+  }
+  let status = $result.status
+  let resp = $result.body
+  if ($resp | describe | str starts-with "record") {
+    let normalized = (normalize-gql-response $resp)
+    if (has-valid-schema $normalized) {
+      return {ok: $normalized}
+    }
+  }
+  # Check for terminal errors (auth, introspection disabled)
+  let terminal = if ($resp | describe | str starts-with "record") {
+    classify-introspection-error $resp $status
+  } else {
+    classify-introspection-error {body: ($resp | to text)} $status
+  }
+  if ($terminal != null) {
+    return {err: $terminal}
+  }
+  # Recoverable rejection — cascade to next tier
+  null
+}
+
 # Fetch a GraphQL introspection schema from an endpoint via POST.
-# Tries the full query first; falls back to the compat query if the server
-# rejects specifiedByURL / isOneOf (common on Hasura, older Apollo, etc.).
+# Three-tier cascade: full → compat → minimal. Falls through on recoverable
+# rejections; stops on success or terminal errors (auth, introspection disabled).
 export def load-introspection [url: string, headers: record = {}] {
-  let full = try { http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY} } catch { null }
-  if ($full != null) and ($full.data?.__schema? | is-not-empty) {
-    return $full
+  let tiers = [
+    [full $INTROSPECTION_QUERY]
+    [compat $INTROSPECTION_QUERY_COMPAT]
+    [minimal $INTROSPECTION_QUERY_MINIMAL]
+  ]
+  mut last_err = ""
+  for tier in $tiers {
+    let tier_name = $tier.0
+    let query = $tier.1
+    let result = (try-introspection-post $url $headers $query)
+    if ($result == null) {
+      # Recoverable rejection — warn and try next tier
+      let next_idx = ($tiers | enumerate | where item.0 == $tier_name | first).index + 1
+      if $next_idx < ($tiers | length) {
+        let next_name = ($tiers | get $next_idx).0
+        warn fallback $"($tier_name) introspection query rejected, retrying with ($next_name) query"
+      }
+      continue
+    }
+    if ($result.ok? | is-not-empty) {
+      return $result.ok
+    }
+    if ($result.err? | is-not-empty) {
+      $last_err = $result.err
+      break
+    }
   }
-  if ($full != null) and ($full.errors? | is-not-empty) {
-    warn fallback "full introspection query rejected, retrying with compat query"
+  if ($last_err | is-empty) {
+    let body = try { http post --content-type "application/json" --headers $headers $url {query: "{ __typename }"} | to text | str substring 0..1000 } catch { "no response" }
+    $last_err = $"All introspection queries rejected by ($url). The server may not support introspection. Use a pre-downloaded schema file instead.\n\nLast response body:\n($body)"
   }
-  http post --content-type "application/json" --headers $headers $url {query: $INTROSPECTION_QUERY_COMPAT}
+  error make --unspanned { msg: $last_err }
 }
 
 # Load a GraphQL spec from a local file or a URL.
@@ -53,8 +142,11 @@ export def load-introspection [url: string, headers: record = {}] {
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
     let raw = try { http get --headers $headers $source } catch { null }
-    if ($raw != null) and ($raw.data?.__schema? | is-not-empty) {
-      return {data: $raw, source: $source}
+    if ($raw != null) and ($raw | describe | str starts-with "record") {
+      let normalized = (normalize-gql-response $raw)
+      if (has-valid-schema $normalized) {
+        return {data: $normalized, source: $source}
+      }
     }
     if ($raw != null) and (is-sdl $raw) {
       return {data: (parse-sdl $raw), source: $source}
@@ -67,6 +159,8 @@ export def load-spec [source: string, headers: record = {}] {
     let data = (open $expanded)
     if (is-sdl $data) {
       {data: (parse-sdl $data), source: $expanded}
+    } else if ($data | describe | str starts-with "record") {
+      {data: (normalize-gql-response $data), source: $expanded}
     } else {
       {data: $data, source: $expanded}
     }
