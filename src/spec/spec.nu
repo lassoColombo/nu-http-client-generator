@@ -61,8 +61,13 @@ def ref-lookup [ref_path: string, schemas: record] {
 }
 
 # Resolve a $ref pointer against a schemas lookup table (version-independent).
-# Tracks visited refs to break cycles.
-export def resolve-ref [val: any, schemas: record, --visited: list<string> = []] {
+# Tracks visited refs to break cycles, and caps total recursion depth so that
+# specs with deeply chained $refs (Nomad, OpenShift, Confluence, etc.) don't
+# blow past Nushell's stack limit. When the cap is hit, the current value is
+# returned untouched — downstream callers that re-invoke resolve-ref on
+# narrower subtrees will still resolve nested refs lazily.
+export def resolve-ref [val: any, schemas: record, --visited: list<string> = [], --depth: int = 0] {
+  if $depth >= 40 { return $val }
   let t = ($val | describe)
   if ($t | str starts-with "record") {
     if ($val | columns | any {|c| $c == "$ref" }) {
@@ -77,7 +82,7 @@ export def resolve-ref [val: any, schemas: record, --visited: list<string> = []]
       }
       let resolved = (ref-lookup $ref_path $schemas)
       if ($resolved != null) {
-        resolve-ref $resolved $schemas --visited ($visited | append $ref_path)
+        resolve-ref $resolved $schemas --visited ($visited | append $ref_path) --depth ($depth + 1)
       } else {
         $val
       }
@@ -87,11 +92,11 @@ export def resolve-ref [val: any, schemas: record, --visited: list<string> = []]
         let v = ($val | get $col)
         let vt = ($v | describe)
         if ($vt | str starts-with "record") {
-          $result = ($result | upsert $col (resolve-ref $v $schemas --visited $visited))
+          $result = ($result | upsert $col (resolve-ref $v $schemas --visited $visited --depth ($depth + 1)))
         } else if ($vt | str starts-with "list") {
           $result = ($result | upsert $col ($v | each {|item|
             if (($item | describe) | str starts-with "record") {
-              resolve-ref $item $schemas --visited $visited
+              resolve-ref $item $schemas --visited $visited --depth ($depth + 1)
             } else {
               $item
             }

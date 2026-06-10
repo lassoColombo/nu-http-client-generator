@@ -9,14 +9,16 @@ use ../log
 def get-base-url-impl [spec_data: record] {
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
   let base_path = ($spec_data.basePath? | default "")
-  let schemes = ($spec_data.schemes? | default ["https"])
-  {scheme: ($schemes | first), host: $host, path: $base_path} | url join | str trim --right --char '/'
+  let raw_schemes = ($spec_data.schemes? | default [])
+  let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
+  {scheme: $scheme, host: $host, path: $base_path} | url join | str trim --right --char '/'
 }
 
 def get-all-urls-impl [spec_data: record] {
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
   let base_path = ($spec_data.basePath? | default "")
-  let schemes = ($spec_data.schemes? | default ["https"])
+  let raw_schemes = ($spec_data.schemes? | default [])
+  let schemes = (if ($raw_schemes | is-empty) { ["https"] } else { $raw_schemes })
   $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }
 }
 

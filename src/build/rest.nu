@@ -11,11 +11,6 @@ use ../log
 #
 # The URL path goes through `spec fetch-text` (raw fetch + UTF-8 decode)
 # instead of `http get`'s auto-parser — see the helper for the rationale.
-# YAML bodies additionally need integer-overflow quoting because nushell's
-# `from yaml` rejects values outside i64 (e.g. openai.yaml has
-# `minimum: -9223372036854776000`). The generator only reads
-# minimum/maximum as descriptive metadata, so widening to string downstream
-# is harmless.
 
 # Load an OpenAPI/Swagger spec from a local file or a URL.
 # Returns {data: record, source: string}.
@@ -31,55 +26,22 @@ export def load-spec [source: string, headers: record = {}] {
 
 # Parse a raw spec body, picking JSON or YAML based on the source URL's
 # extension and falling back to "try JSON then YAML" when there's no hint.
-# YAML bodies are first run through `quote-overflow-ints` so they survive
-# `from yaml` even when they contain out-of-i64 integers.
 def parse-spec-text [body: string, source: string]: nothing -> any {
   if ($source | str ends-with ".json") {
     return ($body | from json)
   }
   if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
-    return ((quote-overflow-ints $body) | from yaml)
+    return ($body | from yaml)
   }
   try {
     $body | from json
   } catch {
     try {
-      (quote-overflow-ints $body) | from yaml
+      $body | from yaml
     } catch {
       error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
     }
   }
-}
-
-# Wrap any bare integer literal in `body` whose magnitude exceeds i64 in quotes.
-# nushell's `from yaml` (serde_yaml) rejects such numbers with "invalid type:
-# integer ... as i128, expected any YAML value" even though i128 holds them.
-# Quoting turns them into YAML strings, which the generator treats as opaque
-# metadata anyway (it only reads `minimum`/`maximum` for descriptions).
-def quote-overflow-ints [body: string]: nothing -> string {
-  let overflow = (
-    $body
-    | parse --regex '(?<n>-?\d{19,})'
-    | get n
-    | uniq
-    | where {|n| not (fits-i64 $n) }
-    | sort-by { $in | str length } --reverse
-  )
-  mut out = $body
-  for n in $overflow {
-    let pattern = ('(^|[^\d"])(' + $n + ')($|[^\d"])')
-    let replacement = ('${1}"' + $n + '"${3}')
-    $out = ($out | str replace --regex --all $pattern $replacement)
-  }
-  $out
-}
-
-# True iff `n` (a decimal-integer string) round-trips through nushell's i64.
-# `into int` silently clamps overflow to i64::MIN/MAX, so a round-trip check
-# is the only reliable detector.
-def fits-i64 [n: string]: nothing -> bool {
-  let parsed = try { $n | into int | into string } catch { return false }
-  $parsed == $n
 }
 
 # Build command model + metadata from a REST spec.
@@ -115,6 +77,20 @@ def process-simple-params [params: list, location: string, h: record] {
   }
 }
 
+# Normalize a discriminator into {propertyName, mapping}. OAS 3.x discriminators
+# are records; Swagger 2.0 encodes them as bare strings (just the propertyName).
+# Returns null when there is no discriminator.
+def normalize-discriminator [disc: any] {
+  let t = ($disc | describe)
+  if ($t | str starts-with "record") {
+    {propertyName: ($disc.propertyName? | default ""), mapping: ($disc.mapping? | default {})}
+  } else if ($t == "string") {
+    {propertyName: $disc, mapping: {}}
+  } else {
+    null
+  }
+}
+
 # Merge properties from a body schema, handling allOf/oneOf/anyOf/discriminator.
 # Returns {props: record, required: list<string>}.
 def merge-body-props [schema: record, schemas: record] {
@@ -131,8 +107,9 @@ def merge-body-props [schema: record, schemas: record] {
     }
   }
 
-  let discriminator = ($schema.discriminator? | default null)
-  let disc_prop = if ($discriminator != null) { $discriminator.propertyName? | default null } else { null }
+  let disc = (normalize-discriminator ($schema.discriminator? | default null))
+  let disc_prop = if ($disc != null) { $disc.propertyName } else { null }
+  let disc_mapping = if ($disc != null) { $disc.mapping } else { {} }
   let poly_variants = ($schema.oneOf? | default ($schema.anyOf? | default []))
   for variant in $poly_variants {
     let resolved_variant = (spec resolve-ref $variant $schemas)
@@ -148,7 +125,6 @@ def merge-body-props [schema: record, schemas: record] {
 
   if ($disc_prop != null) and ($disc_prop in ($merged_props | columns)) {
     $merged_required = ($merged_required | append $disc_prop | uniq)
-    let disc_mapping = ($discriminator.mapping? | default {})
     if ($disc_mapping | columns | length) > 0 {
       $merged_props = ($merged_props | upsert $disc_prop ($merged_props | get $disc_prop | upsert enum ($disc_mapping | columns)))
     }
@@ -162,7 +138,12 @@ def extract-body-fields [schema: record, schemas: record] {
   let merged = (merge-body-props $schema $schemas)
   let props = $merged.props
   let required = $merged.required
+  # Filter out malformed entries where a property value isn't a schema record
+  # (e.g. meilisearch's open-api.yaml uses `$ref` as a property name, leaving
+  # a bare string sibling that would crash subsequent cell-path accesses).
   $props | transpose name field_spec | where {|field|
+    ($field.field_spec | describe | str starts-with "record")
+  } | where {|field|
     not ($field.field_spec.readOnly? | default false)
   } | each {|field|
     let field_type = (spec normalize-type ($field.field_spec.type? | default "any"))
@@ -196,7 +177,9 @@ def extract-body-fields [schema: record, schemas: record] {
 # Returns list of {flag: string, shape: string, is_item: bool}.
 def build-field-shapes [schema: record, schemas: record] {
   let merged = (merge-body-props $schema $schemas)
-  $merged.props | transpose name field_spec | each {|field|
+  $merged.props | transpose name field_spec | where {|field|
+    ($field.field_spec | describe | str starts-with "record")
+  } | each {|field|
     let fs = (spec resolve-ref $field.field_spec $schemas)
     let ft = (spec normalize-type ($fs.type? | default ""))
     if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
@@ -368,7 +351,7 @@ def extract-body-info [op: record, schemas: record, h: record] {
   }
 
   # discriminator info
-  let body_disc = ($body_schema.discriminator? | default null)
+  let body_disc = (normalize-discriminator (if (($body_schema | describe) | str starts-with "record") { $body_schema.discriminator? | default null } else { null }))
   let responses = ($op.responses? | default {})
   let resp_discs = $responses | transpose code resp | where {|r|
     ($r.code | str starts-with "2") or ($r.code == "default") or ($r.code =~ '^[12][xX]{2}$')
@@ -376,13 +359,17 @@ def extract-body-info [op: record, schemas: record, h: record] {
     let content = ($r.resp.content? | default {})
     let json_schema = ($content | get -o "application/json" | default {} | get -o schema | default {})
     let resolved = (spec resolve-ref $json_schema $schemas)
-    $resolved.discriminator? | default null
+    if (($resolved | describe) | str starts-with "record") {
+      normalize-discriminator ($resolved.discriminator? | default null)
+    } else {
+      null
+    }
   } | where { $in != null }
   let resp_disc = if ($resp_discs | length) > 0 { $resp_discs | first } else { null }
   let discriminator = if ($body_disc != null) {
-    {context: "request", propertyName: ($body_disc.propertyName? | default ""), mapping: ($body_disc.mapping? | default {})}
+    {context: "request", propertyName: $body_disc.propertyName, mapping: $body_disc.mapping}
   } else if ($resp_disc != null) {
-    {context: "response", propertyName: ($resp_disc.propertyName? | default ""), mapping: ($resp_disc.mapping? | default {})}
+    {context: "response", propertyName: $resp_disc.propertyName, mapping: $resp_disc.mapping}
   } else {
     null
   }
