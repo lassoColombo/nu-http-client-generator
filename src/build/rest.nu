@@ -7,37 +7,94 @@ use ../spec/spec.nu
 use ../render
 use ../log
 
+# ─── Spec loading ──────────────────────────────────────────────────
+#
+# The URL path explicitly avoids `http get`'s auto-parser. The auto-parser
+# would be ideal — one call, parsed record back — but it doesn't survive
+# two real-world specs we want to generate clients for:
+#
+# 1. api.weather.gov serves its OpenAPI doc with content-type
+#    `application/vnd.oai.openapi+json;version=3.1`. nushell doesn't have
+#    a parser registered for that media type, so `http get` hands back the
+#    body as a bare string and `spec detect` later panics with "can't
+#    convert string to record".
+#
+# 2. openai.yaml contains `minimum: -9223372036854776000` (slightly outside
+#    i64 range). nushell's `from yaml` (serde_yaml) deserializes via i128
+#    but then fails the final "as i128, expected any YAML value" coercion
+#    and errors out before returning anything.
+#
+# Both problems disappear if we control parsing ourselves: fetch with
+# `--raw`, decode if the body comes back as binary, dispatch to `from
+# json` or `from yaml` based on the URL extension, and quote out-of-range
+# integers so YAML can deserialize them as strings. The generator only
+# reads `minimum`/`maximum` as descriptive metadata, so widening their
+# type to string downstream is harmless.
+
 # Load an OpenAPI/Swagger spec from a local file or a URL.
 # Returns {data: record, source: string}.
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = http get --headers $headers $source
-    {data: (parse-if-string $raw $source), source: $source}
+    let raw = (http get --raw --headers $headers $source)
+    let body = if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
+    {data: (parse-spec-text $body $source), source: $source}
   } else {
     let expanded = ($source | path expand | into string)
     {data: (open $expanded), source: $expanded}
   }
 }
 
-# `http get` auto-parses recognized content-types (application/json,
-# application/yaml). Servers that label specs with unrecognized media types
-# (e.g. api.weather.gov returns `application/vnd.oai.openapi+json;version=3.1`)
-# come back as a raw string — try JSON then YAML before giving up.
-def parse-if-string [data: any, source: string]: nothing -> any {
-  if (($data | describe) != "string") { return $data }
-  if ($source | str ends-with ".json") { return ($data | from json) }
+# Parse a raw spec body, picking JSON or YAML based on the source URL's
+# extension and falling back to "try JSON then YAML" when there's no hint.
+# YAML bodies are first run through `quote-overflow-ints` so they survive
+# `from yaml` even when they contain out-of-i64 integers.
+def parse-spec-text [body: string, source: string]: nothing -> any {
+  if ($source | str ends-with ".json") {
+    return ($body | from json)
+  }
   if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
-    return ($data | from yaml)
+    return ((quote-overflow-ints $body) | from yaml)
   }
   try {
-    $data | from json
+    $body | from json
   } catch {
     try {
-      $data | from yaml
+      (quote-overflow-ints $body) | from yaml
     } catch {
-      error make --unspanned { msg: $"could not parse spec from ($source): server returned an unrecognized content-type and the body is neither valid JSON nor YAML" }
+      error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
     }
   }
+}
+
+# Wrap any bare integer literal in `body` whose magnitude exceeds i64 in quotes.
+# nushell's `from yaml` (serde_yaml) rejects such numbers with "invalid type:
+# integer ... as i128, expected any YAML value" even though i128 holds them.
+# Quoting turns them into YAML strings, which the generator treats as opaque
+# metadata anyway (it only reads `minimum`/`maximum` for descriptions).
+def quote-overflow-ints [body: string]: nothing -> string {
+  let overflow = (
+    $body
+    | parse --regex '(?<n>-?\d{19,})'
+    | get n
+    | uniq
+    | where {|n| not (fits-i64 $n) }
+    | sort-by { $in | str length } --reverse
+  )
+  mut out = $body
+  for n in $overflow {
+    let pattern = ('(^|[^\d"])(' + $n + ')($|[^\d"])')
+    let replacement = ('${1}"' + $n + '"${3}')
+    $out = ($out | str replace --regex --all $pattern $replacement)
+  }
+  $out
+}
+
+# True iff `n` (a decimal-integer string) round-trips through nushell's i64.
+# `into int` silently clamps overflow to i64::MIN/MAX, so a round-trip check
+# is the only reliable detector.
+def fits-i64 [n: string]: nothing -> bool {
+  let parsed = try { $n | into int | into string } catch { return false }
+  $parsed == $n
 }
 
 # Build command model + metadata from a REST spec.
