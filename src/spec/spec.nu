@@ -15,6 +15,21 @@ export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
 
 # ── Version-independent helpers ─────────────────────────────────────
 
+# Fetch a URL as raw text, decoding binary responses to UTF-8.
+#
+# Used by both REST and GraphQL spec loaders to bypass `http get`'s
+# auto-parser. The auto-parser would be ideal — one call, parsed record
+# back — but it doesn't survive real-world specs served with content-types
+# nushell doesn't recognize (e.g. `application/vnd.oai.openapi+json` from
+# api.weather.gov, or `application/graphql+json` from some GraphQL servers).
+# When the auto-parser doesn't know a media type, it hands back a bare string
+# and downstream `from json` / `spec detect` panics. Fetching raw and parsing
+# explicitly downstream sidesteps the issue.
+export def fetch-text [url: string, headers: record = {}] {
+  let raw = (http get --raw --headers $headers $url)
+  if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
+}
+
 # Look up a $ref target in a nested schemas record (keyed by namespace).
 # Parses the ref path to find the right sub-record, with fallback search.
 # Returns null if not found.

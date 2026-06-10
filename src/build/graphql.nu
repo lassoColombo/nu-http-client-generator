@@ -179,17 +179,25 @@ export def load-introspection [url: string, headers: record = {}] {
 # Load a GraphQL spec from a local file or a URL.
 # Handles introspection JSON, SDL text, and live endpoint introspection via POST.
 # Returns {data: record, source: string}.
+#
+# Like rest.nu, the URL path uses `spec fetch-text` (raw fetch + UTF-8 decode)
+# instead of `http get`'s auto-parser. This lets us recognize introspection
+# JSON served with unusual content-types (e.g. `application/graphql+json`)
+# without having to fall through to the introspection POST cascade.
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = try { http get --headers $headers $source } catch { null }
-    if ($raw != null) and ($raw | describe | str starts-with "record") {
-      let normalized = (normalize-gql-response $raw)
-      if (has-valid-schema $normalized) {
-        return {data: $normalized, source: $source}
+    let body = try { spec fetch-text $source $headers } catch { null }
+    if $body != null {
+      let parsed = try { $body | from json } catch { null }
+      if ($parsed != null) and ($parsed | describe | str starts-with "record") {
+        let normalized = (normalize-gql-response $parsed)
+        if (has-valid-schema $normalized) {
+          return {data: $normalized, source: $source}
+        }
       }
-    }
-    if ($raw != null) and (is-sdl $raw) {
-      return {data: (parse-sdl $raw), source: $source}
+      if (is-sdl $body) {
+        return {data: (parse-sdl $body), source: $source}
+      }
     }
     # GET failed or returned unrecognized format — POST introspection query
     log warn $"GET ($source) returned unrecognized format, attempting GraphQL introspection via POST"

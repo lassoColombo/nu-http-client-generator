@@ -9,34 +9,19 @@ use ../log
 
 # ─── Spec loading ──────────────────────────────────────────────────
 #
-# The URL path explicitly avoids `http get`'s auto-parser. The auto-parser
-# would be ideal — one call, parsed record back — but it doesn't survive
-# two real-world specs we want to generate clients for:
-#
-# 1. api.weather.gov serves its OpenAPI doc with content-type
-#    `application/vnd.oai.openapi+json;version=3.1`. nushell doesn't have
-#    a parser registered for that media type, so `http get` hands back the
-#    body as a bare string and `spec detect` later panics with "can't
-#    convert string to record".
-#
-# 2. openai.yaml contains `minimum: -9223372036854776000` (slightly outside
-#    i64 range). nushell's `from yaml` (serde_yaml) deserializes via i128
-#    but then fails the final "as i128, expected any YAML value" coercion
-#    and errors out before returning anything.
-#
-# Both problems disappear if we control parsing ourselves: fetch with
-# `--raw`, decode if the body comes back as binary, dispatch to `from
-# json` or `from yaml` based on the URL extension, and quote out-of-range
-# integers so YAML can deserialize them as strings. The generator only
-# reads `minimum`/`maximum` as descriptive metadata, so widening their
-# type to string downstream is harmless.
+# The URL path goes through `spec fetch-text` (raw fetch + UTF-8 decode)
+# instead of `http get`'s auto-parser — see the helper for the rationale.
+# YAML bodies additionally need integer-overflow quoting because nushell's
+# `from yaml` rejects values outside i64 (e.g. openai.yaml has
+# `minimum: -9223372036854776000`). The generator only reads
+# minimum/maximum as descriptive metadata, so widening to string downstream
+# is harmless.
 
 # Load an OpenAPI/Swagger spec from a local file or a URL.
 # Returns {data: record, source: string}.
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let raw = (http get --raw --headers $headers $source)
-    let body = if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
+    let body = (spec fetch-text $source $headers)
     {data: (parse-spec-text $body $source), source: $source}
   } else {
     let expanded = ($source | path expand | into string)
@@ -461,12 +446,29 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 
   # Apply custom verb map override, then camelCase check, then default mapping
   let action_mapped = ($verb_map | get -o $action_raw | default null)
-  let action = if ($action_mapped != null) {
+  let action_picked = if ($action_mapped != null) {
     $action_mapped
   } else if ($action_raw =~ '^(get|post|put|patch|delete)[A-Z]') {
     $method
   } else {
     action-verb $action_raw
+  }
+
+  # Strip chars that break `def "..." [...]` names. Some specs (e.g. Sentry)
+  # use free-text operationIds like "Retrieve Statuses (Alpha)" — without
+  # this, the parens/spaces flow straight into the generated def name.
+  # Only kicks in when the action has unsafe chars — leaves clean camelCase
+  # action names (findPetsByStatus, etc.) untouched.
+  let action = if ($action_picked =~ '[\s\\$()*\[\]=\x27",.#!@%^&+~`]') {
+    let cleaned = (
+      $action_picked
+      | str replace --all --regex '[\\$()*\[\]=\x27",.$#!@%^&+~`]' ''
+      | str trim
+      | str replace --all --regex '\s+' '-'
+    )
+    if ($cleaned | is-empty) { $method } else { $cleaned }
+  } else {
+    $action_picked
   }
 
   # detect _2 deduplication pattern
