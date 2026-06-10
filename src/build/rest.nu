@@ -11,11 +11,32 @@ use ../log
 # Returns {data: record, source: string}.
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let data = http get --headers $headers $source
-    {data: $data, source: $source}
+    let raw = http get --headers $headers $source
+    {data: (parse-if-string $raw $source), source: $source}
   } else {
     let expanded = ($source | path expand | into string)
     {data: (open $expanded), source: $expanded}
+  }
+}
+
+# `http get` auto-parses recognized content-types (application/json,
+# application/yaml). Servers that label specs with unrecognized media types
+# (e.g. api.weather.gov returns `application/vnd.oai.openapi+json;version=3.1`)
+# come back as a raw string — try JSON then YAML before giving up.
+def parse-if-string [data: any, source: string]: nothing -> any {
+  if (($data | describe) != "string") { return $data }
+  if ($source | str ends-with ".json") { return ($data | from json) }
+  if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
+    return ($data | from yaml)
+  }
+  try {
+    $data | from json
+  } catch {
+    try {
+      $data | from yaml
+    } catch {
+      error make --unspanned { msg: $"could not parse spec from ($source): server returned an unrecognized content-type and the body is neither valid JSON nor YAML" }
+    }
   }
 }
 
