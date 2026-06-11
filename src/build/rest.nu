@@ -27,21 +27,29 @@ export def load-spec [source: string, headers: record = {}] {
 # Parse a raw spec body, picking JSON or YAML based on the source URL's
 # extension and falling back to "try JSON then YAML" when there's no hint.
 def parse-spec-text [body: string, source: string]: nothing -> any {
-  if ($source | str ends-with ".json") {
-    return ($body | from json)
-  }
-  if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
-    return ($body | from yaml)
-  }
-  try {
+  let parsed = if ($source | str ends-with ".json") {
     $body | from json
-  } catch {
+  } else if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
+    $body | from yaml
+  } else {
     try {
-      $body | from yaml
+      $body | from json
     } catch {
-      error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
+      try {
+        $body | from yaml
+      } catch {
+        # YAML accepts bare HTML/text as a scalar string, so a successful parse
+        # here means we got real JSON or structured YAML — anything else is a
+        # server returning an error page (HTML, plain text) with HTTP 200.
+        error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
+      }
     }
   }
+  if not (($parsed | describe) | str starts-with "record") {
+    let preview = ($body | str trim | str substring 0..120)
+    error make --unspanned { msg: $"spec at ($source) did not parse to a record \(got ($parsed | describe)\); response begins: ($preview)" }
+  }
+  $parsed
 }
 
 # Build command model + metadata from a REST spec.
@@ -141,7 +149,13 @@ def extract-body-fields [schema: record, schemas: record] {
   # Filter out malformed entries where a property value isn't a schema record
   # (e.g. meilisearch's open-api.yaml uses `$ref` as a property name, leaving
   # a bare string sibling that would crash subsequent cell-path accesses).
-  $props | transpose name field_spec | where {|field|
+  $props | transpose name field_spec | each {|field|
+    if (($field.field_spec | describe) | str starts-with "record") {
+      $field | upsert field_spec (spec resolve-ref $field.field_spec $schemas)
+    } else {
+      $field
+    }
+  } | where {|field|
     ($field.field_spec | describe | str starts-with "record")
   } | where {|field|
     not ($field.field_spec.readOnly? | default false)
@@ -278,11 +292,16 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
   } | append $op_params)
 
   # resolve $ref in params, filter out body params
+  # resolve-ref is shallow, so we also resolve the nested .schema if it's a ref
   let resolved_params = $parameters | each {|p|
-    if ($p | columns | any {|c| $c == "$ref"}) {
+    let resolved = if ($p | columns | any {|c| $c == "$ref"}) {
       spec resolve-ref $p $schemas
+    } else { $p }
+    let s = ($resolved.schema? | default null)
+    if ($s != null) and (($s | describe) | str starts-with "record") and ($s | columns | any {|c| $c == "$ref"}) {
+      $resolved | upsert schema (spec resolve-ref $s $schemas)
     } else {
-      $p
+      $resolved
     }
   } | spec get-non-body-params $in
 

@@ -142,7 +142,10 @@ def process-spec [spec_data: record, config: record] {
     "graphql" => (render graphql-render-strategy)
     _ => (render rest-render-strategy)
   }
-  let schemas = (do $h.get-schemas $spec_data)
+  let raw_schemas = (do $h.get-schemas $spec_data)
+  # Pre-resolve $refs once for REST specs so every downstream resolve-ref
+  # call becomes a cheap lookup. GraphQL schemas don't use $refs.
+  let schemas = if $info.schema == "graphql" { $raw_schemas } else { (spec build-resolved-schemas $raw_schemas) }
 
   let built = match $info.schema {
     "graphql" => (build graphql build-commands $spec_data $schemas $config)

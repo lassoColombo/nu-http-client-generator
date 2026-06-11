@@ -60,73 +60,70 @@ def ref-lookup [ref_path: string, schemas: record] {
   null
 }
 
-# Resolve a $ref pointer against a schemas lookup table (version-independent).
-# Tracks visited refs to break cycles, and caps total recursion depth so that
-# specs with deeply chained $refs (Nomad, OpenShift, Confluence, etc.) don't
-# blow past Nushell's stack limit. When the cap is hit, the current value is
-# returned untouched — downstream callers that re-invoke resolve-ref on
-# narrower subtrees will still resolve nested refs lazily.
+# Pre-resolve $ref chains in a raw schemas record. Each entry has any top-
+# level $ref chain (A → B → C) collapsed to the final concrete value, but
+# inner $refs inside that value are LEFT IN PLACE. Callers re-invoke
+# resolve-ref to resolve those inner refs when they actually need them.
 #
-# Memoizes (ref_path → resolved_value) for the lifetime of a single top-level
-# call. Schemas like Confluence share sub-schemas across many fields; without
-# memoization each occurrence re-expanded the same sub-tree, blowing total
-# work up by orders of magnitude. The memo collapses repeated expansions into
-# a single lookup. Cyclic refs follow "first wins": whatever resolution is
-# produced on the first reaching path is what later references see.
-export def resolve-ref [val: any, schemas: record, --visited: list<string> = [], --depth: int = 0] {
-  (resolve-ref-memo $val $schemas $visited $depth {}).value
+# Why shallow rather than deep: Nushell has no shared object references —
+# every "share" is a copy. Deep-inlining a heavily-shared schema graph
+# (Confluence, GitLab, GitHub) blows up memory by the fan-out factor.
+# Shallow resolution keeps the table size O(sum of schema sizes) and
+# pushes resolution work to where it's actually needed.
+#
+# Cycles: a {$ref} that points back into its own chain is returned as-is
+# ("first wins" semantics, same as the previous implementation).
+export def build-resolved-schemas [raw_schemas: record] {
+  mut output = {}
+  for ns in ($raw_schemas | columns) {
+    let sub = ($raw_schemas | get $ns)
+    if not (($sub | describe) | str starts-with "record") {
+      $output = ($output | upsert $ns $sub)
+      continue
+    }
+    mut resolved_sub = {}
+    for name in ($sub | columns) {
+      let val = ($sub | get $name)
+      let collapsed = (collapse-ref-chain $val $raw_schemas [])
+      $resolved_sub = ($resolved_sub | upsert $name $collapsed)
+    }
+    $output = ($output | upsert $ns $resolved_sub)
+  }
+  $output
 }
 
-# Internal driver for resolve-ref. Returns {value, memo} so the memo can
-# thread through recursive calls (nushell has no closure-over-mutable-state).
-def resolve-ref-memo [val: any, schemas: record, visited: list<string>, depth: int, memo: record] {
-  if $depth >= 40 { return {value: $val, memo: $memo} }
+# Internal: follow a $ref chain to the first non-$ref value (or to a cycle).
+# Does NOT descend into the resolved value's structure.
+def collapse-ref-chain [val: any, schemas: record, visited: list<string>] {
   let t = ($val | describe)
-  if not ($t | str starts-with "record") {
-    return {value: $val, memo: $memo}
-  }
-  if ($val | columns | any {|c| $c == "$ref" }) {
-    let ref_path = ($val | get "$ref")
-    if not (($ref_path | describe) == "string") {
-      return {value: $val, memo: $memo}
-    }
-    if ($ref_path in $visited) {
-      return {value: $val, memo: $memo}
-    }
-    if ($ref_path in ($memo | columns)) {
-      return {value: ($memo | get $ref_path), memo: $memo}
-    }
-    let resolved = (ref-lookup $ref_path $schemas)
-    if ($resolved == null) {
-      return {value: $val, memo: $memo}
-    }
-    let r = (resolve-ref-memo $resolved $schemas ($visited | append $ref_path) ($depth + 1) $memo)
-    return {value: $r.value, memo: ($r.memo | upsert $ref_path $r.value)}
-  }
-  mut result = $val
-  mut cur_memo = $memo
-  for col in ($val | columns) {
-    let v = ($val | get $col)
-    let vt = ($v | describe)
-    if ($vt | str starts-with "record") {
-      let r = (resolve-ref-memo $v $schemas $visited ($depth + 1) $cur_memo)
-      $cur_memo = $r.memo
-      $result = ($result | upsert $col $r.value)
-    } else if ($vt | str starts-with "list") {
-      mut new_list = []
-      for item in $v {
-        if (($item | describe) | str starts-with "record") {
-          let r = (resolve-ref-memo $item $schemas $visited ($depth + 1) $cur_memo)
-          $cur_memo = $r.memo
-          $new_list = ($new_list | append $r.value)
-        } else {
-          $new_list = ($new_list | append $item)
-        }
-      }
-      $result = ($result | upsert $col $new_list)
-    }
-  }
-  {value: $result, memo: $cur_memo}
+  if not ($t | str starts-with "record") { return $val }
+  if not ($val | columns | any {|c| $c == "$ref" }) { return $val }
+  let ref_path = ($val | get "$ref")
+  if not (($ref_path | describe) == "string") { return $val }
+  if ($ref_path in $visited) { return $val }
+  let target = (ref-lookup $ref_path $schemas)
+  if ($target == null) { return $val }
+  collapse-ref-chain $target $schemas ($visited | append $ref_path)
+}
+
+# Resolve a $ref pointer against a (pre-resolved) schemas table.
+#
+# Behaviour is intentionally SHALLOW — only the top-level $ref is followed:
+# - If $val is a {$ref: X} record, return ref-lookup of X. The returned
+#   value is the target schema with its OWN $refs still inline; the caller
+#   must re-invoke resolve-ref on any sub-field it wants resolved.
+# - Otherwise return $val unchanged.
+#
+# Combined with `build-resolved-schemas`, ref chains (A → B → C) collapse
+# to C in a single lookup, and each ref resolution is O(1).
+export def resolve-ref [val: any, schemas: record] {
+  let t = ($val | describe)
+  if not ($t | str starts-with "record") { return $val }
+  if not ($val | columns | any {|c| $c == "$ref" }) { return $val }
+  let ref_path = ($val | get "$ref")
+  if not (($ref_path | describe) == "string") { return $val }
+  let resolved = (ref-lookup $ref_path $schemas)
+  if ($resolved == null) { $val } else { $resolved }
 }
 
 # Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
@@ -259,7 +256,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
         # merge allOf properties
         mut merged_props = ($schema.properties? | default {})
         for sub in ($schema.allOf? | default []) {
-          let resolved = (resolve-ref $sub $schemas --visited $visited)
+          let resolved = (resolve-ref $sub $schemas)
           if (($resolved | describe) | str starts-with "record") {
             $merged_props = ($merged_props | merge ($resolved.properties? | default {}))
           }
