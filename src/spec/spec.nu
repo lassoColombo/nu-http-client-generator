@@ -66,48 +66,67 @@ def ref-lookup [ref_path: string, schemas: record] {
 # blow past Nushell's stack limit. When the cap is hit, the current value is
 # returned untouched — downstream callers that re-invoke resolve-ref on
 # narrower subtrees will still resolve nested refs lazily.
+#
+# Memoizes (ref_path → resolved_value) for the lifetime of a single top-level
+# call. Schemas like Confluence share sub-schemas across many fields; without
+# memoization each occurrence re-expanded the same sub-tree, blowing total
+# work up by orders of magnitude. The memo collapses repeated expansions into
+# a single lookup. Cyclic refs follow "first wins": whatever resolution is
+# produced on the first reaching path is what later references see.
 export def resolve-ref [val: any, schemas: record, --visited: list<string> = [], --depth: int = 0] {
-  if $depth >= 40 { return $val }
+  (resolve-ref-memo $val $schemas $visited $depth {}).value
+}
+
+# Internal driver for resolve-ref. Returns {value, memo} so the memo can
+# thread through recursive calls (nushell has no closure-over-mutable-state).
+def resolve-ref-memo [val: any, schemas: record, visited: list<string>, depth: int, memo: record] {
+  if $depth >= 40 { return {value: $val, memo: $memo} }
   let t = ($val | describe)
-  if ($t | str starts-with "record") {
-    if ($val | columns | any {|c| $c == "$ref" }) {
-      let ref_path = ($val | get "$ref")
-      # guard: $ref must be a string
-      if not (($ref_path | describe) == "string") {
-        return $val
-      }
-      # cycle detection
-      if ($ref_path in $visited) {
-        return $val
-      }
-      let resolved = (ref-lookup $ref_path $schemas)
-      if ($resolved != null) {
-        resolve-ref $resolved $schemas --visited ($visited | append $ref_path) --depth ($depth + 1)
-      } else {
-        $val
-      }
-    } else {
-      mut result = $val
-      for col in ($val | columns) {
-        let v = ($val | get $col)
-        let vt = ($v | describe)
-        if ($vt | str starts-with "record") {
-          $result = ($result | upsert $col (resolve-ref $v $schemas --visited $visited --depth ($depth + 1)))
-        } else if ($vt | str starts-with "list") {
-          $result = ($result | upsert $col ($v | each {|item|
-            if (($item | describe) | str starts-with "record") {
-              resolve-ref $item $schemas --visited $visited --depth ($depth + 1)
-            } else {
-              $item
-            }
-          }))
+  if not ($t | str starts-with "record") {
+    return {value: $val, memo: $memo}
+  }
+  if ($val | columns | any {|c| $c == "$ref" }) {
+    let ref_path = ($val | get "$ref")
+    if not (($ref_path | describe) == "string") {
+      return {value: $val, memo: $memo}
+    }
+    if ($ref_path in $visited) {
+      return {value: $val, memo: $memo}
+    }
+    if ($ref_path in ($memo | columns)) {
+      return {value: ($memo | get $ref_path), memo: $memo}
+    }
+    let resolved = (ref-lookup $ref_path $schemas)
+    if ($resolved == null) {
+      return {value: $val, memo: $memo}
+    }
+    let r = (resolve-ref-memo $resolved $schemas ($visited | append $ref_path) ($depth + 1) $memo)
+    return {value: $r.value, memo: ($r.memo | upsert $ref_path $r.value)}
+  }
+  mut result = $val
+  mut cur_memo = $memo
+  for col in ($val | columns) {
+    let v = ($val | get $col)
+    let vt = ($v | describe)
+    if ($vt | str starts-with "record") {
+      let r = (resolve-ref-memo $v $schemas $visited ($depth + 1) $cur_memo)
+      $cur_memo = $r.memo
+      $result = ($result | upsert $col $r.value)
+    } else if ($vt | str starts-with "list") {
+      mut new_list = []
+      for item in $v {
+        if (($item | describe) | str starts-with "record") {
+          let r = (resolve-ref-memo $item $schemas $visited ($depth + 1) $cur_memo)
+          $cur_memo = $r.memo
+          $new_list = ($new_list | append $r.value)
+        } else {
+          $new_list = ($new_list | append $item)
         }
       }
-      $result
+      $result = ($result | upsert $col $new_list)
     }
-  } else {
-    $val
   }
+  {value: $result, memo: $cur_memo}
 }
 
 # Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
