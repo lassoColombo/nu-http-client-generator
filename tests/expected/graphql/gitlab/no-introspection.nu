@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -202,14 +201,14 @@ export def "query admin-groups" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --ids: string # Filter groups by IDs.
-  --top-level-only: string@bool-completer # Only include top-level groups.
-  --owned-only: string@bool-completer # Only include groups where the current user has an owner role.
+  --top-level-only: oneof<nothing, bool> # Only include top-level groups.
+  --owned-only: oneof<nothing, bool> # Only include groups where the current user has an owner role.
   --search: string # Search query for group name or group full path.
   --qp-sort: string # Sort order of results. Format: `<field_name>_<sort_direction>`, for example: `id_desc` or `name_asc`
   --parent-path: string # Full path of the parent group.
-  --all-available: string@bool-completer # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member. Unauthenticated requests always return all public groups. The `owned_only` argument takes precedence.
+  --all-available: oneof<nothing, bool> # When `true`, returns all accessible groups. When `false`, returns only groups where the user is a member. Unauthenticated requests always return all public groups. The `owned_only` argument takes precedence.
   --marked-for-deletion-on: string # Date when the group was marked for deletion.
-  --active: string@bool-completer # When `nil` (default value), returns all groups. When `true`, returns only groups that are not pending deletion. When `false`, only returns groups that are pending deletion.
+  --active: oneof<nothing, bool> # When `nil` (default value), returns all groups. When `true`, returns only groups that are not pending deletion. When `false`, only returns groups that are pending deletion.
   --after: string # Returns the elements in the list that come after the specified cursor.
   --before: string # Returns the elements in the list that come before the specified cursor.
   --first: int # Returns the first _n_ elements from the list.
@@ -246,7 +245,7 @@ export def "query admin-member-role" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --assignable: string@bool-completer # Filter for member roles the current user can assign.
+  --assignable: oneof<nothing, bool> # Filter for member roles the current user can assign.
   --id: string # Global ID of the member role to look up.
   --ids: string # Global IDs of the member role to look up.
   --order-by: string@order-by-completer # Ordering column. Default is NAME.
@@ -319,7 +318,7 @@ export def "query admin-member-roles" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --assignable: string@bool-completer # Filter for member roles the current user can assign.
+  --assignable: oneof<nothing, bool> # Filter for member roles the current user can assign.
   --id: string # Global ID of the member role to look up.
   --ids: string # Global IDs of the member role to look up.
   --order-by: string@order-by-completer # Ordering column. Default is NAME.
@@ -363,29 +362,29 @@ export def "query admin-projects" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --membership: string@bool-completer # Return only projects that the current user is a member of.
+  --membership: oneof<nothing, bool> # Return only projects that the current user is a member of.
   --search: string # Search query, which can be for the project name, a path, or a description.
-  --search-namespaces: string@bool-completer # Include namespace in project search.
+  --search-namespaces: oneof<nothing, bool> # Include namespace in project search.
   --topics: string # Filter projects by topics.
-  --personal: string@bool-completer # Return only personal projects.
+  --personal: oneof<nothing, bool> # Return only personal projects.
   --qp-sort: string # Sort order of results. Format: `<field_name>_<sort_direction>`, for example: `id_desc` or `name_asc`. Defaults to `id_desc`, or `similarity` if search used.
   --namespace-path: string # Filter projects by their namespace's full path (group or user).
   --ids: string # Filter projects by IDs.
   --full-paths: string # Filter projects by full paths. You cannot provide more than 50 full paths.
-  --with-issues-enabled: string@bool-completer # Return only projects with issues enabled.
-  --with-merge-requests-enabled: string@bool-completer # Return only projects with merge requests enabled.
+  --with-issues-enabled: oneof<nothing, bool> # Return only projects with issues enabled.
+  --with-merge-requests-enabled: oneof<nothing, bool> # Return only projects with merge requests enabled.
   --archived: string@archived-completer # Filter projects by archived status.
   --min-access-level: string@min-access-level-completer # Return only projects where current user has at least the specified access level.
   --programming-language-name: string # Filter projects by programming language name (case insensitive). For example: `css` or `ruby`.
-  --trending: string@bool-completer # Return only projects that are trending. Deprecated in GitLab 18.8: Removed in 19.0 due to low usage. (DEPRECATED: Removed in 19.0 due to low usage. Deprecated in GitLab 18.8.)
-  --aimed-for-deletion: string@bool-completer # Return only projects marked for deletion.
-  --not-aimed-for-deletion: string@bool-completer # Exclude projects that are marked for deletion.
+  --trending: oneof<nothing, bool> # Return only projects that are trending. Deprecated in GitLab 18.8: Removed in 19.0 due to low usage. (DEPRECATED: Removed in 19.0 due to low usage. Deprecated in GitLab 18.8.)
+  --aimed-for-deletion: oneof<nothing, bool> # Return only projects marked for deletion.
+  --not-aimed-for-deletion: oneof<nothing, bool> # Exclude projects that are marked for deletion.
   --marked-for-deletion-on: string # Date when the project was marked for deletion.
-  --active: string@bool-completer # Filters by projects that are not archived and not marked for deletion.
+  --active: oneof<nothing, bool> # Filters by projects that are not archived and not marked for deletion.
   --visibility-level: string@visibility-level-completer # Filter projects by visibility level.
-  --last-repository-check-failed: string@bool-completer # Return only projects where the last repository check failed. Only available for administrators.
-  --include-hidden: string@bool-completer # Include hidden projects.
-  --with-duo-eligible: string@bool-completer # Include only projects that are eligible for GitLab Duo and have Duo features enabled. Introduced in GitLab 18.6: **Status**: Experiment. (DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.6.)
+  --last-repository-check-failed: oneof<nothing, bool> # Return only projects where the last repository check failed. Only available for administrators.
+  --include-hidden: oneof<nothing, bool> # Include hidden projects.
+  --with-duo-eligible: oneof<nothing, bool> # Include only projects that are eligible for GitLab Duo and have Duo features enabled. Introduced in GitLab 18.6: **Status**: Experiment. (DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.6.)
   --duo-licensed-feature: string@duo-licensed-feature-completer # Include only projects eligible for the specified GitLab Duo licensed feature. Results are automatically filtered to projects where the user has the Maintainer or Owner role. Introduced in GitLab 18.11: **Status**: Experiment. (DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.11.)
   --after: string # Returns the elements in the list that come after the specified cursor.
   --before: string # Returns the elements in the list that come before the specified cursor.
@@ -531,8 +530,8 @@ export def "query ai-catalog-configured-items" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --group-id: string # Group ID to retrieve configured AI Catalog items for.
-  --include-inherited: string@bool-completer # Include configured AI Catalog items inherited from parent groups.
-  --include-foundational-consumers: string@bool-completer # Include configured foundational AI Catalog items. Introduced in GitLab 18.10: **Status**: Experiment. (DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.10.)
+  --include-inherited: oneof<nothing, bool> # Include configured AI Catalog items inherited from parent groups.
+  --include-foundational-consumers: oneof<nothing, bool> # Include configured foundational AI Catalog items. Introduced in GitLab 18.10: **Status**: Experiment. (DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.10.)
   --item-id: string # Item ID to retrieve configured AI Catalog items for.
   --project-id: string # Project ID to retrieve configured AI Catalog items for.
   --configurable-for-project-id: string # Project ID to filter AI Catalog item consumers. When provided with group_id, returns only consumers whose associated items are configurable within the project (i.e., group-enabled items that are public or owned by the project). Excludes consumers for items that are private to other projects.
@@ -615,7 +614,7 @@ export def "query ai-catalog-item" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # Global ID of the catalog item to find.
-  --show-soft-deleted: string@bool-completer # Whether to show the item if it has been soft-deleted. Defaults to `false`.
+  --show-soft-deleted: oneof<nothing, bool> # Whether to show the item if it has been soft-deleted. Defaults to `false`.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1057,8 +1056,8 @@ export def "mutation ai-catalog-agent-create" [
   --input-description: string # Description for the agent.
   --input-name: string # Name for the agent.
   --input-projectId: string # Project for the agent.
-  --input-public: string@bool-completer # Whether the agent is publicly visible in the catalog.
-  --input-release: string@bool-completer # Whether to release the latest version of the agent.
+  --input-public: oneof<nothing, bool> # Whether the agent is publicly visible in the catalog.
+  --input-release: oneof<nothing, bool> # Whether to release the latest version of the agent.
   --input-systemPrompt: string # System prompt for the agent.
   --input-tools: string # List of GitLab built-in tools enabled for the agent.
   --input-mcpTools: string # DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.11. List of MCP tools enabled for the agent. Introduced in GitLab 18.11: **Status**: Experiment.
@@ -1099,7 +1098,7 @@ export def "mutation ai-catalog-agent-delete" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
   --input-id: string # Global ID of the catalog Agent to delete.
-  --input-forceHardDelete: string@bool-completer # When true, the flow will always be hard deleted and never soft deleted. Can only be used by instance admins
+  --input-forceHardDelete: oneof<nothing, bool> # When true, the flow will always be hard deleted and never soft deleted. Can only be used by instance admins
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1139,8 +1138,8 @@ export def "mutation ai-catalog-agent-update" [
   --input-id: string # Global ID of the catalog Agent to update.
   --input-description: string # Description for the agent.
   --input-name: string # Name for the agent.
-  --input-public: string@bool-completer # Whether the agent is publicly visible in the catalog.
-  --input-release: string@bool-completer # Whether to release the latest version of the agent.
+  --input-public: oneof<nothing, bool> # Whether the agent is publicly visible in the catalog.
+  --input-release: oneof<nothing, bool> # Whether to release the latest version of the agent.
   --input-systemPrompt: string # System prompt for the agent.
   --input-tools: string # List of GitLab built-in tools enabled for the agent.
   --input-mcpTools: string # DEPRECATED: **Status**: Experiment. Introduced in GitLab 18.11. List of MCP tools enabled for the agent. Introduced in GitLab 18.11: **Status**: Experiment.
@@ -1184,8 +1183,8 @@ export def "mutation ai-catalog-flow-create" [
   --input-description: string # Description for the flow.
   --input-name: string # Name for the flow.
   --input-projectId: string # Project for the flow.
-  --input-public: string@bool-completer # Whether the flow is publicly visible in the catalog.
-  --input-release: string@bool-completer # Whether to release the latest version of the flow.
+  --input-public: oneof<nothing, bool> # Whether the flow is publicly visible in the catalog.
+  --input-release: oneof<nothing, bool> # Whether to release the latest version of the flow.
   --input-definition: string # YAML definition for the flow.
 ]: any -> record {
   let input = $in
@@ -1222,7 +1221,7 @@ export def "mutation ai-catalog-flow-delete" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
   --input-id: string # Global ID of the catalog flow to delete.
-  --input-forceHardDelete: string@bool-completer # When true, the flow will always be hard deleted and never soft deleted. Can only be used by instance admins
+  --input-forceHardDelete: oneof<nothing, bool> # When true, the flow will always be hard deleted and never soft deleted. Can only be used by instance admins
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1260,8 +1259,8 @@ export def "mutation ai-catalog-flow-update" [
   --input-id: string # Global ID of the catalog flow to update.
   --input-description: string # Description for the flow.
   --input-name: string # Name for the flow.
-  --input-public: string@bool-completer # Whether the flow is publicly visible in the catalog.
-  --input-release: string@bool-completer # Whether to release the latest version of the flow.
+  --input-public: oneof<nothing, bool> # Whether the flow is publicly visible in the catalog.
+  --input-release: oneof<nothing, bool> # Whether to release the latest version of the flow.
   --input-definition: string # YAML definition for the Flow.
   --input-versionBump: string@input-versionBump-completer # Bump version, calculated from the last released version name.
 ]: any -> record {

@@ -154,7 +154,7 @@ def render-param-sig [flag_name: string, nu_type: string, desc: string, cname?: 
       $'  ($flag_name): ($nu_type)($desc)'
     }
   } else if $nu_type == "bool" {
-    $'  --($flag_name): string@bool-completer($desc)'
+    $'  --($flag_name): oneof<nothing, bool>($desc)'
   } else if ($cname | is-not-empty) {
     $'  --($flag_name): ($nu_type)@($cname)($desc)'
   } else {
@@ -651,7 +651,6 @@ def render-module-header [
   let per_op_urls = ($commands | where {|c| $c.base_url != null } | each {|c| $c.base_url } | uniq)
   let all_completer_urls = ($all_urls | append $per_op_urls | uniq)
   let base_url_vals = $all_completer_urls | each {|u| $'"($u)"' } | str join ' '
-  let bool_completer = "def bool-completer [] { [\"'true'\" \"'false'\"] }"
   let base_url_completer = $'def base-url-completer [] { [($base_url_vals)] }'
 
   # auth-scheme completer
@@ -711,7 +710,6 @@ def render-module-header [
     ""
     $helpers_code
     ""
-    $bool_completer
     $base_url_completer
     $auth_completer
     ""

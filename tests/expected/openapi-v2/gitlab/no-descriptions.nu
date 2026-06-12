@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://gitlab.com"] }
 def auth-scheme-completer [] { ["private-token" "query-private_token"] }
 
@@ -667,23 +666,23 @@ export def "groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statistics: string@bool-completer
-  --archived: string@bool-completer
+  --statistics: oneof<nothing, bool>
+  --archived: oneof<nothing, bool>
   --skip-groups: list
-  --all-available: string@bool-completer
+  --all-available: oneof<nothing, bool>
   --visibility: string@visibility-completer
   --search: string
-  --owned: string@bool-completer
+  --owned: oneof<nothing, bool>
   --order-by: string@order-by-completer
   --qp-sort: string@sort-completer
   --min-access-level: int@min-access-level-completer
-  --top-level-only: string@bool-completer
+  --top-level-only: oneof<nothing, bool>
   --marked-for-deletion-on: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --repository-storage: string
   --page: int
   --per-page: int
-  --with-custom-attributes: string@bool-completer
+  --with-custom-attributes: oneof<nothing, bool>
 ]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
@@ -713,38 +712,38 @@ export def "groups post" [
   --description: string
   --visibility: string@visibility-completer
   --avatar: path
-  --share-with-group-lock: string@bool-completer
-  --require-two-factor-authentication: string@bool-completer
+  --share-with-group-lock: oneof<nothing, bool>
+  --require-two-factor-authentication: oneof<nothing, bool>
   --two-factor-grace-period: int
   --project-creation-level: string@project-creation-level-completer
-  --auto-devops-enabled: string@bool-completer
+  --auto-devops-enabled: oneof<nothing, bool>
   --subgroup-creation-level: string@subgroup-creation-level-completer
-  --emails-disabled: string@bool-completer
-  --emails-enabled: string@bool-completer
-  --show-diff-preview-in-email: string@bool-completer
-  --mentions-disabled: string@bool-completer
-  --lfs-enabled: string@bool-completer
-  --request-access-enabled: string@bool-completer
+  --emails-disabled: oneof<nothing, bool>
+  --emails-enabled: oneof<nothing, bool>
+  --show-diff-preview-in-email: oneof<nothing, bool>
+  --mentions-disabled: oneof<nothing, bool>
+  --lfs-enabled: oneof<nothing, bool>
+  --request-access-enabled: oneof<nothing, bool>
   --default-branch: string
   --default-branch-protection: int@default-branch-protection-completer
   --default-branch-protection-defaults: record
   --enabled-git-access-protocol: string@enabled-git-access-protocol-completer
-  --membership-lock: string@bool-completer
+  --membership-lock: oneof<nothing, bool>
   --ldap-cn: string
   --ldap-access: int
   --shared-runners-minutes-limit: int
   --extra-shared-runners-minutes-limit: int
   --wiki-access-level: string@wiki-access-level-completer
   --duo-availability: string@duo-availability-completer
-  --duo-remote-flows-availability: string@bool-completer
-  --duo-foundational-flows-availability: string@bool-completer
-  --duo-custom-agents-availability: string@bool-completer
-  --duo-custom-flows-availability: string@bool-completer
-  --duo-external-agents-availability: string@bool-completer
+  --duo-remote-flows-availability: oneof<nothing, bool>
+  --duo-foundational-flows-availability: oneof<nothing, bool>
+  --duo-custom-agents-availability: oneof<nothing, bool>
+  --duo-custom-flows-availability: oneof<nothing, bool>
+  --duo-external-agents-availability: oneof<nothing, bool>
   --tool-approval-for-session-availability: string@tool-approval-for-session-availability-completer
-  --amazon-q-auto-review-enabled: string@bool-completer
-  --experiment-features-enabled: string@bool-completer
-  --model-prompt-cache-enabled: string@bool-completer
+  --amazon-q-auto-review-enabled: oneof<nothing, bool>
+  --experiment-features-enabled: oneof<nothing, bool>
+  --model-prompt-cache-enabled: oneof<nothing, bool>
   --foundational-agents-statuses: list
   --ai-settings-attributes: record
 ]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
@@ -778,69 +777,69 @@ export def "groups put" [
   --description: string
   --visibility: string@visibility-completer
   --avatar: path
-  --share-with-group-lock: string@bool-completer
-  --require-two-factor-authentication: string@bool-completer
+  --share-with-group-lock: oneof<nothing, bool>
+  --require-two-factor-authentication: oneof<nothing, bool>
   --two-factor-grace-period: int
   --project-creation-level: string@project-creation-level-completer
-  --auto-devops-enabled: string@bool-completer
+  --auto-devops-enabled: oneof<nothing, bool>
   --subgroup-creation-level: string@subgroup-creation-level-completer
-  --emails-disabled: string@bool-completer
-  --emails-enabled: string@bool-completer
-  --show-diff-preview-in-email: string@bool-completer
-  --mentions-disabled: string@bool-completer
-  --lfs-enabled: string@bool-completer
-  --request-access-enabled: string@bool-completer
+  --emails-disabled: oneof<nothing, bool>
+  --emails-enabled: oneof<nothing, bool>
+  --show-diff-preview-in-email: oneof<nothing, bool>
+  --mentions-disabled: oneof<nothing, bool>
+  --lfs-enabled: oneof<nothing, bool>
+  --request-access-enabled: oneof<nothing, bool>
   --default-branch: string
   --default-branch-protection: int@default-branch-protection-completer
   --default-branch-protection-defaults: record
   --enabled-git-access-protocol: string@enabled-git-access-protocol-completer
-  --membership-lock: string@bool-completer
+  --membership-lock: oneof<nothing, bool>
   --ldap-cn: string
   --ldap-access: int
   --shared-runners-minutes-limit: int
   --extra-shared-runners-minutes-limit: int
   --wiki-access-level: string@wiki-access-level-completer
   --duo-availability: string@duo-availability-completer
-  --duo-remote-flows-availability: string@bool-completer
-  --duo-foundational-flows-availability: string@bool-completer
-  --duo-custom-agents-availability: string@bool-completer
-  --duo-custom-flows-availability: string@bool-completer
-  --duo-external-agents-availability: string@bool-completer
+  --duo-remote-flows-availability: oneof<nothing, bool>
+  --duo-foundational-flows-availability: oneof<nothing, bool>
+  --duo-custom-agents-availability: oneof<nothing, bool>
+  --duo-custom-flows-availability: oneof<nothing, bool>
+  --duo-external-agents-availability: oneof<nothing, bool>
   --tool-approval-for-session-availability: string@tool-approval-for-session-availability-completer
-  --amazon-q-auto-review-enabled: string@bool-completer
-  --experiment-features-enabled: string@bool-completer
-  --model-prompt-cache-enabled: string@bool-completer
+  --amazon-q-auto-review-enabled: oneof<nothing, bool>
+  --experiment-features-enabled: oneof<nothing, bool>
+  --model-prompt-cache-enabled: oneof<nothing, bool>
   --foundational-agents-statuses: list
   --ai-settings-attributes: record
-  --prevent-sharing-groups-outside-hierarchy: string@bool-completer
+  --prevent-sharing-groups-outside-hierarchy: oneof<nothing, bool>
   --step-up-auth-required-oauth-provider: string
-  --lock-math-rendering-limits-enabled: string@bool-completer
-  --math-rendering-limits-enabled: string@bool-completer
+  --lock-math-rendering-limits-enabled: oneof<nothing, bool>
+  --math-rendering-limits-enabled: oneof<nothing, bool>
   --max-artifacts-size: int
   --file-template-project-id: int
-  --prevent-forking-outside-group: string@bool-completer
+  --prevent-forking-outside-group: oneof<nothing, bool>
   --unique-project-download-limit: int
   --unique-project-download-limit-interval-in-seconds: int
   --unique-project-download-limit-allowlist: list
   --unique-project-download-limit-alertlist: list
-  --auto-ban-user-on-excessive-projects-download: string@bool-completer
+  --auto-ban-user-on-excessive-projects-download: oneof<nothing, bool>
   --ip-restriction-ranges: string
   --allowed-email-domains-list: string
-  --service-access-tokens-expiration-enforced: string@bool-completer
-  --duo-core-features-enabled: string@bool-completer
-  --duo-features-enabled: string@bool-completer
-  --lock-duo-features-enabled: string@bool-completer
-  --auto-duo-code-review-enabled: string@bool-completer
-  --web-based-commit-signing-enabled: string@bool-completer
-  --only-allow-merge-if-pipeline-succeeds: string@bool-completer
-  --allow-merge-on-skipped-pipeline: string@bool-completer
-  --only-allow-merge-if-all-discussions-are-resolved: string@bool-completer
+  --service-access-tokens-expiration-enforced: oneof<nothing, bool>
+  --duo-core-features-enabled: oneof<nothing, bool>
+  --duo-features-enabled: oneof<nothing, bool>
+  --lock-duo-features-enabled: oneof<nothing, bool>
+  --auto-duo-code-review-enabled: oneof<nothing, bool>
+  --web-based-commit-signing-enabled: oneof<nothing, bool>
+  --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool>
+  --allow-merge-on-skipped-pipeline: oneof<nothing, bool>
+  --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool>
   --enabled-foundational-flows: list
   --duo-template-project-id: int
-  --allow-personal-snippets: string@bool-completer
+  --allow-personal-snippets: oneof<nothing, bool>
   --duo-namespace-access-rules: list
-  --built-in-project-templates-enabled: string@bool-completer
-  --lock-built-in-project-templates-enabled: string@bool-completer
+  --built-in-project-templates-enabled: oneof<nothing, bool>
+  --lock-built-in-project-templates-enabled: oneof<nothing, bool>
 ]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -866,8 +865,8 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --with-custom-attributes: string@bool-completer
-  --with-projects: string@bool-completer
+  --with-custom-attributes: oneof<nothing, bool>
+  --with-projects: oneof<nothing, bool>
 ]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool, shared_with_groups: list<record>, runners_token: string, enabled_git_access_protocol: string, prevent_sharing_groups_outside_hierarchy: bool, step_up_auth_required_oauth_provider: string, projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_runners_minutes_limit: string, extra_shared_runners_minutes_limit: string, prevent_forking_outside_group: string, service_access_tokens_expiration_enforced: string, experiment_features_enabled: string, membership_lock: string, ip_restriction_ranges: string, allowed_email_domains_list: string, only_allow_merge_if_pipeline_succeeds: string, allow_merge_on_skipped_pipeline: string, only_allow_merge_if_all_discussions_are_resolved: string, unique_project_download_limit: string, unique_project_download_limit_interval_in_seconds: string, unique_project_download_limit_allowlist: string, unique_project_download_limit_alertlist: string, auto_ban_user_on_excessive_projects_download: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)

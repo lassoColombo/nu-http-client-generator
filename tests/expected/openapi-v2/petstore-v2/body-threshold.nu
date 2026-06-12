@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://petstore.swagger.io/v2" "http://petstore.swagger.io/v2"] }
 def auth-scheme-completer [] { ["api_key" "bearer"] }
 

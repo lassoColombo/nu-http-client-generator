@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://localhost/api/v3"] }
 def auth-scheme-completer [] { ["bearer" "api_key"] }
 
@@ -321,7 +320,7 @@ export def "store-order placeOrder" [
   --quantity: int
   --shipDate: string
   --status: string@status-completer-1
-  --complete: string@bool-completer
+  --complete: oneof<nothing, bool>
 ]: any -> record<id: int, petId: int, quantity: int, shipDate: string, status: string, complete: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

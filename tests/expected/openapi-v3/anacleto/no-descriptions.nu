@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://127.0.0.1:8000"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
@@ -201,9 +200,9 @@ export def "delivery-asset list" [
   --allow-errors(-e) # Return full response without error handling
   --address: string
   --idrs: string
-  --is-active: string@bool-completer
-  --is-public: string@bool-completer
-  --is-scannable: string@bool-completer
+  --is-active: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
+  --is-scannable: oneof<nothing, bool>
   --name: string
   --ordering: string
   --page: int
@@ -337,7 +336,7 @@ export def "delivery-asset-create create" [
   --allow-errors(-e) # Return full response without error handling
   idrs: string
   name: string
-  --is-scannable: string@bool-completer
+  --is-scannable: oneof<nothing, bool>
   scanner_id: int
   type: string@type-completer
   address: list
@@ -434,9 +433,9 @@ export def "delivery-asset-details update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-scannable: string@bool-completer
+  --is-scannable: oneof<nothing, bool>
   --atlantis-id: int
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
   type: string@type-completer-1
   address: list
   scanner_id: int

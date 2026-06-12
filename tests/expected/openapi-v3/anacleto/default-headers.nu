@@ -64,7 +64,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["http://127.0.0.1:8000"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
@@ -202,9 +201,9 @@ export def "delivery-asset list" [
   --allow-errors(-e) # Return full response without error handling
   --address: string
   --idrs: string # IDRS
-  --is-active: string@bool-completer
-  --is-public: string@bool-completer
-  --is-scannable: string@bool-completer
+  --is-active: oneof<nothing, bool>
+  --is-public: oneof<nothing, bool>
+  --is-scannable: oneof<nothing, bool>
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -338,7 +337,7 @@ export def "delivery-asset-create create" [
   --allow-errors(-e) # Return full response without error handling
   idrs: string
   name: string
-  --is-scannable: string@bool-completer
+  --is-scannable: oneof<nothing, bool>
   scanner_id: int
   type: string@type-completer # * `HOSTNAME` - HOSTNAME * `CUSTOM` - CUSTOM
   address: list
@@ -435,9 +434,9 @@ export def "delivery-asset-details update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   name: string
-  --is-scannable: string@bool-completer
+  --is-scannable: oneof<nothing, bool>
   --atlantis-id: int # nullable
-  --is-active: string@bool-completer
+  --is-active: oneof<nothing, bool>
   type: string@type-completer-1 # * `HOSTNAME` - HOSTNAME * `CUSTOM` - CUSTOM * `CI` - CI * `NETWORK` - NETWORK
   address: list
   scanner_id: int

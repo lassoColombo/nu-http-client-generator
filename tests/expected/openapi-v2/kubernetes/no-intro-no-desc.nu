@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -149,7 +148,7 @@ export def "componentstatuses listCoreV1ComponentStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
@@ -157,10 +156,10 @@ export def "componentstatuses listCoreV1ComponentStatus" [
   --pretty: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, conditions: list, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -209,7 +208,7 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
@@ -217,10 +216,10 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   --pretty: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -244,7 +243,7 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
@@ -252,10 +251,10 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   --pretty: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, subsets: list>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +278,7 @@ export def "events listCoreV1EventForAllNamespaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
@@ -287,10 +286,10 @@ export def "events listCoreV1EventForAllNamespaces" [
   --pretty: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<action: string, apiVersion: string, count: int, eventTime: string, firstTimestamp: string, involvedObject: record, kind: string, lastTimestamp: string, message: string, metadata: record, reason: string, related: record, reportingComponent: string, reportingInstance: string, series: record, source: record, type: string>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +313,7 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
@@ -322,10 +321,10 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   --pretty: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, spec: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -349,17 +348,17 @@ export def "namespaces listCoreV1Namespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
   --limit: int
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, spec: record, status: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -457,14 +456,14 @@ export def "namespaces-configmaps delete-by-namespace" [
   --dryRun: string
   --fieldSelector: string
   --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: string@bool-completer
+  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
   --labelSelector: string
   --limit: int
-  --orphanDependents: string@bool-completer
+  --orphanDependents: oneof<nothing, bool>
   --propagationPolicy: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
@@ -491,17 +490,17 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
   --limit: int
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +531,7 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
   --apiVersion: string
   --binaryData: record
   --data: record
-  --immutable: string@bool-completer
+  --immutable: oneof<nothing, bool>
   --kind: string
   --metadata: record
 ]: any -> record<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
@@ -565,8 +564,8 @@ export def "namespaces-configmaps delete-by-name-namespace" [
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: string@bool-completer
-  --orphanDependents: string@bool-completer
+  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
+  --orphanDependents: oneof<nothing, bool>
   --propagationPolicy: string
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -622,7 +621,7 @@ export def "namespaces-configmaps patch" [
   --dryRun: string
   --fieldManager: string
   --fieldValidation: string
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,7 +653,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   --apiVersion: string
   --binaryData: record
   --data: record
-  --immutable: string@bool-completer
+  --immutable: oneof<nothing, bool>
   --kind: string
   --metadata: record
 ]: any -> record<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
@@ -688,14 +687,14 @@ export def "namespaces-endpoints delete-by-namespace" [
   --dryRun: string
   --fieldSelector: string
   --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: string@bool-completer
+  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
   --labelSelector: string
   --limit: int
-  --orphanDependents: string@bool-completer
+  --orphanDependents: oneof<nothing, bool>
   --propagationPolicy: string
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
@@ -722,17 +721,17 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: string@bool-completer
+  --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
   --fieldSelector: string
   --labelSelector: string
   --limit: int
   --resourceVersion: string
   --resourceVersionMatch: string
-  --sendInitialEvents: string@bool-completer
+  --sendInitialEvents: oneof<nothing, bool>
   --shardSelector: string
   --timeoutSeconds: int
-  --watch: string@bool-completer
+  --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, subsets: list>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -794,8 +793,8 @@ export def "namespaces-endpoints delete-by-name-namespace" [
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: string@bool-completer
-  --orphanDependents: string@bool-completer
+  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
+  --orphanDependents: oneof<nothing, bool>
   --propagationPolicy: string
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -851,7 +850,7 @@ export def "namespaces-endpoints patch" [
   --dryRun: string
   --fieldManager: string
   --fieldValidation: string
-  --force: string@bool-completer
+  --force: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, subsets: table<addresses: list, notReadyAddresses: list, ports: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

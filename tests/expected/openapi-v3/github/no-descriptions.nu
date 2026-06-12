@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.github.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -137,7 +136,7 @@ export def "advisories security-advisories/list-global-advisories" [
   --ecosystem: string@ecosystem-completer
   --severity: string@severity-completer
   --cwes: string
-  --is-withdrawn: string@bool-completer
+  --is-withdrawn: oneof<nothing, bool>
   --affects: string
   --published: string
   --updated: string
@@ -202,7 +201,7 @@ export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
   --qp-sort: string@sort-completer-1
   --direction: string@direction-completer
   --state: string
-  --is-archived: string@bool-completer
+  --is-archived: oneof<nothing, bool>
   --since: string
   --creator-id: list
 ]: nothing -> record<tasks: table<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: list, owner: record, repository: record, state: string, session_count: int, artifacts: list, archived_at: string, updated_at: string, created_at: string>, total_active_count: int, total_archived_count: int> {
@@ -232,7 +231,7 @@ export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
   --allow-errors(-e) # Return full response without error handling
   prompt: string
   --model: string
-  --create-pull-request: string@bool-completer
+  --create-pull-request: oneof<nothing, bool>
   --base-ref: string
   --head-ref: string
 ]: any -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string> {
@@ -290,7 +289,7 @@ export def "agents-tasks agent-tasks/list-tasks" [
   --qp-sort: string@sort-completer-1
   --direction: string@direction-completer
   --state: string
-  --is-archived: string@bool-completer
+  --is-archived: oneof<nothing, bool>
   --since: string
 ]: nothing -> record<tasks: table<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: list, owner: record, repository: record, state: string, session_count: int, artifacts: list, archived_at: string, updated_at: string, created_at: string>, total_active_count: int, total_archived_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

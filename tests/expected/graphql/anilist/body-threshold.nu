@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -190,19 +189,19 @@ export def "query media" [
   --duration: int # Filter by the media's episode length
   --chapters: int # Filter by the media's chapter count
   --volumes: int # Filter by the media's volume count
-  --is-adult: string@bool-completer # Filter by if the media's intended for 18+ adult audiences
+  --is-adult: oneof<nothing, bool> # Filter by if the media's intended for 18+ adult audiences
   --genre: string # Filter by the media's genres
   --tag: string # Filter by the media's tags
   --minimum-tag-rank: int # Only apply the tags filter argument to tags above this rank. Default: 18
   --tag-category: string # Filter by the media's tags with in a tag category
-  --on-list: string@bool-completer # Filter by the media on the authenticated user's lists
+  --on-list: oneof<nothing, bool> # Filter by the media on the authenticated user's lists
   --licensed-by: string # Filter media by sites name with a online streaming or reading license
   --licensed-by-id: int # Filter media by sites id with a online streaming or reading license
   --average-score: int # Filter by the media's average score
   --popularity: int # Filter by the number of users with this media on their list
   --qp-source: string@source-completer # Filter by the source type of the media
   --country-of-origin: string # Filter by the media's country of origin
-  --is-licensed: string@bool-completer # If the media is officially licensed or a self-published doujin release
+  --is-licensed: oneof<nothing, bool> # If the media is officially licensed or a self-published doujin release
   --search: string # Filter by search query
   --id-not: int # Filter by the media id
   --id-in: int # Filter by the media id (max 10,000 items)
@@ -282,7 +281,7 @@ export def "query media-trend" [
   --average-score: int # Filter by score
   --popularity: int # Filter by popularity
   --episode: int # Filter by episode number
-  --releasing: string@bool-completer # Filter to stats recorded while the media was releasing
+  --releasing: oneof<nothing, bool> # Filter to stats recorded while the media was releasing
   --media-id-not: int # Filter by the media id
   --media-id-in: int # Filter by the media id (max 10,000 items)
   --media-id-not-in: int # Filter by the media id (max 10,000 items)
@@ -335,7 +334,7 @@ export def "query airing-schedule" [
   --media-id: int # Filter by the id of associated media
   --episode: int # Filter by the airing episode number
   --airing-at: int # Filter by the time of airing
-  --not-yet-aired: string@bool-completer # Filter to episodes that haven't yet aired
+  --not-yet-aired: oneof<nothing, bool> # Filter to episodes that haven't yet aired
   --id-not: int # Filter by the id of the airing schedule item
   --id-in: int # Filter by the id of the airing schedule item (max 10,000 items)
   --id-not-in: int # Filter by the id of the airing schedule item (max 10,000 items)
@@ -381,7 +380,7 @@ export def "query character" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # Filter by character id
-  --is-birthday: string@bool-completer # Filter by character by if its their birthday today
+  --is-birthday: oneof<nothing, bool> # Filter by character by if its their birthday today
   --search: string # Filter by search query
   --id-not: int # Filter by character id
   --id-in: int # Filter by character id (max 10,000 items)
@@ -418,7 +417,7 @@ export def "query staff" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # Filter by the staff id
-  --is-birthday: string@bool-completer # Filter by staff by if its their birthday today
+  --is-birthday: oneof<nothing, bool> # Filter by staff by if its their birthday today
   --search: string # Filter by search query
   --id-not: int # Filter by the staff id
   --id-in: int # Filter by the staff id (max 10,000 items)
@@ -460,11 +459,11 @@ export def "query media-list" [
   --type: string@type-completer # Filter by the list entries media type
   --status: string@status-completer-1 # Filter by the watching/reading status
   --media-id: int # Filter by the media id of the list entry
-  --is-following: string@bool-completer # Filter list entries to users who are being followed by the authenticated user
+  --is-following: oneof<nothing, bool> # Filter list entries to users who are being followed by the authenticated user
   --notes: string # Filter by note words and #tags
   --started-at: string # Filter by the date the user started the media
   --completed-at: string # Filter by the date the user completed the media
-  --compare-with-auth-list: string@bool-completer # Limit to only entries also on the auth user's list. Requires user id or name arguments.
+  --compare-with-auth-list: oneof<nothing, bool> # Limit to only entries also on the auth user's list. Requires user id or name arguments.
   --user-id-in: int # Filter by a user's id (max 10,000 items)
   --status-in: string@status-in-completer-1 # Filter by the watching/reading status (max 10,000 items)
   --status-not-in: string@status-not-in-completer-1 # Filter by the watching/reading status (max 10,000 items)
@@ -516,7 +515,7 @@ export def "query media-list-collection" [
   --notes: string # Filter by note words and #tags
   --started-at: string # Filter by the date the user started the media
   --completed-at: string # Filter by the date the user completed the media
-  --force-single-completed-list: string@bool-completer # Always return completed list entries in one group, overriding the user's split completed option.
+  --force-single-completed-list: oneof<nothing, bool> # Always return completed list entries in one group, overriding the user's split completed option.
   --chunk: int # Which chunk of list entries to load
   --per-chunk: int # The amount of entries per chunk, max 500
   --status-in: string@status-in-completer-1 # Filter by the watching/reading status (max 10,000 items)
@@ -622,7 +621,7 @@ export def "query user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # Filter by the user id
   --name: string # Filter by the name of the user
-  --is-moderator: string@bool-completer # Filter to moderators only if true
+  --is-moderator: oneof<nothing, bool> # Filter to moderators only if true
   --search: string # Filter by search query
   --qp-sort: string@sort-completer-6 # The order the results will be returned in
 ]: any -> record {
@@ -686,7 +685,7 @@ export def "query notification" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --type: string@type-completer-1 # Filter by the type of notifications
-  --reset-notification-count: string@bool-completer # Reset the unread notification count to 0 on load
+  --reset-notification-count: oneof<nothing, bool> # Reset the unread notification count to 0 on load
   --type-in: string@type-in-completer # Filter by the type of notifications (max 10,000 items)
 ]: any -> record {
   let input = $in
@@ -795,8 +794,8 @@ export def "mutation update-user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --about: string # User's about/bio text
   --title-language: string@title-language-completer # User's title language
-  --display-adult-content: string@bool-completer # If the user should see media marked as adult-only
-  --airing-notifications: string@bool-completer # If the user should get notifications when a show they are watching aires
+  --display-adult-content: oneof<nothing, bool> # If the user should see media marked as adult-only
+  --airing-notifications: oneof<nothing, bool> # If the user should get notifications when a show they are watching aires
   --score-format: string@score-format-completer # The user's list scoring system
   --row-order: string # The user's default list order
   --profile-color: string # Profile highlight color
@@ -807,7 +806,7 @@ export def "mutation update-user" [
   --anime-list-options: record # The user's anime list options — shape: {sectionOrder?: string, splitCompletedSectionByFormat?: bool, customLists?: string, advancedScoring?: string, advancedScoringEnabled?: bool, theme?: string}
   --manga-list-options: record # The user's anime list options — shape: {sectionOrder?: string, splitCompletedSectionByFormat?: bool, customLists?: string, advancedScoring?: string, advancedScoringEnabled?: bool, theme?: string}
   --staff-name-language: string@staff-name-language-completer # The language the user wants to see staff and character names in
-  --restrict-messages-to-following: string@bool-completer # Only allow messages from other users the user follows
+  --restrict-messages-to-following: oneof<nothing, bool> # Only allow messages from other users the user follows
   --disabled-list-activity: record # item shape: {disabled?: bool, type?: "CURRENT"|"PLANNING"|"COMPLETED"|"DROPPED"|"PAUSED"|"REPEATING"}
 ]: any -> record {
   let input = $in
@@ -850,9 +849,9 @@ export def "mutation save-media-list-entry" [
   --progress-volumes: int # The amount of volumes read by the user
   --repeat: int # The amount of times the user has rewatched/read the media
   --priority: int # Priority of planning
-  --private: string@bool-completer # If the entry should only be visible to authenticated user
+  --private: oneof<nothing, bool> # If the entry should only be visible to authenticated user
   --notes: string # Text notes
-  --hidden-from-status-lists: string@bool-completer # If the entry shown be hidden from non-custom lists
+  --hidden-from-status-lists: oneof<nothing, bool> # If the entry shown be hidden from non-custom lists
   --custom-lists: string # Array of custom list names which should be enabled for this entry
   --advanced-scores: float # Array of advanced scores
   --started-at: record # When the entry was started by the user — shape: {year?: int, month?: int, day?: int}
@@ -896,9 +895,9 @@ export def "mutation update-media-list-entries" [
   --progress-volumes: int # The amount of volumes read by the user
   --repeat: int # The amount of times the user has rewatched/read the media
   --priority: int # Priority of planning
-  --private: string@bool-completer # If the entry should only be visible to authenticated user
+  --private: oneof<nothing, bool> # If the entry should only be visible to authenticated user
   --notes: string # Text notes
-  --hidden-from-status-lists: string@bool-completer # If the entry shown be hidden from non-custom lists
+  --hidden-from-status-lists: oneof<nothing, bool> # If the entry shown be hidden from non-custom lists
   --advanced-scores: float # Array of advanced scores
   --started-at: record # When the entry was started by the user — shape: {year?: int, month?: int, day?: int}
   --completed-at: record # When the entry was completed by the user — shape: {year?: int, month?: int, day?: int}
@@ -998,7 +997,7 @@ export def "mutation save-text-activity" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # The activity's id, required for updating
   --text: string # The activity text
-  --locked: string@bool-completer # If the activity should be locked. (Mod Only)
+  --locked: oneof<nothing, bool> # If the activity should be locked. (Mod Only)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1032,9 +1031,9 @@ export def "mutation save-message-activity" [
   --id: int # The activity id, required for updating
   --message: string # The activity message text
   --recipient-id: int # The id of the user the message is being sent to
-  --private: string@bool-completer # If the activity should be private
-  --locked: string@bool-completer # If the activity should be locked. (Mod Only)
-  --as-mod: string@bool-completer # If the message should be sent from the Moderator account (Mod Only)
+  --private: oneof<nothing, bool> # If the activity should be private
+  --locked: oneof<nothing, bool> # If the activity should be locked. (Mod Only)
+  --as-mod: oneof<nothing, bool> # If the message should be sent from the Moderator account (Mod Only)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1066,7 +1065,7 @@ export def "mutation save-list-activity" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # The activity's id, required for updating
-  --locked: string@bool-completer # If the activity should be locked. (Mod Only)
+  --locked: oneof<nothing, bool> # If the activity should be locked. (Mod Only)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1129,7 +1128,7 @@ export def "mutation toggle-activity-pin" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int # Toggle activity id to be pinned
-  --pinned: string@bool-completer # If the activity should be pinned or unpinned
+  --pinned: oneof<nothing, bool> # If the activity should be pinned or unpinned
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1161,7 +1160,7 @@ export def "mutation toggle-activity-subscription" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --activity-id: int # The id of the activity to un/subscribe
-  --subscribe: string@bool-completer # Whether to subscribe or unsubscribe from the activity
+  --subscribe: oneof<nothing, bool> # Whether to subscribe or unsubscribe from the activity
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1195,7 +1194,7 @@ export def "mutation save-activity-reply" [
   --id: int # The activity reply id, required for updating
   --activity-id: int # The id of the parent activity being replied to
   --text: string # The reply text
-  --as-mod: string@bool-completer # If the reply should be sent from the Moderator account (Mod Only)
+  --as-mod: oneof<nothing, bool> # If the reply should be sent from the Moderator account (Mod Only)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))

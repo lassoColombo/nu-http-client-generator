@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://custom.example.com" "https://quality-pandora.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 

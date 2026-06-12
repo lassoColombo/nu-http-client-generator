@@ -62,7 +62,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://clopin.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "static"] }
 
@@ -1231,7 +1230,7 @@ export def "startupvariables create" [
   name: string
   dmilog: int
   customer: int
-  --state: string@bool-completer
+  --state: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1282,7 +1281,7 @@ export def "startupvariables update" [
   --body-name: string
   --body-dmilog: int
   customer: int
-  --state: string@bool-completer
+  --state: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1353,7 +1352,7 @@ export def "startupvariables update-by-id" [
   name: string
   dmilog: int
   customer: int
-  --state: string@bool-completer
+  --state: oneof<nothing, bool>
 ]: any -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1444,7 +1443,7 @@ export def "timonextractor create" [
   customer: int
   dmilog: int
   size_limit: int
-  --submit: string@bool-completer
+  --submit: oneof<nothing, bool>
 ]: any -> record<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -1493,7 +1492,7 @@ export def "timonextractor update" [
   customer: int
   dmilog: int
   size_limit: int
-  --submit: string@bool-completer
+  --submit: oneof<nothing, bool>
 ]: any -> record<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))

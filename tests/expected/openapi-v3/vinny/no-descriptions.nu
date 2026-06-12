@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://avcfg.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
@@ -209,7 +208,7 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   --allow-errors(-e) # Return full response without error handling
   --uniqueness: string
   --incident-name: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --path: string
   --command-line: string
@@ -226,9 +225,9 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   --remediation-status: string
   --scan-group-name: string
   --file: string
-  --acknowledged: string@bool-completer
-  --notified-llama: string@bool-completer
-  --notified-cardinalis: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
+  --notified-cardinalis: oneof<nothing, bool>
   --customer: int
 ]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
   let input = $in
@@ -256,7 +255,7 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   --allow-errors(-e) # Return full response without error handling
   --uniqueness: string
   --incident-name: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --path: string
   --command-line: string
@@ -273,9 +272,9 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   --remediation-status: string
   --scan-group-name: string
   --file: string
-  --acknowledged: string@bool-completer
-  --notified-llama: string@bool-completer
-  --notified-cardinalis: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
+  --notified-cardinalis: oneof<nothing, bool>
   --customer: int
 ]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
   let input = $in
@@ -301,7 +300,7 @@ export def "avcfg-cynet-alerts-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -316,15 +315,15 @@ export def "avcfg-cynet-alerts-list list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string
   --last-seen-gte: string
   --last-seen-lte: string
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string
   --page: int
   --path: string
@@ -333,7 +332,7 @@ export def "avcfg-cynet-alerts-list list" [
   --scan-group-name: string
   --search: string
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -365,7 +364,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -380,15 +379,15 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string
   --last-seen-gte: string
   --last-seen-lte: string
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string
   --page: int
   --path: string
@@ -397,7 +396,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --scan-group-name: string
   --search: string
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -428,7 +427,7 @@ export def "avcfg-cynet-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -443,15 +442,15 @@ export def "avcfg-cynet-alerts-summary list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string
   --last-seen-gte: string
   --last-seen-lte: string
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string
   --page: int
   --path: string
@@ -460,7 +459,7 @@ export def "avcfg-cynet-alerts-summary list" [
   --scan-group-name: string
   --search: string
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -587,7 +586,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -602,15 +601,15 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string
   --last-seen-gte: string
   --last-seen-lte: string
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string
   --page: int
   --path: string
@@ -619,7 +618,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --scan-group-name: string
   --search: string
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -672,10 +671,10 @@ export def "avcfg-cynet-tenant update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --note: string
-  --alert: string@bool-completer
-  --discovery: string@bool-completer
+  --alert: oneof<nothing, bool>
+  --discovery: oneof<nothing, bool>
   cynet_info: record
 ]: any -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let input = $in
@@ -702,10 +701,10 @@ export def "avcfg-cynet-tenant patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --note: string
-  --alert: string@bool-completer
-  --discovery: string@bool-completer
+  --alert: oneof<nothing, bool>
+  --discovery: oneof<nothing, bool>
   --cynet-info: record
 ]: any -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let input = $in
@@ -731,10 +730,10 @@ export def "avcfg-cynet-tenant-create create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --enable: string@bool-completer
+  --enable: oneof<nothing, bool>
   --note: string
-  --alert: string@bool-completer
-  --discovery: string@bool-completer
+  --alert: oneof<nothing, bool>
+  --discovery: oneof<nothing, bool>
   cynet_info: record
 ]: any -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let input = $in

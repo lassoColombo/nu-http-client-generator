@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -168,19 +167,19 @@ export def "query media" [
   --duration: int
   --chapters: int
   --volumes: int
-  --is-adult: string@bool-completer
+  --is-adult: oneof<nothing, bool>
   --genre: string
   --tag: string
   --minimum-tag-rank: int
   --tag-category: string
-  --on-list: string@bool-completer
+  --on-list: oneof<nothing, bool>
   --licensed-by: string
   --licensed-by-id: int
   --average-score: int
   --popularity: int
   --qp-source: string@source-completer
   --country-of-origin: string
-  --is-licensed: string@bool-completer
+  --is-licensed: oneof<nothing, bool>
   --search: string
   --id-not: int
   --id-in: int
@@ -260,7 +259,7 @@ export def "query media-trend" [
   --average-score: int
   --popularity: int
   --episode: int
-  --releasing: string@bool-completer
+  --releasing: oneof<nothing, bool>
   --media-id-not: int
   --media-id-in: int
   --media-id-not-in: int
@@ -313,7 +312,7 @@ export def "query airing-schedule" [
   --media-id: int
   --episode: int
   --airing-at: int
-  --not-yet-aired: string@bool-completer
+  --not-yet-aired: oneof<nothing, bool>
   --id-not: int
   --id-in: int
   --id-not-in: int
@@ -359,7 +358,7 @@ export def "query character" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
-  --is-birthday: string@bool-completer
+  --is-birthday: oneof<nothing, bool>
   --search: string
   --id-not: int
   --id-in: int
@@ -396,7 +395,7 @@ export def "query staff" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
-  --is-birthday: string@bool-completer
+  --is-birthday: oneof<nothing, bool>
   --search: string
   --id-not: int
   --id-in: int
@@ -438,11 +437,11 @@ export def "query media-list" [
   --type: string@type-completer
   --status: string@status-completer-1
   --media-id: int
-  --is-following: string@bool-completer
+  --is-following: oneof<nothing, bool>
   --notes: string
   --started-at: string
   --completed-at: string
-  --compare-with-auth-list: string@bool-completer
+  --compare-with-auth-list: oneof<nothing, bool>
   --user-id-in: int
   --status-in: string@status-in-completer-1
   --status-not-in: string@status-not-in-completer-1
@@ -494,7 +493,7 @@ export def "query media-list-collection" [
   --notes: string
   --started-at: string
   --completed-at: string
-  --force-single-completed-list: string@bool-completer
+  --force-single-completed-list: oneof<nothing, bool>
   --chunk: int
   --per-chunk: int
   --status-in: string@status-in-completer-1
@@ -600,7 +599,7 @@ export def "query user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
   --name: string
-  --is-moderator: string@bool-completer
+  --is-moderator: oneof<nothing, bool>
   --search: string
   --qp-sort: string@sort-completer-6
 ]: any -> record {
@@ -664,7 +663,7 @@ export def "query notification" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --type: string@type-completer-1
-  --reset-notification-count: string@bool-completer
+  --reset-notification-count: oneof<nothing, bool>
   --type-in: string@type-in-completer
 ]: any -> record {
   let input = $in
@@ -769,8 +768,8 @@ export def "mutation update-user" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --about: string
   --title-language: string@title-language-completer
-  --display-adult-content: string@bool-completer
-  --airing-notifications: string@bool-completer
+  --display-adult-content: oneof<nothing, bool>
+  --airing-notifications: oneof<nothing, bool>
   --score-format: string@score-format-completer
   --row-order: string
   --profile-color: string
@@ -779,19 +778,19 @@ export def "mutation update-user" [
   --timezone: string
   --activity-merge-time: int
   --staff-name-language: string@staff-name-language-completer
-  --restrict-messages-to-following: string@bool-completer
+  --restrict-messages-to-following: oneof<nothing, bool>
   --disabled-list-activity: record
   --anime-list-options-sectionOrder: string
-  --anime-list-options-splitCompletedSectionByFormat: string@bool-completer
+  --anime-list-options-splitCompletedSectionByFormat: oneof<nothing, bool>
   --anime-list-options-customLists: string
   --anime-list-options-advancedScoring: string
-  --anime-list-options-advancedScoringEnabled: string@bool-completer
+  --anime-list-options-advancedScoringEnabled: oneof<nothing, bool>
   --anime-list-options-theme: string
   --manga-list-options-sectionOrder: string
-  --manga-list-options-splitCompletedSectionByFormat: string@bool-completer
+  --manga-list-options-splitCompletedSectionByFormat: oneof<nothing, bool>
   --manga-list-options-customLists: string
   --manga-list-options-advancedScoring: string
-  --manga-list-options-advancedScoringEnabled: string@bool-completer
+  --manga-list-options-advancedScoringEnabled: oneof<nothing, bool>
   --manga-list-options-theme: string
 ]: any -> record {
   let input = $in
@@ -834,9 +833,9 @@ export def "mutation save-media-list-entry" [
   --progress-volumes: int
   --repeat: int
   --priority: int
-  --private: string@bool-completer
+  --private: oneof<nothing, bool>
   --notes: string
-  --hidden-from-status-lists: string@bool-completer
+  --hidden-from-status-lists: oneof<nothing, bool>
   --custom-lists: string
   --advanced-scores: float
   --started-at-year: int
@@ -884,9 +883,9 @@ export def "mutation update-media-list-entries" [
   --progress-volumes: int
   --repeat: int
   --priority: int
-  --private: string@bool-completer
+  --private: oneof<nothing, bool>
   --notes: string
-  --hidden-from-status-lists: string@bool-completer
+  --hidden-from-status-lists: oneof<nothing, bool>
   --advanced-scores: float
   --ids: int
   --started-at-year: int
@@ -992,7 +991,7 @@ export def "mutation save-text-activity" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
   --text: string
-  --locked: string@bool-completer
+  --locked: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1026,9 +1025,9 @@ export def "mutation save-message-activity" [
   --id: int
   --message: string
   --recipient-id: int
-  --private: string@bool-completer
-  --locked: string@bool-completer
-  --as-mod: string@bool-completer
+  --private: oneof<nothing, bool>
+  --locked: oneof<nothing, bool>
+  --as-mod: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1060,7 +1059,7 @@ export def "mutation save-list-activity" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
-  --locked: string@bool-completer
+  --locked: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1123,7 +1122,7 @@ export def "mutation toggle-activity-pin" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --id: int
-  --pinned: string@bool-completer
+  --pinned: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1155,7 +1154,7 @@ export def "mutation toggle-activity-subscription" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --activity-id: int
-  --subscribe: string@bool-completer
+  --subscribe: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1189,7 +1188,7 @@ export def "mutation save-activity-reply" [
   --id: int
   --activity-id: int
   --text: string
-  --as-mod: string@bool-completer
+  --as-mod: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))

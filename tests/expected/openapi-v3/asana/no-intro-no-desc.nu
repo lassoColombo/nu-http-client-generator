@@ -61,7 +61,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://app.asana.com/api/1.0"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -84,7 +83,7 @@ export def "access-requests get" [
   --allow-errors(-e) # Return full response without error handling
   --target: string
   --user: string
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
 ]: nothing -> record<data: table<gid: string, resource_type: string, message: string, approval_status: string, requester: record, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -204,7 +203,7 @@ export def "agents get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
 ]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, name: string, description: string, behavior_guidance: string, workspace: record<gid: string, resource_type: string, name: string>, photo: record<image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string, image_128x128: string, image_1024x1024: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -229,7 +228,7 @@ export def "allocations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
 ]: nothing -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -254,7 +253,7 @@ export def "allocations updateAllocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
@@ -283,7 +282,7 @@ export def "allocations delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +333,7 @@ export def "allocations createAllocation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
@@ -363,7 +362,7 @@ export def "attachments get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -388,7 +387,7 @@ export def "attachments delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,14 +436,14 @@ export def "attachments createAttachmentForObject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
   --resource-subtype: string@resource-subtype-completer
   --file: string
   parent: string
   --body-url: string
   --name: string
-  --connect-to-app: string@bool-completer
+  --connect-to-app: oneof<nothing, bool>
 ]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -501,7 +500,7 @@ export def "batch createBatchRequest" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
   --data: record
 ]: any -> record<data: table<status_code: int, headers: record, body: record>> {
@@ -529,7 +528,7 @@ export def "budgets list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --parent: string
 ]: nothing -> record<data: table<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -553,7 +552,7 @@ export def "budgets createBudget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
   let input = $in
@@ -581,7 +580,7 @@ export def "budgets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
 ]: nothing -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -606,7 +605,7 @@ export def "budgets updateBudget" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --opt-fields: list
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
@@ -635,7 +634,7 @@ export def "budgets delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +658,7 @@ export def "projects-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --limit: int
   --offset: string
   --opt-fields: list
@@ -686,7 +685,7 @@ export def "portfolios-custom-field-settings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --opt-pretty: string@bool-completer
+  --opt-pretty: oneof<nothing, bool>
   --limit: int
   --offset: string
   --opt-fields: list

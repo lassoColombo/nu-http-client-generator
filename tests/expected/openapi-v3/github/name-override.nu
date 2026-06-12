@@ -60,7 +60,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.github.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -137,7 +136,7 @@ export def "advisories security-advisories/list-global-advisories" [
   --ecosystem: string@ecosystem-completer # If specified, only advisories for these ecosystems will be returned.
   --severity: string@severity-completer # If specified, only advisories with these severities will be returned.
   --cwes: string # If specified, only advisories with these Common Weakness Enumerations (CWEs) will be returned.  Example: `cwes=79,284,22` or `cwes[]=79&cwes[]=284&cwes[]=22`
-  --is-withdrawn: string@bool-completer # Whether to only return advisories that have been withdrawn.
+  --is-withdrawn: oneof<nothing, bool> # Whether to only return advisories that have been withdrawn.
   --affects: string # If specified, only return advisories that affect any of `package` or `package@version`. A maximum of 1000 packages can be specified. If the query parameter causes the URL to exceed the maximum URL length supported by your client, you must specify fewer packages.  Example: `affects=package1,package2@1.0.0,package3@2.0.0` or `affects[]=package1&affects[]=package2@1.0.0`
   --published: string # If specified, only return advisories that were published on a date or date range.  For more information on the syntax of the date range, see "[Understanding the search syntax](https://docs.github.com/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#query-for-dates)."
   --updated: string # If specified, only return advisories that were updated on a date or date range.  For more information on the syntax of the date range, see "[Understanding the search syntax](https://docs.github.com/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#query-for-dates)."
@@ -202,7 +201,7 @@ export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
   --qp-sort: string@sort-completer-1 # The field to sort results by. Can be `updated_at` or `created_at`. (default: updated_at)
   --direction: string@direction-completer # The direction to sort results. Can be `asc` or `desc`. (default: desc)
   --state: string # Comma-separated list of task states to filter by. Can be any combination of: `queued`, `in_progress`, `completed`, `failed`, `idle`, `waiting_for_user`, `timed_out`, `cancelled`.
-  --is-archived: string@bool-completer # Filter by archived status. When `true`, returns only archived tasks. When `false` or omitted, returns only non-archived tasks. Defaults to `false`. (default: false)
+  --is-archived: oneof<nothing, bool> # Filter by archived status. When `true`, returns only archived tasks. When `false` or omitted, returns only non-archived tasks. Defaults to `false`. (default: false)
   --since: string # Only show tasks updated at or after this time (ISO 8601 timestamp) (format: date-time)
   --creator-id: list # Filter tasks by creator user ID. Accepts one or more user IDs.
 ]: nothing -> record<tasks: table<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: list, owner: record, repository: record, state: string, session_count: int, artifacts: list, archived_at: string, updated_at: string, created_at: string>, total_active_count: int, total_archived_count: int> {
@@ -232,7 +231,7 @@ export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
   --allow-errors(-e) # Return full response without error handling
   prompt: string # The user's prompt for the agent
   --model: string # The model to use for this task. The allowed models may change over time and depend on the user's GitHub Copilot plan and organization policies. Currently supported values: `claude-sonnet-4.6`, `claude-opus-4.6`, `gpt-5.2-codex`, `gpt-5.3-codex`, `gpt-5.4`, `claude-sonnet-4.5`, `claude-opus-4.5`
-  --create-pull-request: string@bool-completer # Whether to create a PR. (default: false)
+  --create-pull-request: oneof<nothing, bool> # Whether to create a PR. (default: false)
   --base-ref: string # Base ref for new branch/PR
   --head-ref: string # Head ref for existing branch/PR. If provided with `base_ref`, the agent looks up open PR context for `head_ref` targeting `base_ref` and commits to `head_ref` instead of creating a new branch.
 ]: any -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string> {
@@ -290,7 +289,7 @@ export def "agents-tasks agent-tasks/list-tasks" [
   --qp-sort: string@sort-completer-1 # The field to sort results by. Can be `updated_at` or `created_at`. (default: updated_at)
   --direction: string@direction-completer # The direction to sort results. Can be `asc` or `desc`. (default: desc)
   --state: string # Comma-separated list of task states to filter by. Can be any combination of: `queued`, `in_progress`, `completed`, `failed`, `idle`, `waiting_for_user`, `timed_out`, `cancelled`.
-  --is-archived: string@bool-completer # Filter by archived status. When `true`, returns only archived tasks. When `false` or omitted, returns only non-archived tasks. Defaults to `false`. (default: false)
+  --is-archived: oneof<nothing, bool> # Filter by archived status. When `true`, returns only archived tasks. When `false` or omitted, returns only non-archived tasks. Defaults to `false`. (default: false)
   --since: string # Only show tasks updated at or after this time (ISO 8601 timestamp) (format: date-time)
 ]: nothing -> record<tasks: table<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: list, owner: record, repository: record, state: string, session_count: int, artifacts: list, archived_at: string, updated_at: string, created_at: string>, total_active_count: int, total_archived_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

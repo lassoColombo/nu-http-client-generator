@@ -63,7 +63,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://avcfg.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
@@ -250,7 +249,7 @@ export def "avcfg-cynet-alerts-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -265,15 +264,15 @@ export def "avcfg-cynet-alerts-list list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string # format: date-time
   --last-seen-gte: string # format: date
   --last-seen-lte: string # format: date
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --path: string
@@ -282,7 +281,7 @@ export def "avcfg-cynet-alerts-list list" [
   --scan-group-name: string
   --search: string # A search term.
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -314,7 +313,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -329,15 +328,15 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string # format: date-time
   --last-seen-gte: string # format: date
   --last-seen-lte: string # format: date
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --path: string
@@ -346,7 +345,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --scan-group-name: string
   --search: string # A search term.
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -377,7 +376,7 @@ export def "avcfg-cynet-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -392,15 +391,15 @@ export def "avcfg-cynet-alerts-summary list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string # format: date-time
   --last-seen-gte: string # format: date
   --last-seen-lte: string # format: date
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --path: string
@@ -409,7 +408,7 @@ export def "avcfg-cynet-alerts-summary list" [
   --scan-group-name: string
   --search: string # A search term.
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string
@@ -536,7 +535,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --acknowledged: string@bool-completer
+  --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
   --alert-type: string
@@ -551,15 +550,15 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --endpoint: int
   --endpoint-name: string
   --endpoint-type: string
-  --eps-prevention: string@bool-completer
+  --eps-prevention: oneof<nothing, bool>
   --eps-prevention-success: string
   --file: string
   --incident-name: string
   --last-seen: string # format: date-time
   --last-seen-gte: string # format: date
   --last-seen-lte: string # format: date
-  --notified-cardinalis: string@bool-completer
-  --notified-llama: string@bool-completer
+  --notified-cardinalis: oneof<nothing, bool>
+  --notified-llama: oneof<nothing, bool>
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --path: string
@@ -568,7 +567,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --scan-group-name: string
   --search: string # A search term.
   --severity: string
-  --solved: string@bool-completer
+  --solved: oneof<nothing, bool>
   --status: string
   --tenant: int
   --type: string

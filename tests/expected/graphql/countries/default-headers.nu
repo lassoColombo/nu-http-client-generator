@@ -72,7 +72,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 

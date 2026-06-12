@@ -71,7 +71,6 @@ def unwrap-graphql [resp: any, field: string] {
   $resp.data? | get -o $field | default $resp.data?
 }
 
-def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://example.com/graphql"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -202,14 +201,14 @@ export def "query admin-groups" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --ids: string
-  --top-level-only: string@bool-completer
-  --owned-only: string@bool-completer
+  --top-level-only: oneof<nothing, bool>
+  --owned-only: oneof<nothing, bool>
   --search: string
   --qp-sort: string
   --parent-path: string
-  --all-available: string@bool-completer
+  --all-available: oneof<nothing, bool>
   --marked-for-deletion-on: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --after: string
   --before: string
   --first: int
@@ -246,7 +245,7 @@ export def "query admin-member-role" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --assignable: string@bool-completer
+  --assignable: oneof<nothing, bool>
   --id: string
   --ids: string
   --order-by: string@order-by-completer
@@ -319,7 +318,7 @@ export def "query admin-member-roles" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --assignable: string@bool-completer
+  --assignable: oneof<nothing, bool>
   --id: string
   --ids: string
   --order-by: string@order-by-completer
@@ -363,29 +362,29 @@ export def "query admin-projects" [
   --allow-errors(-e) # Return full response without error handling
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
-  --membership: string@bool-completer
+  --membership: oneof<nothing, bool>
   --search: string
-  --search-namespaces: string@bool-completer
+  --search-namespaces: oneof<nothing, bool>
   --topics: string
-  --personal: string@bool-completer
+  --personal: oneof<nothing, bool>
   --qp-sort: string
   --namespace-path: string
   --ids: string
   --full-paths: string
-  --with-issues-enabled: string@bool-completer
-  --with-merge-requests-enabled: string@bool-completer
+  --with-issues-enabled: oneof<nothing, bool>
+  --with-merge-requests-enabled: oneof<nothing, bool>
   --archived: string@archived-completer
   --min-access-level: string@min-access-level-completer
   --programming-language-name: string
-  --trending: string@bool-completer
-  --aimed-for-deletion: string@bool-completer
-  --not-aimed-for-deletion: string@bool-completer
+  --trending: oneof<nothing, bool>
+  --aimed-for-deletion: oneof<nothing, bool>
+  --not-aimed-for-deletion: oneof<nothing, bool>
   --marked-for-deletion-on: string
-  --active: string@bool-completer
+  --active: oneof<nothing, bool>
   --visibility-level: string@visibility-level-completer
-  --last-repository-check-failed: string@bool-completer
-  --include-hidden: string@bool-completer
-  --with-duo-eligible: string@bool-completer
+  --last-repository-check-failed: oneof<nothing, bool>
+  --include-hidden: oneof<nothing, bool>
+  --with-duo-eligible: oneof<nothing, bool>
   --duo-licensed-feature: string@duo-licensed-feature-completer
   --after: string
   --before: string
@@ -531,8 +530,8 @@ export def "query ai-catalog-configured-items" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --group-id: string
-  --include-inherited: string@bool-completer
-  --include-foundational-consumers: string@bool-completer
+  --include-inherited: oneof<nothing, bool>
+  --include-foundational-consumers: oneof<nothing, bool>
   --item-id: string
   --project-id: string
   --configurable-for-project-id: string
@@ -615,7 +614,7 @@ export def "query ai-catalog-item" [
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string
-  --show-soft-deleted: string@bool-completer
+  --show-soft-deleted: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1047,8 +1046,8 @@ export def "mutation ai-catalog-agent-create" [
   --input-description: string
   --input-name: string
   --input-projectId: string
-  --input-public: string@bool-completer
-  --input-release: string@bool-completer
+  --input-public: oneof<nothing, bool>
+  --input-release: oneof<nothing, bool>
   --input-systemPrompt: string
   --input-tools: string
   --input-mcpTools: string
@@ -1089,7 +1088,7 @@ export def "mutation ai-catalog-agent-delete" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string
   --input-id: string
-  --input-forceHardDelete: string@bool-completer
+  --input-forceHardDelete: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1129,8 +1128,8 @@ export def "mutation ai-catalog-agent-update" [
   --input-id: string
   --input-description: string
   --input-name: string
-  --input-public: string@bool-completer
-  --input-release: string@bool-completer
+  --input-public: oneof<nothing, bool>
+  --input-release: oneof<nothing, bool>
   --input-systemPrompt: string
   --input-tools: string
   --input-mcpTools: string
@@ -1174,8 +1173,8 @@ export def "mutation ai-catalog-flow-create" [
   --input-description: string
   --input-name: string
   --input-projectId: string
-  --input-public: string@bool-completer
-  --input-release: string@bool-completer
+  --input-public: oneof<nothing, bool>
+  --input-release: oneof<nothing, bool>
   --input-definition: string
 ]: any -> record {
   let input = $in
@@ -1212,7 +1211,7 @@ export def "mutation ai-catalog-flow-delete" [
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string
   --input-id: string
-  --input-forceHardDelete: string@bool-completer
+  --input-forceHardDelete: oneof<nothing, bool>
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))
@@ -1250,8 +1249,8 @@ export def "mutation ai-catalog-flow-update" [
   --input-id: string
   --input-description: string
   --input-name: string
-  --input-public: string@bool-completer
-  --input-release: string@bool-completer
+  --input-public: oneof<nothing, bool>
+  --input-release: oneof<nothing, bool>
   --input-definition: string
   --input-versionBump: string@input-versionBump-completer
 ]: any -> record {
