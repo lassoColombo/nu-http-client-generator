@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -88,7 +89,7 @@ def sort-completer-1 [] { ["CATALOG_PRIORITY" "STAR_COUNT_ASC" "STAR_COUNT_DESC"
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query abuse-report" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -122,6 +123,7 @@ export def "query abuse-report" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # ID of the abuse report.
@@ -133,13 +135,13 @@ export def "query abuse-report" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "id" }
     let body = {query: ("query($id: AbuseReportID!) { abuseReport(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "abuseReport" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "abuseReport" }
 }
 
 # List of permissions for fine-grained access tokens Introduced in GitLab 18.6: **Status**: Experiment.
@@ -155,6 +157,7 @@ export def "query access-token-permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
 ]: any -> list {
@@ -165,13 +168,13 @@ export def "query access-token-permissions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "action boundaries category categoryName description name resource resourceDescription resourceName" }
     let body = {query: ("query { accessTokenPermissions { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "accessTokenPermissions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "accessTokenPermissions" }
 }
 
 # Retrieve all active add-on purchases. This query can be used in GitLab.com and self-managed environments.
@@ -185,6 +188,7 @@ export def "query add-on-purchases" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --namespace-id: string # ID of namespace that the add-ons were purchased for.
@@ -196,13 +200,13 @@ export def "query add-on-purchases" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "assignedQuantity id name purchasedQuantity" }
     let body = {query: ("query($namespaceId: NamespaceID) { addOnPurchases(namespaceId: $namespaceId) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addOnPurchases" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addOnPurchases" }
 }
 
 # Find groups visible to the current admin. Introduced in GitLab 18.4: **Status**: Experiment.
@@ -218,6 +222,7 @@ export def "query admin-groups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --ids: string # Filter groups by IDs.
@@ -241,13 +246,13 @@ export def "query admin-groups" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "count" }
     let body = {query: ("query($ids: [ID!], $topLevelOnly: Boolean, $ownedOnly: Boolean, $search: String, $sort: String, $parentPath: ID, $allAvailable: Boolean, $markedForDeletionOn: Date, $active: Boolean, $after: String, $before: String, $first: Int, $last: Int) { adminGroups(ids: $ids, topLevelOnly: $topLevelOnly, ownedOnly: $ownedOnly, search: $search, sort: $sort, parentPath: $parentPath, allAvailable: $allAvailable, markedForDeletionOn: $markedForDeletionOn, active: $active, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminGroups" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminGroups" }
 }
 
 # Finds a single admin custom role for the instance. Available only for GitLab Self-Managed. Introduced in GitLab 17.10: **Status**: Experiment.
@@ -263,6 +268,7 @@ export def "query admin-member-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --assignable: oneof<nothing, bool> # Filter for member roles the current user can assign.
@@ -278,13 +284,13 @@ export def "query admin-member-role" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "createdAt description detailsPath editPath id name usersCount" }
     let body = {query: ("query($assignable: Boolean, $id: MemberRoleID, $ids: [MemberRoleID!], $orderBy: MemberRolesOrderBy, $sort: SortDirectionEnum) { adminMemberRole(assignable: $assignable, id: $id, ids: $ids, orderBy: $orderBy, sort: $sort) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRole" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRole" }
 }
 
 # List of all admin customizable permissions. Introduced in GitLab 17.9: **Status**: Experiment.
@@ -300,6 +306,7 @@ export def "query admin-member-role-permissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string # Returns the elements in the list that come after the specified cursor.
@@ -314,13 +321,13 @@ export def "query admin-member-role-permissions" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($after: String, $before: String, $first: Int, $last: Int) { adminMemberRolePermissions(after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRolePermissions" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRolePermissions" }
 }
 
 # Admin custom roles available for the instance. Available only for GitLab Self-Managed. Introduced in GitLab 17.10: **Status**: Experiment.
@@ -336,6 +343,7 @@ export def "query admin-member-roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --assignable: oneof<nothing, bool> # Filter for member roles the current user can assign.
@@ -355,13 +363,13 @@ export def "query admin-member-roles" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($assignable: Boolean, $id: MemberRoleID, $ids: [MemberRoleID!], $orderBy: MemberRolesOrderBy, $sort: SortDirectionEnum, $after: String, $before: String, $first: Int, $last: Int) { adminMemberRoles(assignable: $assignable, id: $id, ids: $ids, orderBy: $orderBy, sort: $sort, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRoles" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminMemberRoles" }
 }
 
 # Find projects visible to the current admin. Introduced in GitLab 18.4: **Status**: Experiment.
@@ -380,6 +388,7 @@ export def "query admin-projects" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --membership: oneof<nothing, bool> # Return only projects that the current user is a member of.
@@ -418,13 +427,13 @@ export def "query admin-projects" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "count" }
     let body = {query: ("query($membership: Boolean, $search: String, $searchNamespaces: Boolean, $topics: [String!], $personal: Boolean, $sort: String, $namespacePath: ID, $ids: [ID!], $fullPaths: [String!], $withIssuesEnabled: Boolean, $withMergeRequestsEnabled: Boolean, $archived: ProjectArchived, $minAccessLevel: AccessLevelEnum, $programmingLanguageName: String, $trending: Boolean, $aimedForDeletion: Boolean, $notAimedForDeletion: Boolean, $markedForDeletionOn: Date, $active: Boolean, $visibilityLevel: VisibilityLevelsEnum, $lastRepositoryCheckFailed: Boolean, $includeHidden: Boolean, $withDuoEligible: Boolean, $duoLicensedFeature: DuoLicensedFeature, $after: String, $before: String, $first: Int, $last: Int) { adminProjects(membership: $membership, search: $search, searchNamespaces: $searchNamespaces, topics: $topics, personal: $personal, sort: $sort, namespacePath: $namespacePath, ids: $ids, fullPaths: $fullPaths, withIssuesEnabled: $withIssuesEnabled, withMergeRequestsEnabled: $withMergeRequestsEnabled, archived: $archived, minAccessLevel: $minAccessLevel, programmingLanguageName: $programmingLanguageName, trending: $trending, aimedForDeletion: $aimedForDeletion, notAimedForDeletion: $notAimedForDeletion, markedForDeletionOn: $markedForDeletionOn, active: $active, visibilityLevel: $visibilityLevel, lastRepositoryCheckFailed: $lastRepositoryCheckFailed, includeHidden: $includeHidden, withDuoEligible: $withDuoEligible, duoLicensedFeature: $duoLicensedFeature, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminProjects" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminProjects" }
 }
 
 # Get flow configuration for an AI Catalog agent. Introduced in GitLab 18.4: **Status**: Experiment.
@@ -440,6 +449,7 @@ export def "query ai-catalog-agent-flow-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   agent_version_id: string # Global ID of the agent version to use.
@@ -452,12 +462,12 @@ export def "query ai-catalog-agent-flow-config" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let body = {query: "query($agentVersionId: AiCatalogItemVersionID!, $flowConfigType: AiCatalogFlowConfigType!) { aiCatalogAgentFlowConfig(agentVersionId: $agentVersionId, flowConfigType: $flowConfigType) }", variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentFlowConfig" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentFlowConfig" }
 }
 
 # AI Catalog flows available to enable for a project. Introduced in GitLab 18.9: **Status**: Experiment.
@@ -473,6 +483,7 @@ export def "query ai-catalog-available-flows-for-project" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   project_id: string # Project ID to retrieve available AI Catalog flows for.
@@ -488,13 +499,13 @@ export def "query ai-catalog-available-flows-for-project" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "count" }
     let body = {query: ("query($projectId: ProjectID!, $after: String, $before: String, $first: Int, $last: Int) { aiCatalogAvailableFlowsForProject(projectId: $projectId, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAvailableFlowsForProject" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAvailableFlowsForProject" }
 }
 
 # List of AI Catalog built-in tools. Introduced in GitLab 18.3: **Status**: Experiment.
@@ -510,6 +521,7 @@ export def "query ai-catalog-built-in-tools" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --after: string # Returns the elements in the list that come after the specified cursor.
@@ -524,13 +536,13 @@ export def "query ai-catalog-built-in-tools" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($after: String, $before: String, $first: Int, $last: Int) { aiCatalogBuiltInTools(after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogBuiltInTools" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogBuiltInTools" }
 }
 
 # AI Catalog items configured for use. Introduced in GitLab 18.2: **Status**: Experiment.
@@ -547,6 +559,7 @@ export def "query ai-catalog-configured-items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --group-id: string # Group ID to retrieve configured AI Catalog items for.
@@ -570,13 +583,13 @@ export def "query ai-catalog-configured-items" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "count" }
     let body = {query: ("query($groupId: GroupID, $includeInherited: Boolean, $includeFoundationalConsumers: Boolean, $itemId: AiCatalogItemID, $projectId: ProjectID, $configurableForProjectId: ProjectID, $foundationalFlowReference: String, $itemType: AiCatalogItemType, $itemTypes: [AiCatalogItemType!], $after: String, $before: String, $first: Int, $last: Int) { aiCatalogConfiguredItems(groupId: $groupId, includeInherited: $includeInherited, includeFoundationalConsumers: $includeFoundationalConsumers, itemId: $itemId, projectId: $projectId, configurableForProjectId: $configurableForProjectId, foundationalFlowReference: $foundationalFlowReference, itemType: $itemType, itemTypes: $itemTypes, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogConfiguredItems" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogConfiguredItems" }
 }
 
 # List of AI Catalog items, including foundational items. Introduced in GitLab 19.0: **Status**: Experiment.
@@ -592,6 +605,7 @@ export def "query ai-catalog-custom-and-foundational-items" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --item-types: string@item-types-completer # Types of items to retrieve.
@@ -609,13 +623,13 @@ export def "query ai-catalog-custom-and-foundational-items" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($itemTypes: [AiCatalogItemType!], $search: String, $sort: AiCatalogItemsSort, $after: String, $before: String, $first: Int, $last: Int) { aiCatalogCustomAndFoundationalItems(itemTypes: $itemTypes, search: $search, sort: $sort, after: $after, before: $before, first: $first, last: $last) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogCustomAndFoundationalItems" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogCustomAndFoundationalItems" }
 }
 
 # Find an AI Catalog item. Introduced in GitLab 18.2: **Status**: Experiment.
@@ -631,6 +645,7 @@ export def "query ai-catalog-item" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # Global ID of the catalog item to find.
@@ -643,13 +658,13 @@ export def "query ai-catalog-item" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "createdAt description foundational foundationalFlowReference id isEnabledInManagedByProject itemType last30DayUsageCount name public softDeleted softDeletedAt starCount starred updatedAt verificationLevel" }
     let body = {query: ("query($id: AiCatalogItemID!, $showSoftDeleted: Boolean) { aiCatalogItem(id: $id, showSoftDeleted: $showSoftDeleted) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogItem" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogItem" }
 }
 
 # Find a single AI Catalog item consumer by ID. Introduced in GitLab 18.5: **Status**: Experiment.
@@ -665,6 +680,7 @@ export def "query ai-catalog-item-consumer" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: string # Global ID of the AI Catalog item consumer.
@@ -676,13 +692,13 @@ export def "query ai-catalog-item-consumer" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "enabled id pinnedVersionPrefix webPath" }
     let body = {query: ("query($id: AiCatalogItemConsumerID!) { aiCatalogItemConsumer(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogItemConsumer" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogItemConsumer" }
 }
 
 # GraphQL mutation: achievementsAward
@@ -698,6 +714,7 @@ export def "mutation achievements-award" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -712,13 +729,13 @@ export def "mutation achievements-award" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AchievementsAwardInput!) { achievementsAward(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsAward" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsAward" }
 }
 
 # GraphQL mutation: achievementsCreate
@@ -735,6 +752,7 @@ export def "mutation achievements-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AchievementsCreate — shape: {clientMutationId?: string, namespaceId: string, name: string, avatar?: path, description?: string}
@@ -746,13 +764,13 @@ export def "mutation achievements-create" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AchievementsCreateInput!) { achievementsCreate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsCreate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsCreate" }
 }
 
 # GraphQL mutation: achievementsDelete
@@ -768,6 +786,7 @@ export def "mutation achievements-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -781,13 +800,13 @@ export def "mutation achievements-delete" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AchievementsDeleteInput!) { achievementsDelete(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsDelete" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsDelete" }
 }
 
 # GraphQL mutation: achievementsRevoke
@@ -803,6 +822,7 @@ export def "mutation achievements-revoke" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -816,13 +836,13 @@ export def "mutation achievements-revoke" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AchievementsRevokeInput!) { achievementsRevoke(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsRevoke" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsRevoke" }
 }
 
 # GraphQL mutation: achievementsUpdate
@@ -839,6 +859,7 @@ export def "mutation achievements-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AchievementsUpdate — shape: {clientMutationId?: string, achievementId: string, name?: string, avatar?: path, description?: string}
@@ -850,13 +871,13 @@ export def "mutation achievements-update" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AchievementsUpdateInput!) { achievementsUpdate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsUpdate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "achievementsUpdate" }
 }
 
 # GraphQL mutation: addProjectToSecurityDashboard
@@ -870,6 +891,7 @@ export def "mutation add-project-to-security-dashboard" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -883,13 +905,13 @@ export def "mutation add-project-to-security-dashboard" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AddProjectToSecurityDashboardInput!) { addProjectToSecurityDashboard(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "addProjectToSecurityDashboard" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "addProjectToSecurityDashboard" }
 }
 
 # GraphQL mutation: adminRolesLdapSync
@@ -905,6 +927,7 @@ export def "mutation admin-roles-ldap-sync" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -917,13 +940,13 @@ export def "mutation admin-roles-ldap-sync" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors success" }
     let body = {query: ("mutation($input: AdminRolesLdapSyncInput!) { adminRolesLdapSync(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminRolesLdapSync" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminRolesLdapSync" }
 }
 
 # GraphQL mutation: adminSidekiqQueuesDeleteJobs
@@ -938,6 +961,7 @@ export def "mutation admin-sidekiq-queues-delete-jobs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AdminSidekiqQueuesDeleteJobs — shape: {clientMutationId?: string, organizationId?: string, user?: string, userId?: string, glUserId?: string, scopedUser?: string, scopedUserId?: string, project?: string, rootNamespace?: string, clientId?: string, callerId?: string, remoteIp?: string, jobId?: string, pipelineId?: string, relatedClass?: string, featureCategory?: string, artifactSize?: string, artifactUsedCdn?: string, artifactsDependenciesSize?: string, artifactsDependenciesCount?: string, rootCallerId?: string, mergeActionStatus?: string, bulkImportEntityId?: string, sidekiqDestinationShardRedis?: string, kubernetesAgentId?: string, subscriptionPlan?: string, aiResource?: string, policySyncConfigId?: string, workerClass?: string, queueName: string}
@@ -949,13 +973,13 @@ export def "mutation admin-sidekiq-queues-delete-jobs" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AdminSidekiqQueuesDeleteJobsInput!) { adminSidekiqQueuesDeleteJobs(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "adminSidekiqQueuesDeleteJobs" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "adminSidekiqQueuesDeleteJobs" }
 }
 
 # GraphQL mutation: aiAction
@@ -972,6 +996,7 @@ export def "mutation ai-action" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AiAction — shape: {clientMutationId?: string, explainVulnerability?: record, resolveVulnerability?: record, summarizeReview?: record, measureCommentTemperature?: record, generateDescription?: record, generateCommitMessage?: record, descriptionComposer?: record, chat?: record, summarizeNewMergeRequest?: record, agenticChat?: record, clientSubscriptionId?: string, platformOrigin?: string, projectId?: string, rootNamespaceId?: string, conversationType?: "DUO_CHAT_LEGACY"|"DUO_CODE_REVIEW"|"DUO_QUICK_CHAT"|"DUO_CHAT", threadId?: string}
@@ -983,13 +1008,13 @@ export def "mutation ai-action" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors requestId threadId" }
     let body = {query: ("mutation($input: AiActionInput!) { aiAction(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiAction" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiAction" }
 }
 
 # GraphQL mutation: aiCatalogAgentCreate
@@ -1006,6 +1031,7 @@ export def "mutation ai-catalog-agent-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AiCatalogAgentCreate — shape: {clientMutationId?: string, description: string, name: string, projectId: string, public: bool, release?: bool, systemPrompt: string, tools?: string, mcpTools?: string, userPrompt?: string, mcpServers?: string}
@@ -1017,13 +1043,13 @@ export def "mutation ai-catalog-agent-create" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AiCatalogAgentCreateInput!) { aiCatalogAgentCreate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentCreate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentCreate" }
 }
 
 # GraphQL mutation: aiCatalogAgentDelete
@@ -1039,6 +1065,7 @@ export def "mutation ai-catalog-agent-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -1053,13 +1080,13 @@ export def "mutation ai-catalog-agent-delete" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors success" }
     let body = {query: ("mutation($input: AiCatalogAgentDeleteInput!) { aiCatalogAgentDelete(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentDelete" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentDelete" }
 }
 
 # GraphQL mutation: aiCatalogAgentUpdate
@@ -1076,6 +1103,7 @@ export def "mutation ai-catalog-agent-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AiCatalogAgentUpdate — shape: {clientMutationId?: string, id: string, description?: string, name?: string, public?: bool, release?: bool, systemPrompt?: string, tools?: string, mcpTools?: string, userPrompt?: string, versionBump?: "MAJOR"|"MINOR"|"PATCH", mcpServers?: string}
@@ -1087,13 +1115,13 @@ export def "mutation ai-catalog-agent-update" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AiCatalogAgentUpdateInput!) { aiCatalogAgentUpdate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentUpdate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogAgentUpdate" }
 }
 
 # GraphQL mutation: aiCatalogFlowCreate
@@ -1110,6 +1138,7 @@ export def "mutation ai-catalog-flow-create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AiCatalogFlowCreate — shape: {clientMutationId?: string, description: string, name: string, projectId: string, public: bool, release?: bool, definition?: string}
@@ -1121,13 +1150,13 @@ export def "mutation ai-catalog-flow-create" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AiCatalogFlowCreateInput!) { aiCatalogFlowCreate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowCreate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowCreate" }
 }
 
 # GraphQL mutation: aiCatalogFlowDelete
@@ -1143,6 +1172,7 @@ export def "mutation ai-catalog-flow-delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input-clientMutationId: string # A unique identifier for the client performing the mutation.
@@ -1157,13 +1187,13 @@ export def "mutation ai-catalog-flow-delete" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors success" }
     let body = {query: ("mutation($input: AiCatalogFlowDeleteInput!) { aiCatalogFlowDelete(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowDelete" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowDelete" }
 }
 
 # GraphQL mutation: aiCatalogFlowUpdate
@@ -1180,6 +1210,7 @@ export def "mutation ai-catalog-flow-update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --input: record # Parameters for AiCatalogFlowUpdate — shape: {clientMutationId?: string, id: string, description?: string, name?: string, public?: bool, release?: bool, definition?: string, versionBump?: "MAJOR"|"MINOR"|"PATCH"}
@@ -1191,11 +1222,11 @@ export def "mutation ai-catalog-flow-update" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "clientMutationId errors" }
     let body = {query: ("mutation($input: AiCatalogFlowUpdateInput!) { aiCatalogFlowUpdate(input: $input) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowUpdate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "aiCatalogFlowUpdate" }
 }

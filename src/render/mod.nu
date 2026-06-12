@@ -47,7 +47,7 @@ const RESERVED_VARS = [
   let mut const def export use module source overlay
   where each error try catch not do
   # generated signature flags
-  base_url token auth_scheme insecure max_time raw allow_errors accept
+  base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
   # generated body-code internal variables
   auth base url qp full_url body extra_headers cookie_str accept_val
   # graphql body-code variables
@@ -222,6 +222,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     '  --max-time(-m): duration # Timeout'
     '  --raw(-r) # Fetch as text'
     '  --allow-errors(-e) # Return full response without error handling'
+    '  --dry-run(-n) # Return the request that would be sent without executing it'
   ])
 
   # Format-specific extra flags (e.g. --fields, --query for GraphQL)
@@ -362,7 +363,7 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '}'
     ''
     '# Execute HTTP request with method dispatch'
-    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {'
+    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {'
     '  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }'
     ('  let timeout = ($max_time | default ' + $default_timeout + ')')
     '  let ct = ($content_type | default "application/json")'
@@ -372,6 +373,7 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
   } else {
     $in
   } | append [
+    '  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }'
     '  let resp = match $method {'
     '    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }'
     '    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }'
@@ -483,7 +485,7 @@ export def build-body-code [cmd: record, config: record] {
   }
 
   let body_arg = if $cmd.has_body { " $body" } else { "" }
-  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $max_time $allow_errors "($cmd.content_type)"($body_arg)')
+  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "($cmd.content_type)"($body_arg)')
 
   $lines | str join "\n"
 }
@@ -545,7 +547,7 @@ export def build-graphql-body-code [cmd: record, config: record] {
   # Raw query override
   $lines = ($lines | append '  let result = if ($query | is-not-empty) {')
   $lines = ($lines | append '    let body = {query: $query, variables: $variables}')
-  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body')
+  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body')
   $lines = ($lines | append "  } else {")
 
   # Auto-built query
@@ -580,11 +582,11 @@ export def build-graphql-body-code [cmd: record, config: record] {
     }
   }
 
-  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body')
+  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body')
   $lines = ($lines | append "  }")
 
   # Unwrap response
-  $lines = ($lines | append ($"  if $raw or $allow_errors { $result } else { unwrap-graphql $result \"($field_name)\" }"))
+  $lines = ($lines | append ($"  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result \"($field_name)\" }"))
 
   $lines | str join "\n"
 }
@@ -674,7 +676,7 @@ def render-module-header [
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
-      '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]'
+      '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]'
       $"  let mod_name = \(scope modules | where { $in.commands | any { $in.name == \"($first_cmd_name)\" } } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)'

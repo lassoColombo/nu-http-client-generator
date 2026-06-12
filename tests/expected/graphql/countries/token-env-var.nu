@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -77,7 +78,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query continent" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -109,6 +110,7 @@ export def "query continent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   code: string
@@ -120,13 +122,13 @@ export def "query continent" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name" }
     let body = {query: ("query($code: ID!) { continent(code: $code) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "continent" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "continent" }
 }
 
 # GraphQL query: continents
@@ -141,6 +143,7 @@ export def "query continents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --filter-code: record # shape: {eq?: string, in?: string, ne?: string, nin?: string, regex?: string}
@@ -153,13 +156,13 @@ export def "query continents" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name" }
     let body = {query: ("query($filter: ContinentFilterInput) { continents(filter: $filter) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "continents" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "continents" }
 }
 
 # GraphQL query: countries
@@ -177,6 +180,7 @@ export def "query countries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --filter-code: record # shape: {eq?: string, in?: string, ne?: string, nin?: string, regex?: string}
@@ -192,13 +196,13 @@ export def "query countries" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "awsRegion capital code currencies currency emoji emojiU name native phone phones" }
     let body = {query: ("query($filter: CountryFilterInput) { countries(filter: $filter) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "countries" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "countries" }
 }
 
 # GraphQL query: country
@@ -212,6 +216,7 @@ export def "query country" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   code: string
@@ -223,13 +228,13 @@ export def "query country" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "awsRegion capital code currencies currency emoji emojiU name native phone phones" }
     let body = {query: ("query($code: ID!) { country(code: $code) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "country" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "country" }
 }
 
 # GraphQL query: language
@@ -243,6 +248,7 @@ export def "query language" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   code: string
@@ -254,13 +260,13 @@ export def "query language" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name native rtl" }
     let body = {query: ("query($code: ID!) { language(code: $code) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "language" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "language" }
 }
 
 # GraphQL query: languages
@@ -275,6 +281,7 @@ export def "query languages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --filter-code: record # shape: {eq?: string, in?: string, ne?: string, nin?: string, regex?: string}
@@ -287,11 +294,11 @@ export def "query languages" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "code name native rtl" }
     let body = {query: ("query($filter: LanguageFilterInput) { languages(filter: $filter) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "languages" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "languages" }
 }

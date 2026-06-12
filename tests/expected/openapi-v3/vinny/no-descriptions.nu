@@ -46,10 +46,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -72,7 +73,7 @@ def health-status-completer [] { ["" "BAD" "GOOD" "WARN"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "avcfg-asset get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -105,13 +106,14 @@ export def "avcfg-asset get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/asset/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PATCH /avcfg/asset/enable/{id}/
@@ -126,6 +128,7 @@ export def "avcfg-asset-enable patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer
   --hostname: string
   --last-seen: string
@@ -143,7 +146,7 @@ export def "avcfg-asset-enable patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /avcfg/chart/endpoints/{idrs}/
@@ -158,6 +161,7 @@ export def "avcfg-chart-endpoints list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int
   --per-page: int
 ]: nothing -> any {
@@ -167,7 +171,7 @@ export def "avcfg-chart-endpoints list" [
   let full_url = (build-url $base $"/avcfg/chart/endpoints/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/customers/
@@ -181,6 +185,7 @@ export def "avcfg-customers list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --idrs: string
   --page: int
   --per-page: int
@@ -191,7 +196,7 @@ export def "avcfg-customers list" [
   let full_url = (build-url $base "/avcfg/customers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /avcfg/cynet/alerts/acknowledge/{id}/
@@ -206,6 +211,7 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uniqueness: string
   --incident-name: string
   --eps-prevention: oneof<nothing, bool>
@@ -238,7 +244,7 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PATCH /avcfg/cynet/alerts/acknowledge/{id}/
@@ -253,6 +259,7 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --uniqueness: string
   --incident-name: string
   --eps-prevention: oneof<nothing, bool>
@@ -285,7 +292,7 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # GET /avcfg/cynet/alerts/list/{idrs}/
@@ -300,6 +307,7 @@ export def "avcfg-cynet-alerts-list list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
@@ -348,7 +356,7 @@ export def "avcfg-cynet-alerts-list list" [
   let full_url = (build-url $base $"/avcfg/cynet/alerts/list/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # List all XDR log for a IDRS
@@ -364,6 +372,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
@@ -412,7 +421,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   let full_url = (build-url $base $"/avcfg/cynet/alerts/list/scangroup/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/alerts/summary/{idrs}/
@@ -427,6 +436,7 @@ export def "avcfg-cynet-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
@@ -475,7 +485,7 @@ export def "avcfg-cynet-alerts-summary list" [
   let full_url = (build-url $base $"/avcfg/cynet/alerts/summary/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # POST /avcfg/cynet/carpet/active_idrs/
@@ -489,13 +499,14 @@ export def "avcfg-cynet-carpet-active-idrs create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/avcfg/cynet/carpet/active_idrs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/carpet/endpoints/{idrs}/
@@ -510,6 +521,7 @@ export def "avcfg-cynet-carpet-endpoints list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --page: int
   --per-page: int
 ]: nothing -> any {
@@ -519,7 +531,7 @@ export def "avcfg-cynet-carpet-endpoints list" [
   let full_url = (build-url $base $"/avcfg/cynet/carpet/endpoints/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/endpoint/ci/{atlantis_id}/
@@ -534,13 +546,14 @@ export def "avcfg-cynet-endpoint-ci get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/endpoint/ci/($atlantis_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/endpoints/{idrs}/
@@ -555,6 +568,7 @@ export def "avcfg-cynet-endpoints list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --cynet-info-last-seen-at--gte: string
   --cynet-info-last-seen-at--lte: string
   --hostname: string
@@ -571,7 +585,7 @@ export def "avcfg-cynet-endpoints list" [
   let full_url = (build-url $base $"/avcfg/cynet/endpoints/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/endpoints/alerts/summary/{idrs}/
@@ -586,6 +600,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --acknowledged: oneof<nothing, bool>
   --alert-domain: string
   --alert-ip: string
@@ -634,7 +649,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   let full_url = (build-url $base $"/avcfg/cynet/endpoints/alerts/summary/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # GET /avcfg/cynet/tenant/{id}/
@@ -649,13 +664,14 @@ export def "avcfg-cynet-tenant get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # PUT /avcfg/cynet/tenant/{id}/
@@ -670,6 +686,7 @@ export def "avcfg-cynet-tenant update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --enable: oneof<nothing, bool>
   --note: string
@@ -685,7 +702,7 @@ export def "avcfg-cynet-tenant update" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # PATCH /avcfg/cynet/tenant/{id}/
@@ -700,6 +717,7 @@ export def "avcfg-cynet-tenant patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --enable: oneof<nothing, bool>
   --note: string
@@ -715,7 +733,7 @@ export def "avcfg-cynet-tenant patch" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # POST /avcfg/cynet/tenant/create/
@@ -729,6 +747,7 @@ export def "avcfg-cynet-tenant-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
   --enable: oneof<nothing, bool>
   --note: string
@@ -744,5 +763,5 @@ export def "avcfg-cynet-tenant-create create" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

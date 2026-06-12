@@ -44,10 +44,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -71,7 +72,7 @@ def accept-completer-2 [] { ["application/cbor" "application/cbor-seq" "applicat
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -104,13 +105,14 @@ export def "well-known-openid-configuration get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/openid-configuration/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get available API versions
@@ -125,6 +127,7 @@ export def "core get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<apiVersion: string, kind: string, serverAddressByClientCIDRs: table<clientCIDR: string, serverAddress: string>, versions: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -132,7 +135,7 @@ export def "core get" [
   let full_url = (build-url $base "/api/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # get available resources
@@ -147,6 +150,7 @@ export def "core-v1 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<apiVersion: string, groupVersion: string, kind: string, resources: table<categories: list, group: string, kind: string, name: string, namespaced: bool, shortNames: list, singularName: string, storageVersionHash: string, verbs: list, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -154,7 +158,7 @@ export def "core-v1 get" [
   let full_url = (build-url $base "/api/v1/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list objects of kind ComponentStatus
@@ -169,6 +173,7 @@ export def "componentstatuses listCoreV1ComponentStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -189,7 +194,7 @@ export def "componentstatuses listCoreV1ComponentStatus" [
   let full_url = (build-url $base "/api/v1/componentstatuses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # read the specified ComponentStatus
@@ -205,6 +210,7 @@ export def "componentstatuses readCoreV1ComponentStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string
 ]: nothing -> record<apiVersion: string, conditions: table<error: string, message: string, status: string, type: string>, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
@@ -214,7 +220,7 @@ export def "componentstatuses readCoreV1ComponentStatus" [
   let full_url = (build-url $base $"/api/v1/componentstatuses/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind ConfigMap
@@ -229,6 +235,7 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -249,7 +256,7 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   let full_url = (build-url $base "/api/v1/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind Endpoints
@@ -264,6 +271,7 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -284,7 +292,7 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   let full_url = (build-url $base "/api/v1/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind Event
@@ -299,6 +307,7 @@ export def "events listCoreV1EventForAllNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -319,7 +328,7 @@ export def "events listCoreV1EventForAllNamespaces" [
   let full_url = (build-url $base "/api/v1/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind LimitRange
@@ -334,6 +343,7 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -354,7 +364,7 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   let full_url = (build-url $base "/api/v1/limitranges" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind Namespace
@@ -369,6 +379,7 @@ export def "namespaces listCoreV1Namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -388,7 +399,7 @@ export def "namespaces listCoreV1Namespace" [
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # create a Namespace
@@ -403,6 +414,7 @@ export def "namespaces createCoreV1Namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -422,7 +434,7 @@ export def "namespaces createCoreV1Namespace" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # create a Binding
@@ -438,6 +450,7 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -457,7 +470,7 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete collection of ConfigMap
@@ -473,6 +486,7 @@ export def "namespaces-configmaps delete-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string
   --dryRun: string
@@ -495,7 +509,7 @@ export def "namespaces-configmaps delete-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind ConfigMap
@@ -511,6 +525,7 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -530,7 +545,7 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # create a ConfigMap
@@ -546,6 +561,7 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -566,7 +582,7 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete a ConfigMap
@@ -583,6 +599,7 @@ export def "namespaces-configmaps delete-by-name-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --gracePeriodSeconds: int
@@ -596,7 +613,7 @@ export def "namespaces-configmaps delete-by-name-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # read the specified ConfigMap
@@ -613,6 +630,7 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string
 ]: nothing -> record<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
@@ -622,7 +640,7 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # partially update the specified ConfigMap
@@ -639,6 +657,7 @@ export def "namespaces-configmaps patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -651,7 +670,7 @@ export def "namespaces-configmaps patch" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # replace the specified ConfigMap
@@ -668,6 +687,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -688,7 +708,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete collection of Endpoints
@@ -704,6 +724,7 @@ export def "namespaces-endpoints delete-by-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string
   --dryRun: string
@@ -726,7 +747,7 @@ export def "namespaces-endpoints delete-by-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # list or watch objects of kind Endpoints
@@ -742,6 +763,7 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allowWatchBookmarks: oneof<nothing, bool>
   --qp-continue: string
@@ -761,7 +783,7 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # create Endpoints
@@ -777,6 +799,7 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -795,7 +818,7 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }
 
 # delete Endpoints
@@ -812,6 +835,7 @@ export def "namespaces-endpoints delete-by-name-namespace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --gracePeriodSeconds: int
@@ -825,7 +849,7 @@ export def "namespaces-endpoints delete-by-name-namespace" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # read the specified Endpoints
@@ -842,6 +866,7 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, subsets: table<addresses: list, notReadyAddresses: list, ports: list>> {
@@ -851,7 +876,7 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # partially update the specified Endpoints
@@ -868,6 +893,7 @@ export def "namespaces-endpoints patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -880,7 +906,7 @@ export def "namespaces-endpoints patch" [
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }
 
 # replace the specified Endpoints
@@ -897,6 +923,7 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --dryRun: string
   --fieldManager: string
@@ -915,5 +942,5 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
 }

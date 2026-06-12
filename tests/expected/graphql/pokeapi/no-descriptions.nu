@@ -43,10 +43,11 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
@@ -83,7 +84,7 @@ def distinct-on-completer-4 [] { ["ability_id" "flavor_text" "id" "language_id" 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "query pokemon-v2-ability" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +116,7 @@ export def "query pokemon-v2-ability" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer
@@ -150,13 +152,13 @@ export def "query pokemon-v2-ability" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "generation_id id is_main_series name" }
     let body = {query: ("query($distinct_on: [pokemon_v2_ability_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_ability_order_by!], $where: pokemon_v2_ability_bool_exp) { pokemon_v2_ability(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability" }
 }
 
 # fetch aggregated fields from the table: "pokemon_v2_ability"
@@ -170,6 +172,7 @@ export def "query pokemon-v2-ability-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer
@@ -205,13 +208,13 @@ export def "query pokemon-v2-ability-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($distinct_on: [pokemon_v2_ability_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_ability_order_by!], $where: pokemon_v2_ability_bool_exp) { pokemon_v2_ability_aggregate(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability_aggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability_aggregate" }
 }
 
 # fetch data from the table: "pokemon_v2_ability" using primary key columns
@@ -225,6 +228,7 @@ export def "query pokemon-v2-ability-by-pk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -236,13 +240,13 @@ export def "query pokemon-v2-ability-by-pk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "generation_id id is_main_series name" }
     let body = {query: ("query($id: Int!) { pokemon_v2_ability_by_pk(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability_by_pk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_ability_by_pk" }
 }
 
 # fetch data from the table: "pokemon_v2_abilitychange"
@@ -256,6 +260,7 @@ export def "query pokemon-v2-abilitychange" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-1
@@ -281,13 +286,13 @@ export def "query pokemon-v2-abilitychange" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id id version_group_id" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilitychange_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilitychange_order_by!], $where: pokemon_v2_abilitychange_bool_exp) { pokemon_v2_abilitychange(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange" }
 }
 
 # fetch aggregated fields from the table: "pokemon_v2_abilitychange"
@@ -301,6 +306,7 @@ export def "query pokemon-v2-abilitychange-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-1
@@ -326,13 +332,13 @@ export def "query pokemon-v2-abilitychange-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilitychange_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilitychange_order_by!], $where: pokemon_v2_abilitychange_bool_exp) { pokemon_v2_abilitychange_aggregate(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange_aggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange_aggregate" }
 }
 
 # fetch data from the table: "pokemon_v2_abilitychange" using primary key columns
@@ -346,6 +352,7 @@ export def "query pokemon-v2-abilitychange-by-pk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -357,13 +364,13 @@ export def "query pokemon-v2-abilitychange-by-pk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id id version_group_id" }
     let body = {query: ("query($id: Int!) { pokemon_v2_abilitychange_by_pk(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange_by_pk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychange_by_pk" }
 }
 
 # fetch data from the table: "pokemon_v2_abilitychangeeffecttext"
@@ -377,6 +384,7 @@ export def "query pokemon-v2-abilitychangeeffecttext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-2
@@ -401,13 +409,13 @@ export def "query pokemon-v2-abilitychangeeffecttext" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_change_id effect id language_id" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilitychangeeffecttext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilitychangeeffecttext_order_by!], $where: pokemon_v2_abilitychangeeffecttext_bool_exp) { pokemon_v2_abilitychangeeffecttext(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext" }
 }
 
 # fetch aggregated fields from the table: "pokemon_v2_abilitychangeeffecttext"
@@ -421,6 +429,7 @@ export def "query pokemon-v2-abilitychangeeffecttext-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-2
@@ -445,13 +454,13 @@ export def "query pokemon-v2-abilitychangeeffecttext-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilitychangeeffecttext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilitychangeeffecttext_order_by!], $where: pokemon_v2_abilitychangeeffecttext_bool_exp) { pokemon_v2_abilitychangeeffecttext_aggregate(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext_aggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext_aggregate" }
 }
 
 # fetch data from the table: "pokemon_v2_abilitychangeeffecttext" using primary key columns
@@ -465,6 +474,7 @@ export def "query pokemon-v2-abilitychangeeffecttext-by-pk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -476,13 +486,13 @@ export def "query pokemon-v2-abilitychangeeffecttext-by-pk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_change_id effect id language_id" }
     let body = {query: ("query($id: Int!) { pokemon_v2_abilitychangeeffecttext_by_pk(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext_by_pk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilitychangeeffecttext_by_pk" }
 }
 
 # fetch data from the table: "pokemon_v2_abilityeffecttext"
@@ -496,6 +506,7 @@ export def "query pokemon-v2-abilityeffecttext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-3
@@ -521,13 +532,13 @@ export def "query pokemon-v2-abilityeffecttext" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id effect id language_id short_effect" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilityeffecttext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilityeffecttext_order_by!], $where: pokemon_v2_abilityeffecttext_bool_exp) { pokemon_v2_abilityeffecttext(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext" }
 }
 
 # fetch aggregated fields from the table: "pokemon_v2_abilityeffecttext"
@@ -541,6 +552,7 @@ export def "query pokemon-v2-abilityeffecttext-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-3
@@ -566,13 +578,13 @@ export def "query pokemon-v2-abilityeffecttext-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilityeffecttext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilityeffecttext_order_by!], $where: pokemon_v2_abilityeffecttext_bool_exp) { pokemon_v2_abilityeffecttext_aggregate(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext_aggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext_aggregate" }
 }
 
 # fetch data from the table: "pokemon_v2_abilityeffecttext" using primary key columns
@@ -586,6 +598,7 @@ export def "query pokemon-v2-abilityeffecttext-by-pk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -597,13 +610,13 @@ export def "query pokemon-v2-abilityeffecttext-by-pk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id effect id language_id short_effect" }
     let body = {query: ("query($id: Int!) { pokemon_v2_abilityeffecttext_by_pk(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext_by_pk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityeffecttext_by_pk" }
 }
 
 # fetch data from the table: "pokemon_v2_abilityflavortext"
@@ -617,6 +630,7 @@ export def "query pokemon-v2-abilityflavortext" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-4
@@ -643,13 +657,13 @@ export def "query pokemon-v2-abilityflavortext" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id flavor_text id language_id version_group_id" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilityflavortext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilityflavortext_order_by!], $where: pokemon_v2_abilityflavortext_bool_exp) { pokemon_v2_abilityflavortext(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext" }
 }
 
 # fetch aggregated fields from the table: "pokemon_v2_abilityflavortext"
@@ -663,6 +677,7 @@ export def "query pokemon-v2-abilityflavortext-aggregate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   --distinct-on: string@distinct-on-completer-4
@@ -689,13 +704,13 @@ export def "query pokemon-v2-abilityflavortext-aggregate" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "__typename" }
     let body = {query: ("query($distinct_on: [pokemon_v2_abilityflavortext_select_column!], $limit: Int, $offset: Int, $order_by: [pokemon_v2_abilityflavortext_order_by!], $where: pokemon_v2_abilityflavortext_bool_exp) { pokemon_v2_abilityflavortext_aggregate(distinct_on: $distinct_on, limit: $limit, offset: $offset, order_by: $order_by, where: $where) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext_aggregate" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext_aggregate" }
 }
 
 # fetch data from the table: "pokemon_v2_abilityflavortext" using primary key columns
@@ -709,6 +724,7 @@ export def "query pokemon-v2-abilityflavortext-by-pk" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # Fields to select
   --query: string # Raw GraphQL query (overrides auto-generated)
   id: int
@@ -720,11 +736,11 @@ export def "query pokemon-v2-abilityflavortext-by-pk" [
   let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }
   let result = if ($query | is-not-empty) {
     let body = {query: $query, variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   } else {
     let sel = if ($fields | is-not-empty) { $fields | str join " " } else { "ability_id flavor_text id language_id version_group_id" }
     let body = {query: ("query($id: Int!) { pokemon_v2_abilityflavortext_by_pk(id: $id) { " + $sel + " } }"), variables: $variables}
-    do-request "post" $base $auth $insecure $raw $max_time $allow_errors "application/json" $body
+    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
   }
-  if $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext_by_pk" }
+  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result "pokemon_v2_abilityflavortext_by_pk" }
 }
