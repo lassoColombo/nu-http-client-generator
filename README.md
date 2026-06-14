@@ -4,7 +4,28 @@ Reads an API specification and generates a typed Nushell HTTP client module.
 
 [![asciicast](https://asciinema.org/a/IQtLxd5nJoZSf0AW.svg)](https://asciinema.org/a/IQtLxd5nJoZSf0AW)
 
----
+# Table of contents
+- [nu-http-client-generator](#nu-http-client-generator)
+  - [Supported specs](#supported-specs)
+  - [Quick start](#quick-start)
+  - [Installation](#installation)
+  - [Subcommands](#subcommands)
+  - [Generation flags](#generation-flags)
+    - [Source & output](#source-&-output)
+    - [Filtering](#filtering)
+    - [Naming](#naming)
+    - [Runtime defaults](#runtime-defaults)
+    - [Module behaviour](#module-behaviour)
+  - [Using a generated client](#using-a-generated-client)
+    - [Passing inputs](#passing-inputs)
+    - [Request bodies](#request-bodies)
+    - [Auth](#auth)
+    - [Tab completion and dry runs](#tab-completion-and-dry-runs)
+    - [Introspecting the client](#introspecting-the-client)
+  - [How command names get built](#how-command-names-get-built)
+  - [GraphQL specifics](#graphql-specifics)
+  - [Acknowledgments](#acknowledgments)
+
 
 ## Supported specs
 
@@ -12,23 +33,9 @@ Reads an API specification and generates a typed Nushell HTTP client module.
 | ------- | ---------------------- |
 | OpenAPI | 3.0.x, 3.1.x           |
 | Swagger | 2.0                    |
-| GraphQL | Introspection JSON, SDL |
+| GraphQL | Introspection JSON, SDL  |
 
 Specs can be loaded from a local file or fetched directly from a URL.
-
----
-
-## Installation
-
-```nu
-# Clone into one of your NU_LIB_DIRS
-let dest = [($env.NU_LIB_DIRS | first) nu-http-client-generator] | path join
-git clone git@github.com:lassoColombo/nu-http-client-generator.git $dest
-
-# Use the module
-use nu-http-client-generator
-nu-http-client-generator --help
-```
 
 ---
 
@@ -59,6 +66,20 @@ use petstore.nu
 petstore pet-find-by-status findPetsByStatus --status available | where status == "available"
 petstore pet get 10
 petstore store-inventory get --token $env.PETSTORE_TOKEN
+```
+
+---
+
+## Installation
+
+```nu
+# Clone into one of your NU_LIB_DIRS
+let dest = [($env.NU_LIB_DIRS | first) nu-http-client-generator] | path join
+git clone git@github.com:lassoColombo/nu-http-client-generator.git $dest
+
+# Use the module
+use nu-http-client-generator
+nu-http-client-generator --help
 ```
 
 ---
@@ -107,7 +128,7 @@ Filters apply to both `<format>` and `<format> preview`. Combine freely.
 
 Default action-verb rewrites baked in: `retrieve` → `get`, `destroy` → `delete`, `partial_update` → `patch`.
 
-### Runtime defaults baked into the module
+### Runtime defaults
 
 These flags control the behaviour of the *generated* commands. They don't affect generation itself - they get embedded as defaults.
 
