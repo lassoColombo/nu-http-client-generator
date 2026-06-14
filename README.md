@@ -1,6 +1,6 @@
 # nu-http-client-generator
 
-Reads an API specification and generates a typed Nushell HTTP client module — one command per operation, with tab-completion, auth, and validated input.
+Reads an API specification and generates a typed Nushell HTTP client module.
 
 [![asciicast](https://asciinema.org/a/IQtLxd5nJoZSf0AW.svg)](https://asciinema.org/a/IQtLxd5nJoZSf0AW)
 
@@ -41,14 +41,14 @@ use nu-http-client-generator
 nu-http-client-generator openapi ./docker-hub.yaml -o ./docker-hub.nu
 
 # Generate from a URL
-nu-http-client-generator openapi "https://api.apis.guru/v2/specs/docker.com/hub/beta/openapi.json" -o ./docker-hub.nu
+nu-http-client-generator openapi https://api.apis.guru/v2/specs/docker.com/hub/beta/openapi.json -o ./docker-hub.nu
 
 # Preview what would be generated (no file written)
 nu-http-client-generator openapi preview ./docker-hub.yaml
 
-# GraphQL — auto-introspects the endpoint
-nu-http-client-generator graphql "https://countries.trevorblades.com/graphql" \
-  -o ./countries.nu --default-base-url "https://countries.trevorblades.com/graphql"
+# GraphQL - auto-introspects the endpoint
+(nu-http-client-generator graphql https://countries.trevorblades.com/graphql
+  -o ./countries.nu --default-base-url "https://countries.trevorblades.com/graphql")
 ```
 
 Then use it:
@@ -109,7 +109,7 @@ Default action-verb rewrites baked in: `retrieve` → `get`, `destroy` → `dele
 
 ### Runtime defaults baked into the module
 
-These flags control the behaviour of the *generated* commands. They don't affect generation itself — they get embedded as defaults.
+These flags control the behaviour of the *generated* commands. They don't affect generation itself - they get embedded as defaults.
 
 | Flag                            | Default     | Description                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -129,17 +129,14 @@ These flags control the behaviour of the *generated* commands. They don't affect
 
 ## Using a generated client
 
-Generated clients are regular Nushell modules. Import them namespaced — never glob-imported — so the command names don't shadow Nushell builtins like `get`, `delete`, or `in`.
-
+A generated client is a regular Nushell module:
 ```nu
 use docker-hub.nu
-
 docker-hub namespaces-repositories-tags list "library" "nginx"
 ```
 
-Each generated command is `<resource> <verb>`: object first, action second. This avoids the verb-first form (`get pet`, `delete user`) that collides with Nushell builtins.
-
-### Built-in flags on every command
+Every command follows the same `<resource> <verb>` shape, object first and action second.   
+Alongside the spec-derived flags, every command also ships with the same set of built-in flags:
 
 | Flag              | Short | Type       | Purpose                                                                                          |
 | ----------------- | ----- | ---------- | ------------------------------------------------------------------------------------------------ |
@@ -149,83 +146,50 @@ Each generated command is `<resource> <verb>`: object first, action second. This
 | `--insecure`      | `-k`  | switch     | Skip TLS certificate verification.                                                               |
 | `--max-time`      | `-m`  | `duration` | Per-request timeout. Defaults to `--default-timeout` from generation.                            |
 | `--raw`           | `-r`  | switch     | Return the response body as text (no JSON parsing).                                              |
-| `--allow-errors` | `-e`  | switch     | Return the full HTTP response record instead of erroring on non-2xx.                              |
+| `--allow-errors`  | `-e`  | switch     | Return the full HTTP response record instead of erroring on non-2xx.                             |
 | `--dry-run`       | `-n`  | switch     | Return the request that *would* be sent (method, url, headers, body, …) without executing it.    |
+| `--accept`        |       | `string`   | Override the `Accept` header. Only present on operations whose spec declares more than one response content type; tab-completes from those types. |
 
 ### Passing inputs
 
-#### Path parameters
-
-Required path params are **positional**:
-
+Required path parameters are positional, in the order they appear in the path.   
+Everything else - query strings, headers, cookies - becomes a `--flag`.   
+Enum-typed params get tab-completion automatically, and boolean query params render as plain switches:
 ```nu
 docker-hub access-tokens get "f0c3a1ce-8cf4-4..."
-docker-hub namespaces-repositories-tags get "library" "nginx" "latest"
-```
-
-#### Query, header, cookie parameters
-
-All `--flag`. Enum-typed params get tab-completion. Boolean query params are switches (no `: bool` annotation, just `--flag`).
-
-```nu
-docker-hub namespaces-repositories-tags list "library" "nginx" --page-size 50
 docker-hub namespaces-repositories-tags list "library" "nginx" --page-size 50 --page 2
 ```
 
-When a query param's name collides with a Nushell keyword or with a built-in flag (e.g. `token`, `raw`), it's automatically prefixed with `qp-` / `hdr-` / `ck-`.
+If a query, header, or cookie name happens to collide with a Nushell keyword or with one of the built-in flags above (`token`, `raw`, …), the generator prefixes the flag with `qp-`, `hdr-`, or `ck-` accordingly.
 
-#### Request body
+### Request bodies
 
-Bodies can be passed three ways, often interchangeably:
-
-**Per-field flags** — when the spec exposes flat top-level body fields, each becomes its own flag (required scalars become positional). Whether you get this shape depends on the spec — many service-style APIs use deeply nested or freeform schemas and end up with the `--body` flag below instead.
-
-**The `--body` flag** — when the body schema is freeform, has no enumerable top-level fields, or has been collapsed via `--body-threshold`, the whole payload goes in one flag:
+Request bodies show up in one of two shapes, depending on the spec. When the body schema exposes flat top-level fields, each one becomes its own flag and required scalars become positional - the most ergonomic form, but only available when the schema is clean enough to enumerate. When the schema is freeform, deeply nested, or has been collapsed by `--body-threshold`, the entire payload goes through a single `--body: record` flag instead:
 
 ```nu
-docker-hub scim-20-users post --body {userName: "alice", emails: [{value: "alice@example.com", primary: true}], active: true}
+docker-hub scim-20-users post --body {
+  userName: "alice"
+  emails: [{value: "alice@example.com", primary: true}]
+  active: true
+}
 ```
 
-**Pipeline input** — every command with a body accepts a piped record. Every body-bearing command has signature `]: any -> any` and starts with `let input = $in`; the piped value is merged deeply with whatever the flags produced:
+Either form also accepts pipeline input. In practice this means you can shape the bulk of the payload from a file or upstream pipe and then patch in last-moment overrides via flags:
 
 ```nu
-{userName: "alice", emails: [{value: "alice@example.com", primary: true}], active: true} | docker-hub scim-20-users post
-open new-user.json | docker-hub scim-20-users post
+open new-user.json | docker-hub scim-20-users post --active true
 ```
 
-When flags and pipeline input conflict, **flags win** — the flag-built body is merged on top of the pipeline value.
+A few edge cases bake in transparently. File-typed body fields accept a path: the generator opens it with `open --raw` and inlines the bytes into a multipart request - so for example Box's file upload looks like `box files-content content-by-file_id 12345 {name: "report.pdf", parent: {id: "0"}} ~/Documents/report.pdf`. And `DELETE` endpoints with a body work despite Nushell's `http delete` expecting `--data` rather than a positional argument.
 
-#### `--body-threshold`
-
-If you generated with `--body-threshold N` and a particular endpoint has more than N body fields, the per-field flags collapse into a single `--body: record`. Same mechanism applies to GraphQL `INPUT_OBJECT` args. Use this on huge specs where the per-endpoint flag count would otherwise blow past Nushell's signature limits.
-
-#### Field-name collisions
-
-Body fields whose sanitized name collides with a path param, with Nushell keywords, or with the built-in flags above get a `body-` prefix in the signature. The wire payload still uses the original spec name — only the flag name changes.
-
-#### Multipart / file uploads
-
-Body fields typed as `file` accept a path (string). The generator opens the file with `open --raw` and inserts the bytes into the multipart body before sending. For example, Box's file-content endpoint takes the file id as a path param and the file bytes as a body field:
-
-```nu
-box files-content content-by-file_id 12345 {name: "report.pdf", parent: {id: "0"}} ~/Documents/report.pdf
-```
-
-#### `DELETE` with a body
-
-Nushell's `http delete` uses `--data` for the body rather than a positional argument. The generated `do-request` helper handles this — you don't see it, but it's why `delete` endpoints with request bodies work.
+If you generated with `--body-threshold N`, any endpoint with more than N body fields collapses its per-field flags into the single `--body: record` form.
 
 ### Auth
 
-Auth scheme and token are resolved at call time:
+At call time the client resolves a token by checking `--token` first, then `$env.<NAME>_TOKEN`. You can customize the default token name at generation time by using the `--token-env-var` flag.
+The scheme comes from `--auth-scheme` if set, otherwise the default the spec declared - or `bearer` if the spec didn't declare one. If the scheme resolves to `none` or no token turns up, the request goes out unauthenticated.
 
-1. `--token` flag if set, otherwise `$env.<NAME>_TOKEN`.
-2. `--auth-scheme` flag if set, otherwise the spec-default scheme (or `bearer` if the spec didn't declare one).
-3. If the resolved scheme is `none` or no token is available, the request goes out unauthenticated.
-
-Schemes the generator recognises and renders match-arms for: `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token goes in the query string), `cookie-*` (token goes in a cookie), and `none`. Anything unrecognised falls back to `Authorization: Bearer <token>`.
-
-The default scheme and the env-var name are baked into the generated module header:
+The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. The defaults are baked into the module header so you can see them at a glance:
 
 ```nu
 # Auth: --token flag or $env.DOCKER_HUB_API_TOKEN
@@ -233,15 +197,11 @@ const BASE_URL = "https://hub.docker.com"
 const DEFAULT_AUTH = "bearer"
 ```
 
-### Tab completion
+### Tab completion and dry runs
 
-- `--base-url` completes from the spec's `servers` list plus anything passed via `--urls`.
-- `--auth-scheme` completes from the schemes the spec declared (plus `none` if any operation is marked public).
-- Any enum-typed parameter gets its own completer. Identical enum sets are deduplicated across the module — one completer per unique enum.
+`--base-url` completes from the spec's `servers` list plus anything you passed via `--urls` at generation time, and `--auth-scheme` completes from the schemes the spec declared (plus `none` if any operation was marked public). Enum-typed parameters each get their own completer, with identical enum sets deduplicated across the module - one completer per unique enum, not one per parameter.
 
-### `--dry-run`
-
-Returns the request that would be sent, without sending it:
+`--dry-run` is useful when you want to see what a call would do without actually making it. It returns the full request record - method, URL, headers, query string, body, timeout - so you can sanity-check the shape before it hits production:
 
 ```nu
 > docker-hub scim-20-users post --body {userName: "alice", active: true} --dry-run
@@ -256,9 +216,9 @@ Returns the request that would be sent, without sending it:
 ╰────────────────┴────────────────────────────────────────────────────────╯
 ```
 
-### The `commands` subcommand
+### Introspecting the client
 
-Every generated module exposes a `commands` introspection subcommand (unless generated with `--no-introspection`). It returns a table of every command with its parameters, types, optional/required-ness, descriptions, and return type — useful for scripting against the client itself.
+Unless you generated with `--no-introspection`, the module exposes a `commands` subcommand that returns a table of every command, its parameters and their types, whether each is optional, the descriptions, and the return type. It's handy both for scripting against the client itself and for browsing what's available when you're new to a spec:
 
 ```nu
 docker-hub commands | where name =~ "access-tokens" | select name return_type
@@ -267,60 +227,31 @@ docker-hub commands | get params | first 5
 
 ---
 
-## Command-name conventions
+## How command names get built
 
-- Names are `<resource> <verb>` — object first, action second. Path segments form the resource (path params and version segments like `v1`/`v2` are stripped); the verb comes from `operationId` (last camelCase chunk) or the HTTP method.
-- **Collection vs item collisions**: when two GET endpoints differ only by one path parameter (`GET /access-tokens` and `GET /access-tokens/{uuid}`), the collection variant is renamed `list` rather than suffixed.
-- **Other collisions**: disambiguated by appending `-by-<path-param-name>` (e.g. `access-tokens get-by-uuid`). If that still leaves duplicates, a numeric suffix is appended (`-1`, `-2`).
-- **`operationId` ending in `_<number>`** (a common pattern in machine-generated specs for de-duplication) triggers the `-by-<params>` rename pre-emptively.
-- Reserved Nushell names (`get`, `delete`, `in`, `version`, `nothing`) are forbidden as standalone command/flag names and are sanitized accordingly.
+Names follow `<resource> <verb>`: the path segments form the resource - with path params and version chunks like `v1`/`v2` stripped - and the verb comes from the operation's `operationId` (its trailing camelCase chunk) or the HTTP method. So `GET /access-tokens/{uuid}` becomes `access-tokens get`, and `POST /namespaces/{namespace}/repositories/{repository}/tags` becomes `namespaces-repositories-tags post`.
+
+Collisions get resolved in a few specific ways. The most common case is a collection-vs-item pair, where two GET endpoints differ only by a single path parameter (`GET /access-tokens` and `GET /access-tokens/{uuid}`); in that case the collection variant is renamed `list` rather than suffixed. Any other collision is disambiguated by appending `-by-<path-param-name>` - you'd end up with `access-tokens get-by-uuid` - and if even that leaves duplicates, a numeric suffix (`-1`, `-2`) is appended on top. An `operationId` ending in `_<number>` (a common pattern in machine-generated specs) triggers the `-by-<params>` rename pre-emptively so you don't end up with numeric suffixes everywhere. Reserved Nushell identifiers (`get`, `delete`, `in`, `version`, `nothing`) are forbidden as standalone names and get sanitized whenever they'd otherwise appear bare.
 
 ---
 
 ## GraphQL specifics
 
-### Generation
+GraphQL clients can be generated from a live endpoint URL, a pre-downloaded introspection JSON file, or a GraphQL SDL text file (`.graphql` - conversion needs Node.js with the `graphql` npm package). When you point at a URL the generator tries `GET <url>` first, and if that doesn't yield introspection it POSTs an introspection query, falling through a cascade of progressively shallower variants (`full → compat → minimal → shallow`).
 
-GraphQL clients are generated from one of:
-
-- A live endpoint URL — the generator fetches `GET <url>`; if that fails it POSTs an introspection query directly. The POST cascade tries four progressively shallower queries (`full → compat → minimal → shallow`); the shallowest one stays within depth-7 query-complexity limits used by Shopify, locked-down GitHub, etc. If POST is rejected entirely, falls back to GET with `?query=...` for servers like older Apollo/Express-GraphQL.
-- A pre-downloaded introspection JSON file.
-- A GraphQL **SDL** text file (`.graphql`). Conversion requires Node.js with the `graphql` npm package.
-
-If the server blocks introspection entirely, use a pre-downloaded schema file.
-
-### Generated GraphQL commands
-
-Every command is prefixed `query` or `mutation`:
+Generated commands look much like the REST ones, except every name is prefixed `query` or `mutation` and every command picks up two extra flags. `--fields` controls the selection set: each entry is either a bare field name or a nested chunk like `"title { romaji }"`. `--query` lets you bypass the auto-built query and supply your own raw GraphQL string instead; the auto-generated `variables` record is still sent, so you can mix a hand-written query with the flag-built variables when you need to:
 
 ```nu
 countries query country "IT" --fields [name capital emoji]
 countries query countries --filter {code: {eq: "IT"}} --fields [name capital]
 ```
 
-Two extra flags on every GraphQL command:
+`INPUT_OBJECT` arguments behave a lot like REST bodies. By default the generator expands each one into individual prefixed flags - an arg `filter: CountryFilterInput { code, continent }` becomes `--filter-code` and `--filter-continent` rather than a single `--filter: record` - and `--body-threshold N` collapses it back to the single-flag form when the expanded count would exceed N. Required scalar args are positional, the rest are flags, and a piped record gets merged deeply into the `variables` map the same way REST bodies do.
 
-| Flag                   | Description                                                                                                          |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `--fields: list<string>` | Fields to include in the selection set. Each entry may be a single field name or a nested chunk like `"title { romaji }"`. |
-| `--query: string`      | Raw GraphQL query string — overrides the auto-built one entirely. The auto-generated `variables` record is still sent. |
-
-#### `INPUT_OBJECT` arguments
-
-By default the generator **expands** each `INPUT_OBJECT` arg into individual prefixed flags. For an arg `filter: CountryFilterInput { code, continent }` you get `--filter-code` and `--filter-continent` rather than a single `--filter: record`. `--body-threshold N` collapses back to the single-flag form when the total expanded field count would exceed N.
-
-#### Default selection set
-
-When `--fields` is not passed, the generator picks all scalar fields at depth 1 of the return type. Use `--fields` for nested types or to trim.
-
-For commands that return a scalar (`String`, `[String]`, an enum, etc.) no selection set is generated at all — the field returns directly.
-
-#### Variables
-
-Required scalar args are positional. Other args become flags. Arg values are sent in the `variables` map alongside the auto-built query. Pipeline input (a record) is merged deeply into `variables`, same as the REST body behaviour.
+If you don't pass `--fields`, the generator picks every scalar field at depth 1 of the return type, so you get something useful out of the box and reach for `--fields` only when you need nested types or a tighter selection. Commands that return a bare scalar (`String`, `[String]`, an enum, …) skip the selection set entirely - the field just comes back directly.
 
 ---
 
 ## Acknowledgments
 
-Tests are powered by [nutest](https://github.com/vyadh/nutest).
+Tests are powered by [nutest](https://github.com/vyadh/nutest), an incredible testing framework for nushell.
