@@ -50,8 +50,6 @@ const RESERVED_VARS = [
   base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
   # generated body-code internal variables
   auth base url qp full_url body extra_headers cookie_str accept_val
-  # graphql body-code variables
-  result sel query fields variables
   # nushell builtins that cause issues as variable names
   sort from to get open save into split str
 ]
@@ -89,9 +87,9 @@ def effective-flag-var [name: string, prefix: string] {
 }
 
 # Render a list of params as a nushell record literal string (e.g. "key": $var, ...)
-def render-param-record [params: list, --quote-keys, --prefix: string = ""] {
+def render-param-record [params: list, prefix: string, --quote-keys] {
   $params | each {|p|
-    let var = if ($prefix | is-not-empty) { effective-flag-var $p.name $prefix } else { to-flag-var $p.name }
+    let var = (effective-flag-var $p.name $prefix)
     if $quote_keys { $'"($p.name)": $($var)' } else { $'($p.name): $($var)' }
   } | str join ", "
 }
@@ -104,7 +102,7 @@ export def collect-completers [commands: list] {
 
   for cmd in $commands {
     let accept_source = if ($cmd.accept_types | length) > 1 { [{name: "accept", enum: $cmd.accept_types}] } else { [] }
-    let enum_sources = ($cmd.query_params | append $cmd.body_fields | append $cmd.header_params | append $cmd.cookie_params | append ($cmd.extra_enum_sources? | default []) | append $accept_source)
+    let enum_sources = ($cmd.query_params | append $cmd.body_fields | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
     for q in $enum_sources {
       if ($q.enum | length) > 0 {
         let flag_name = (to-flag-name $q.name)
@@ -167,7 +165,7 @@ def render-param-sig [flag_name: string, nu_type: string, desc: string, cname?: 
 # completer_key (record with name+enum for resolve-completer),
 # plus the original param fields (type, description, deprecated?, required?, name).
 # Returns {parts: list<string>, dep_flags: list<record>}.
-def render-param-group [params: list, mapping: record, config: record, shapes: list, --positional-required] {
+def render-param-group [params: list, mapping: record, config: record, shapes: list] {
   mut parts = []
   mut dep_flags = []
   for q in $params {
@@ -178,22 +176,14 @@ def render-param-group [params: list, mapping: record, config: record, shapes: l
     let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
     let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
     let cname = if ($q.enum | length) > 0 { resolve-completer $q.completer_key $mapping } else { null }
-    let is_required = ($q.required? | default false)
-    if $positional_required and $is_required and ($nu_type != "record") and ($nu_type != "bool") {
-      let var_name = ($q.name | str replace --all '-' '_')
-      $parts = ($parts | append (render-param-sig $var_name $nu_type $desc $cname --positional))
-    } else {
-      $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
-      if ($q.deprecated? | default false) {
-        $dep_flags = ($dep_flags | append {flag_name: $flag_name, reason: ($q.description? | default "")})
-      }
+    $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
+    if ($q.deprecated? | default false) {
+      $dep_flags = ($dep_flags | append {flag_name: $flag_name, reason: ($q.description? | default "")})
     }
   }
   {parts: $parts, dep_flags: $dep_flags}
 }
 
-# Build the signature string for a command.
-# Returns a record: {signature: string, deprecated_flags: list<record {flag_name: string, reason: string}>}
 # Look up a shape description for a flag name from the field_shapes list.
 def lookup-shape [flag: string, shapes: list] {
   let matched = ($shapes | where { $in.flag == $flag })
@@ -204,7 +194,9 @@ def lookup-shape [flag: string, shapes: list] {
   }
 }
 
-export def build-signature [cmd: record, completers: record, mapping: record, config: record, strategy: record] {
+# Build the signature string for a command.
+# Returns {signature: string, deprecated_flags: list<record {flag_name: string, reason: string}>}.
+export def build-signature [cmd: record, completers: record, mapping: record, config: record] {
   mut parts = []
   mut dep_flags = []
   let shapes = if $config.no_descriptions { [] } else { $cmd.field_shapes? | default [] }
@@ -225,12 +217,6 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     '  --dry-run(-n) # Return the request that would be sent without executing it'
   ])
 
-  # Format-specific extra flags (e.g. --fields, --query for GraphQL)
-  let extra_flags = (do $strategy.extra_signature_flags $cmd)
-  if ($extra_flags | length) > 0 {
-    $parts = ($parts | append $extra_flags)
-  }
-
   # Accept header flag (only when multiple response content types)
   if ($cmd.accept_types | length) > 1 {
     let cname = resolve-completer {name: "accept", enum: $cmd.accept_types} $mapping
@@ -243,14 +229,9 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 
   # Query params
   let qp_items = ($cmd.query_params | each {|q| $q | merge {flag_name: (effective-flag-name $q.name "qp"), shape_key: ($q.name | str kebab-case), completer_key: $q} })
-  let qp_result = (render-param-group $qp_items $mapping $config $shapes --positional-required=$strategy.positional_required)
+  let qp_result = (render-param-group $qp_items $mapping $config $shapes)
   $parts = ($parts | append $qp_result.parts)
   $dep_flags = ($dep_flags | append $qp_result.dep_flags)
-
-  # Format-specific expanded params (e.g. GraphQL INPUT_OBJECT fields)
-  let extra_params = (do $strategy.extra_signature_params $cmd $mapping $config $shapes)
-  $parts = ($parts | append $extra_params.parts)
-  $dep_flags = ($dep_flags | append $extra_params.dep_flags)
 
   # Header params
   let hdr_items = ($cmd.header_params | each {|q| $q | merge {flag_name: (effective-flag-name $q.name "hdr"), shape_key: (effective-flag-name $q.name "hdr"), completer_key: $q} })
@@ -455,13 +436,13 @@ export def build-body-code [cmd: record, config: record] {
   }
 
   if ($cmd.header_params | length) > 0 {
-    let hp_record = (render-param-record $cmd.header_params --quote-keys --prefix "hdr")
+    let hp_record = (render-param-record $cmd.header_params "hdr" --quote-keys)
     $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
     $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))')
   }
 
   if ($cmd.cookie_params | length) > 0 {
-    let cp_record = (render-param-record $cmd.cookie_params --prefix "ck")
+    let cp_record = (render-param-record $cmd.cookie_params "ck")
     $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | transpose k v | where { $in.v != null } | each { $\"\($in.k\)=\($in.v\)\" } | str join \"; \""))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
@@ -490,158 +471,12 @@ export def build-body-code [cmd: record, config: record] {
   $lines | str join "\n"
 }
 
-# Build the body code for a GraphQL command.
-export def build-graphql-body-code [cmd: record, config: record] {
-  mut lines = []
-
-  $lines = ($lines | append '  let input = $in')
-
-  # Auth
-  $lines = ($lines | append '  let auth = (build-auth $token ($auth_scheme | default $DEFAULT_AUTH))')
-
-  # Base URL
-  if ($cmd.base_url | is-not-empty) {
-    $lines = ($lines | append ($"  let base = \($base_url | default \"($cmd.base_url)\"\)"))
-  } else {
-    $lines = ($lines | append '  let base = ($base_url | default $BASE_URL)')
-  }
-
-  # Reassemble expanded INPUT_OBJECT args from individual flags
-  let gql_input_fields = ($cmd.gql_input_fields? | default [])
-  for group in $gql_input_fields {
-    let field_entries = ($group.fields | each {|f|
-      let flag_name = $"($group.arg_flag)-(to-flag-name $f.name)"
-      let var_name = ($flag_name | str replace --all '-' '_')
-      $'"($f.name)": $($var_name)'
-    } | str join ", ")
-    $lines = ($lines | append ($"  let ($group.arg_name) = \({($field_entries)} | compact | if \($in | is-empty\) { null } else { $in }\)"))
-  }
-
-  # Build variables record from query_params (which are GraphQL args)
-  # Must match variable names from build-signature: positional args use raw names,
-  # flag args use effective-flag-var with "qp" prefix for reserved names.
-  let var_entries = ($cmd.query_params | each {|p|
-    let nu_type = (openapi-to-nu-type $p.type)
-    let is_required = ($p.required? | default false)
-    let is_positional = ($is_required and ($nu_type != "record") and ($nu_type != "bool"))
-    let var_name = if $is_positional {
-      $p.name | str replace --all '-' '_'
-    } else {
-      effective-flag-var $p.name "qp"
-    }
-    let orig = ($p.original_name? | default $p.name)
-    $'"($orig)": $($var_name)'
-  })
-  # Add expanded INPUT_OBJECT args as reassembled variables
-  let expanded_entries = ($gql_input_fields | each {|g| $'"($g.arg_name)": $($g.arg_name)' })
-  let all_var_entries = ($var_entries | append $expanded_entries)
-
-  if ($all_var_entries | length) > 0 {
-    let entries_str = ($all_var_entries | str join ", ")
-    $lines = ($lines | append ($"  let variables = {($entries_str)} | compact"))
-  } else {
-    $lines = ($lines | append "  let variables = {}")
-  }
-  $lines = ($lines | append '  let variables = if ($input | describe | str starts-with "record") { $input | merge deep $variables } else { $variables }')
-
-  # Raw query override
-  $lines = ($lines | append '  let result = if ($query | is-not-empty) {')
-  $lines = ($lines | append '    let body = {query: $query, variables: $variables}')
-  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body')
-  $lines = ($lines | append "  } else {")
-
-  # Auto-built query
-  let field_name = $cmd.gql_field_name
-  let op_type = $cmd.gql_op_type
-  let var_decl = $cmd.gql_var_declarations
-  let scalar_return = ($cmd.gql_scalar_return? | default false)
-
-  # Build args pass-through: continent(code: $code)
-  let qp_args = ($cmd.query_params | each {|p|
-    let orig = ($p.original_name? | default $p.name)
-    $"($orig): $($orig)"
-  })
-  let expanded_args = ($gql_input_fields | each {|g| $"($g.arg_name): $($g.arg_name)" })
-  let args_pass = ($qp_args | append $expanded_args | str join ", ")
-
-  if $scalar_return {
-    # Scalar return: no selection set needed (e.g. GenreCollection returns [String])
-    if ($var_decl | is-empty) {
-      $lines = ($lines | append ($"    let body = {query: \"($op_type) { ($field_name) }\", variables: $variables}"))
-    } else {
-      $lines = ($lines | append ($"    let body = {query: \"($op_type)\(($var_decl)\) { ($field_name)\(($args_pass)\) }\", variables: $variables}"))
-    }
-  } else {
-    let default_sel = if ($cmd.gql_default_selection | is-empty) { "__typename" } else { $cmd.gql_default_selection }
-    $lines = ($lines | append ($"    let sel = if \($fields | is-not-empty\) { $fields | str join \" \" } else { \"($default_sel)\" }"))
-
-    if ($var_decl | is-empty) {
-      $lines = ($lines | append ($"    let body = {query: \(\"($op_type) { ($field_name) { \" + $sel + \" } }\"\), variables: $variables}"))
-    } else {
-      $lines = ($lines | append ($"    let body = {query: \(\"($op_type)\(($var_decl)\) { ($field_name)\(($args_pass)\) { \" + $sel + \" } }\"\), variables: $variables}"))
-    }
-  }
-
-  $lines = ($lines | append '    do-request "post" $base $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body')
-  $lines = ($lines | append "  }")
-
-  # Unwrap response
-  $lines = ($lines | append ($"  if $dry_run or $raw or $allow_errors { $result } else { unwrap-graphql $result \"($field_name)\" }"))
-
-  $lines | str join "\n"
-}
-
-# ── Render strategy constructors ───────────────────────────────────
-# Each returns a record of closures/values that encapsulate format-specific
-# rendering. Adding a new format (e.g. gRPC) means adding a new constructor here.
-
-# Render strategy for REST (OpenAPI / Swagger) commands.
-export def rest-render-strategy [] {
-  {
-    build_body_code: {|cmd, config| build-body-code $cmd $config }
-    extra_signature_flags: {|cmd| [] }
-    extra_signature_params: {|cmd, mapping, config, shapes| {parts: [], dep_flags: []} }
-    positional_required: false
-    extra_module_helpers: {|commands| "" }
-  }
-}
-
-# Render strategy for GraphQL commands.
-export def graphql-render-strategy [] {
-  {
-    build_body_code: {|cmd, config| build-graphql-body-code $cmd $config }
-    extra_signature_flags: {|cmd| [
-      '  --fields: list<string> # Fields to select'
-      '  --query: string # Raw GraphQL query (overrides auto-generated)'
-    ] }
-    extra_signature_params: {|cmd, mapping, config, shapes|
-      let gql_items = ($cmd.gql_input_fields? | default [] | each {|group| $group.fields | each {|f| $f | merge {flag_name: $"($group.arg_flag)-(to-flag-name $f.name)", shape_key: $"($group.arg_flag)-(to-flag-name $f.name)", completer_key: {name: $"($group.arg_flag)-($f.name)", enum: $f.enum}} } } | flatten)
-      render-param-group $gql_items $mapping $config $shapes
-    }
-    positional_required: true
-    extra_module_helpers: {|commands|
-      [
-        '# Unwrap a GraphQL response: extract data.{field} and surface errors'
-        'def unwrap-graphql [resp: any, field: string] {'
-        '  if ($resp | describe) == "string" { return $resp }'
-        '  let errors = ($resp.errors? | default [])'
-        '  if ($errors | length) > 0 {'
-        '    let msgs = ($errors | each {|e| $e.message? | default "unknown error" } | str join "; ")'
-        '    error make --unspanned { msg: $"GraphQL error: ($msgs)" }'
-        '  }'
-        '  $resp.data? | get -o $field | default $resp.data?'
-        '}'
-      ] | str join "\n"
-    }
-  }
-}
-
 # Render the module header: comment header, constants, helpers, completers, introspection command.
 def render-module-header [
   title: string, version_str: string, spec_file: string, token_env_var: string,
   base_url: string, default_auth: string, all_urls: list, commands: list,
   auth_schemes: list, completers: record, helpers_code: string,
-  config: record, strategy: record
+  config: record
 ] {
   let completers_code = if ($completers | columns | length) > 0 {
     $"# Completers for enum parameters\n(render-completers $completers)\n"
@@ -665,10 +500,6 @@ def render-module-header [
     '"bearer"'
   }
   let auth_completer = $'def auth-scheme-completer [] { [($auth_completer_vals)] }'
-
-  # Format-specific module helpers (e.g. unwrap-graphql for GraphQL)
-  let extra_helpers = (do $strategy.extra_module_helpers $commands)
-  let helpers_code = if ($extra_helpers | is-not-empty) { $helpers_code + "\n\n" + $extra_helpers } else { $helpers_code }
 
   # Only generate introspection command when not disabled
   let introspection_code = if not $config.no_introspection {
@@ -721,13 +552,14 @@ def render-module-header [
 }
 
 # Render a single command as a complete string (doc comment + annotations + export def + signature + body).
-def render-command [cmd: record, completers: record, mapping: record, config: record, strategy: record] {
+def render-command [cmd: record, completers: record, mapping: record, config: record] {
   mut cmd_lines = []
 
+  let endpoint_line = $"($cmd.method | str upcase) ($cmd.path_template)"
   let summary = if ($cmd.description | is-not-empty) {
     $cmd.description | lines | str join " "
   } else {
-    $cmd.summary_fallback
+    $endpoint_line
   }
   $cmd_lines = ($cmd_lines | append $"# ($summary)")
 
@@ -771,7 +603,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
     $cmd_lines = ($cmd_lines | append $extra)
   }
 
-  let sig_result = (build-signature $cmd $completers $mapping $config $strategy)
+  let sig_result = (build-signature $cmd $completers $mapping $config)
 
   # Emit @deprecated attributes (must come immediately before export def)
   mut annotations = []
@@ -793,10 +625,10 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
 
   $cmd_lines = ($cmd_lines | append $'export def "($cmd.name)" [')
   $cmd_lines = ($cmd_lines | append $sig_result.signature)
-  let input_type = if ($cmd.accepts_input? | default $cmd.has_body) { "any" } else { "nothing" }
+  let input_type = if $cmd.has_body { "any" } else { "nothing" }
   $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($cmd.return_type) {")
 
-  let body_code = (do $strategy.build_body_code $cmd $config)
+  let body_code = (build-body-code $cmd $config)
   $cmd_lines = ($cmd_lines | append $body_code)
   $cmd_lines = ($cmd_lines | append "}")
   $cmd_lines = ($cmd_lines | append "")
@@ -805,7 +637,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
 }
 
 # Render the full module file
-export def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, default_auth: string, config: record, strategy: record] {
+export def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, default_auth: string, config: record] {
   let title = ($spec_data.info?.title? | default $module_name)
   let version_str = ($spec_data.info?.version? | default "0.0.0")
   let token_env_var = if ($config.token_env_var != null) and ($config.token_env_var | is-not-empty) {
@@ -823,9 +655,9 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
 
   let helpers_code = render-helpers $token_env_var $auth_schemes $default_auth $config.default_timeout $config.default_headers
 
-  let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $default_auth $all_urls $commands $auth_schemes $completers $helpers_code $config $strategy
+  let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $default_auth $all_urls $commands $auth_schemes $completers $helpers_code $config
 
-  let command_sections = ($commands | each {|cmd| render-command $cmd $completers $mapping $config $strategy })
+  let command_sections = ($commands | each {|cmd| render-command $cmd $completers $mapping $config })
 
   [$header] | append $command_sections | str join "\n"
 }

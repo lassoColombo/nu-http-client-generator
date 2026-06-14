@@ -1,11 +1,11 @@
-# build-rest.nu — REST/OpenAPI command-model builder.
+# build.nu — OpenAPI/Swagger command-model builder.
 #
 # Extracts operations from an OpenAPI 3.x / Swagger 2.0 spec and produces
-# the unified command model consumed by render.nu.
+# the command model consumed by render.nu.
 
-use ../spec/spec.nu
-use ../render
-use ../log
+use spec/spec.nu
+use render.nu
+use log.nu
 
 # ─── Spec loading ──────────────────────────────────────────────────
 #
@@ -52,24 +52,13 @@ def parse-spec-text [body: string, source: string]: nothing -> any {
   $parsed
 }
 
-# Build command model + metadata from a REST spec.
-# Returns {commands, auth_schemes, default_auth, base_url, all_urls}.
-export def build-commands [spec_data: record, schemas: record, h: record, config: record] {
-  let auth_schemes = (do $h.get-auth-schemes $spec_data)
-  let default_auth = (spec get-default-auth $spec_data $auth_schemes)
-  let base_url = (do $h.get-base-url $spec_data)
-  let all_urls = (do $h.get-all-urls $spec_data)
-  let commands = build-command-list $spec_data $schemas $h $auth_schemes $default_auth $config
-  {commands: $commands, auth_schemes: $auth_schemes, default_auth: $default_auth, base_url: $base_url, all_urls: $all_urls}
-}
-
 # ── Private helpers ────────────────────────────────────────────────
 
 # Process header or cookie params into a uniform record list.
 def process-simple-params [params: list, location: string, h: record] {
   $params | where {|p| ($p.in? | default "") == $location } | each {|p|
     let example = ($p.schema?.example? | default ($p.example? | default null))
-    let desc_base = (spec get-param-description $p)
+    let desc_base = ($p.description? | default "")
     let deprecated = ($p.deprecated? | default false)
     {
       name: $p.name
@@ -303,7 +292,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
     } else {
       $resolved
     }
-  } | spec get-non-body-params $in
+  } | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] }
 
   # classify params
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
@@ -324,7 +313,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
     let deprecated = ($p.deprecated? | default false)
     let nullable = ($p.schema?.nullable? | default false)
     let allow_empty = ($p.allowEmptyValue? | default false)
-    let desc_base = (spec get-param-description $p)
+    let desc_base = ($p.description? | default "")
     let description = (spec build-description $desc_base [
       (if $deprecated { "DEPRECATED" } else { null })
       (if $nullable { "nullable" } else { null })
@@ -495,7 +484,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 }
 
 # Build the command model list from a parsed+resolved REST spec.
-def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
+export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
   $spec_data.paths | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | length) > 0 {
@@ -570,10 +559,7 @@ def build-command-list [spec_data: record, schemas: record, h: record, auth_sche
         field_shapes: $field_shapes
         returns_body: $resp.returns_body
         description: $meta.description
-        summary_fallback: $endpoint_line
         extra_doc_lines: (if ($meta.description | is-not-empty) { [$"# ($endpoint_line)"] } else { [] })
-        accepts_input: $body.has_body
-        extra_enum_sources: []
         operation_id: $meta.operation_id
         deprecated: $meta.deprecated
         deprecation_reason: null

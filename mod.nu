@@ -1,46 +1,18 @@
-# http-gen — OpenAPI 3.x / Swagger 2.0 / GraphQL to Nushell client generator.
+# http-gen — OpenAPI 3.x / Swagger 2.0 to Nushell client generator.
 #
 # Usage:
 #   use http-gen
-#   http-gen openapi ./spec.yaml -o ./client.nu
-#   http-gen graphql ./schema.json -o ./client.nu --default-base-url "https://api.example.com/graphql"
-#   http-gen openapi preview ./spec.yaml
-#   http-gen graphql preview ./schema.json
+#   http-gen ./spec.yaml -o ./client.nu
+#   http-gen preview ./spec.yaml
 
 use src/spec
-use src/render
-use src/log
-use src/build
+use src/render.nu
+use src/log.nu
+use src/build.nu
 
-# Build a normalized config record from CLI flags
-def build-config [
-  filter_tags: list = []
-  filter_prefixes: list = []
-  filter_methods: list = []
-  exclude_deprecated: bool = false
-  verb_map: record = {}
-  token_env_var: string = ""
-  default_timeout: string = "30min"
-  default_headers: record = {}
-  body_threshold: int = 0
-  no_introspection: bool = false
-  no_descriptions: bool = false
-  default_base_url: string = ""
-] {
-  {
-    filter_tags: $filter_tags
-    filter_prefixes: $filter_prefixes
-    filter_methods: ($filter_methods | each { $in | str downcase })
-    exclude_deprecated: $exclude_deprecated
-    verb_map: $verb_map
-    token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
-    default_timeout: $default_timeout
-    default_headers: $default_headers
-    body_threshold: $body_threshold
-    no_introspection: $no_introspection
-    no_descriptions: $no_descriptions
-    default_base_url: (if ($default_base_url | is-empty) { null } else { $default_base_url })
-  }
+# Format a list for log output: first 5 + "... (N total)" if longer than 5.
+def truncated-display [items: list]: nothing -> string {
+  if ($items | length) > 5 { $"($items | first 5 | str join ', '), ... \(($items | length) total\)" } else { $items | str join ", " }
 }
 
 # Deduplicate command names.
@@ -74,12 +46,11 @@ def deduplicate-commands [commands: list] {
   let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
 
   if ($list_candidates | length) > 0 {
-    let display = if ($list_candidates | length) > 5 { $"($list_candidates | first 5 | each {|n| $n | split row ' ' | first } | str join ', '), ... \(($list_candidates | length) total\)" } else { $list_candidates | each {|n| $n | split row ' ' | first } | str join ", " }
+    let display = (truncated-display ($list_candidates | each {|n| $n | split row ' ' | first }))
     log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
   }
   if ($suffix_candidates | length) > 0 {
-    let display = if ($suffix_candidates | length) > 5 { $"($suffix_candidates | first 5 | str join ', '), ... \(($suffix_candidates | length) total\)" } else { $suffix_candidates | str join ", " }
-    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($display)"
+    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: (truncated-display $suffix_candidates)"
   }
 
   let pass1 = $commands | each {|cmd|
@@ -109,8 +80,7 @@ def deduplicate-commands [commands: list] {
     return $pass1
   }
 
-  let display2 = if ($dup_names2 | length) > 5 { $"($dup_names2 | first 5 | str join ', '), ... \(($dup_names2 | length) total\)" } else { $dup_names2 | str join ", " }
-  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($display2)"
+  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: (truncated-display $dup_names2)"
 
   mut result = []
   mut seen = {}
@@ -130,60 +100,30 @@ def deduplicate-commands [commands: list] {
   $result
 }
 
-# Shared pipeline: parse spec, resolve refs, build commands
+# Shared pipeline: parse spec, resolve refs, extract metadata, build & dedupe commands.
+# Returns {commands, auth_schemes, default_auth, base_url, all_urls}.
 def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = match $info.schema {
     "openapi" => (spec oa3 helpers)
     "swagger" => (spec swagger2 helpers)
-    "graphql" => (spec graphql helpers)
-  }
-  let strategy = match $info.schema {
-    "graphql" => (render graphql-render-strategy)
-    _ => (render rest-render-strategy)
   }
   let raw_schemas = (do $h.get-schemas $spec_data)
-  # Pre-resolve $refs once for REST specs so every downstream resolve-ref
-  # call becomes a cheap lookup. GraphQL schemas don't use $refs.
-  let schemas = if $info.schema == "graphql" { $raw_schemas } else { (spec build-resolved-schemas $raw_schemas) }
-
-  let built = match $info.schema {
-    "graphql" => (build graphql build-commands $spec_data $schemas $config)
-    _ => (build rest build-commands $spec_data $schemas $h $config)
-  }
-
-  let deduped = deduplicate-commands $built.commands
-  {spec: $spec_data, commands: $deduped, helpers: $h, auth_schemes: $built.auth_schemes, default_auth: $built.default_auth, base_url: $built.base_url, all_urls: $built.all_urls, strategy: $strategy}
-}
-
-# Shared generation pipeline — called by openapi and graphql subcommands.
-def generate-module [loaded: record, config: record, name_flag: any, output_flag: any, urls_flag: list] {
-  let title = if ($name_flag | is-not-empty) { $name_flag } else {
-    $loaded.data.info?.title? | default ($loaded.source | path parse | get stem)
-  }
-  let result = process-spec $loaded.data $config
-  if ($result.commands | is-empty) {
-    log error "no commands were generated — check your spec content or filter flags"
-  }
-  let extra_urls = ($urls_flag | append $result.all_urls)
-  let output_content = render render-module $result.spec $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config $result.strategy
-  let out_path = if ($output_flag | is-not-empty) { $output_flag } else { $"./($title).nu" }
-  $output_content | save --force $out_path
-}
-
-# Shared preview pipeline — called by openapi and graphql preview subcommands.
-def preview-commands [loaded: record, config: record] {
-  let result = process-spec $loaded.data $config
-  if ($result.commands | is-empty) {
-    log error "no commands were generated — check your spec content or filter flags"
-  }
-  $result.commands | each {|c|
-    {name: $c.name, method: $c.method, path_template: (if ($c.path_template | is-empty) { $c.gql_field_name? | default "" } else { $c.path_template })}
+  let schemas = (spec build-resolved-schemas $raw_schemas)
+  let auth_schemes = (do $h.get-auth-schemes $spec_data)
+  let default_auth = (spec get-default-auth $spec_data $auth_schemes)
+  let commands = (build build-command-list $spec_data $schemas $h $auth_schemes $default_auth $config)
+  {
+    commands: (deduplicate-commands $commands)
+    auth_schemes: $auth_schemes
+    default_auth: $default_auth
+    base_url: (do $h.get-base-url $spec_data)
+    all_urls: (do $h.get-all-urls $spec_data)
   }
 }
 
 # Generate a Nushell HTTP client module from an OpenAPI/Swagger spec
-export def openapi [
+export def main [
   source: string                # OpenAPI/Swagger spec file path or URL
   --output(-o): path            # Output .nu file (default: ./{title}.nu)
   --name: string                # Override module name
@@ -202,42 +142,40 @@ export def openapi [
   --default-base-url: string    # Override default base URL from spec
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (build rest load-spec $source ($spec_headers | default {}))
-  let info = (spec detect $loaded.data)
-  if $info.schema == "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
-  }
+  let loaded = (build load-spec $source ($spec_headers | default {}))
   if ($loaded.data.paths? | is-empty) {
     error make --unspanned { msg: "not a valid OpenAPI/Swagger spec: missing 'paths' field" }
   }
-  let config = (
-    build-config
-    ($tags | default [])
-    ($prefixes | default [])
-    ($methods | default [])
-    $exclude_deprecated
-    ($verb_map | default {})
-    ($token_env_var | default "")
-    $default_timeout
-    ($default_headers | default {})
-    $body_threshold
-    $no_introspection
-    $no_descriptions
-    ($default_base_url | default "")
-  )
+  let config = {
+    filter_tags: ($tags | default [])
+    filter_prefixes: ($prefixes | default [])
+    filter_methods: ($methods | default [] | each { $in | str downcase })
+    exclude_deprecated: $exclude_deprecated
+    verb_map: ($verb_map | default {})
+    token_env_var: (if ($token_env_var | default "" | is-empty) { null } else { $token_env_var })
+    default_timeout: $default_timeout
+    default_headers: ($default_headers | default {})
+    body_threshold: $body_threshold
+    no_introspection: $no_introspection
+    no_descriptions: $no_descriptions
+    default_base_url: (if ($default_base_url | default "" | is-empty) { null } else { $default_base_url })
+  }
 
-  (
-    generate-module
-    $loaded
-    $config
-    ($name | default "")
-    $output
-    ($urls | default [])
-  )
+  let title = if ($name | is-not-empty) { $name } else {
+    $loaded.data.info?.title? | default ($loaded.source | path parse | get stem)
+  }
+  let result = (process-spec $loaded.data $config)
+  if ($result.commands | is-empty) {
+    log error "no commands were generated — check your spec content or filter flags"
+  }
+  let extra_urls = (($urls | default []) | append $result.all_urls)
+  let output_content = (render render-module $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config)
+  let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
+  $output_content | save --force $out_path
 }
 
 # Preview what commands would be generated from an OpenAPI/Swagger spec
-export def "openapi preview" [
+export def preview [
   source: string                # OpenAPI/Swagger spec file path or URL
   --tags: list<string>          # Filter: only operations with these tags
   --prefixes: list<string>      # Filter: only paths matching these prefixes
@@ -246,107 +184,21 @@ export def "openapi preview" [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (build rest load-spec $source ($spec_headers | default {}))
-  let info = (spec detect $loaded.data)
-  if $info.schema == "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not OpenAPI/Swagger" }
+  let loaded = (build load-spec $source ($spec_headers | default {}))
+  let config = {
+    filter_tags: ($tags | default [])
+    filter_prefixes: ($prefixes | default [])
+    filter_methods: ($methods | default [] | each { $in | str downcase })
+    exclude_deprecated: $exclude_deprecated
+    verb_map: ($verb_map | default {})
+    body_threshold: 0
   }
-  let config = (
-    build-config
-    ($tags | default [])
-    ($prefixes | default [])
-    ($methods | default [])
-    $exclude_deprecated
-    ($verb_map | default {})
-  )
 
-  (
-    preview-commands 
-    $loaded 
-    $config
-  )
-}
-
-# Generate a Nushell HTTP client module from a GraphQL schema
-export def graphql [
-  source: string                # GraphQL introspection schema file path or endpoint URL
-  --output(-o): path            # Output .nu file (default: ./{title}.nu)
-  --name: string                # Override module name
-  --urls(-u): list<string>      # Additional base URLs for autocompletion
-  --prefixes: list<string>      # Filter: only fields matching these name prefixes
-  --exclude-deprecated          # Filter: skip deprecated fields
-  --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
-  --token-env-var: string       # Override auto-derived token env var name
-  --default-timeout: string = "30min"  # Override default request timeout
-  --default-headers: record     # Static headers added to every request
-  --body-threshold: int = 0     # Collapse INPUT_OBJECT fields to --body:record above this count (0 = never)
-  --no-introspection            # Omit the commands subcommand
-  --no-descriptions             # Omit parameter descriptions
-  --default-base-url: string    # Base URL for the GraphQL endpoint
-  --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
-] {
-  let loaded = (build graphql load-spec $source ($spec_headers | default {}))
-  let info = (spec detect $loaded.data)
-  if $info.schema != "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }
+  let result = (process-spec $loaded.data $config)
+  if ($result.commands | is-empty) {
+    log error "no commands were generated — check your spec content or filter flags"
   }
-  if ($loaded.data.data?.__schema?.types? | is-empty) {
-    error make --unspanned { msg: "not a valid GraphQL introspection result: missing types" }
+  $result.commands | each {|c|
+    {name: $c.name, method: $c.method, path_template: $c.path_template}
   }
-  if ($default_base_url | default "" | is-empty) {
-    log error "--default-base-url not set for GraphQL spec; generated client will have an empty base URL"
-  }
-  let config = (
-    build-config
-    []
-    ($prefixes | default [])
-    []
-    $exclude_deprecated
-    ($verb_map | default {})
-    ($token_env_var | default "")
-    $default_timeout
-    ($default_headers | default {})
-    $body_threshold
-    $no_introspection
-    $no_descriptions
-    ($default_base_url | default "")
-  )
-
-  (
-    generate-module 
-    $loaded 
-    $config 
-    ($name | default "") 
-    $output 
-    ($urls | default [])
-  )
-}
-
-# Preview what commands would be generated from a GraphQL schema
-export def "graphql preview" [
-  source: string                # GraphQL introspection schema file path or endpoint URL
-  --prefixes: list<string>      # Filter: only fields matching these name prefixes
-  --exclude-deprecated          # Filter: skip deprecated fields
-  --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
-  --spec-headers: record        # Headers for fetching remote specs
-] {
-  let loaded = (build graphql load-spec $source ($spec_headers | default {}))
-  let info = (spec detect $loaded.data)
-  if $info.schema != "graphql" {
-    error make --unspanned { msg: $"spec is ($info.schema), not GraphQL" }
-  }
-  let config = (
-    build-config
-    []
-    ($prefixes | default []) 
-    []
-    $exclude_deprecated 
-    ($verb_map | default {})
-  )
-
-  (
-    preview-commands
-    $loaded
-    $config
-  )
 }

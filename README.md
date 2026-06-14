@@ -23,7 +23,6 @@ Reads an API specification and generates a typed Nushell HTTP client module.
     - [Tab completion and dry runs](#tab-completion-and-dry-runs)
     - [Introspecting the client](#introspecting-the-client)
   - [How command names get built](#how-command-names-get-built)
-  - [GraphQL specifics](#graphql-specifics)
   - [Acknowledgments](#acknowledgments)
 
 
@@ -33,7 +32,6 @@ Reads an API specification and generates a typed Nushell HTTP client module.
 | ------- | ---------------------- |
 | OpenAPI | 3.0.x, 3.1.x           |
 | Swagger | 2.0                    |
-| GraphQL | Introspection JSON, SDL  |
 
 Specs can be loaded from a local file or fetched directly from a URL.
 
@@ -45,17 +43,13 @@ Specs can be loaded from a local file or fetched directly from a URL.
 use nu-http-client-generator
 
 # Generate from a file
-nu-http-client-generator openapi ./petstore.yaml -o ./petstore.nu
+nu-http-client-generator ./petstore.yaml -o ./petstore.nu
 
 # Generate from a URL
-nu-http-client-generator openapi https://petstore3.swagger.io/api/v3/openapi.json -o ./petstore.nu
+nu-http-client-generator https://petstore3.swagger.io/api/v3/openapi.json -o ./petstore.nu
 
 # Preview what would be generated (no file written)
-nu-http-client-generator openapi preview ./petstore.yaml
-
-# GraphQL - auto-introspects the endpoint
-(nu-http-client-generator graphql https://countries.trevorblades.com/graphql
-  -o ./countries.nu --default-base-url "https://countries.trevorblades.com/graphql")
+nu-http-client-generator preview ./petstore.yaml
 ```
 
 Then use it:
@@ -86,12 +80,10 @@ nu-http-client-generator --help
 
 ## Subcommands
 
-| Command                                     | Purpose                                       |
-| ------------------------------------------- | --------------------------------------------- |
-| `nu-http-client-generator openapi <src>`    | Generate a client from OpenAPI/Swagger.       |
-| `nu-http-client-generator openapi preview <src>` | List the commands that would be generated. |
-| `nu-http-client-generator graphql <src>`    | Generate a client from a GraphQL schema.      |
-| `nu-http-client-generator graphql preview <src>` | List the commands that would be generated. |
+| Command                                   | Purpose                                       |
+| ----------------------------------------- | --------------------------------------------- |
+| `nu-http-client-generator <src>`          | Generate a client from OpenAPI/Swagger.       |
+| `nu-http-client-generator preview <src>`  | List the commands that would be generated.   |
 
 `<src>` is either a local file path or an `http(s)://` URL.
 
@@ -106,19 +98,19 @@ nu-http-client-generator --help
 | `-o, --output: path`       | `./{title}.nu`     | Where to write the generated module.                                                                                       |
 | `--name: string`           | spec `info.title`  | Module name. Used as the file stem (when `-o` is not set), as the prefix of the token env var, and as the command namespace. |
 | `-u, --urls: list<string>` | spec servers       | Additional base URLs added to `--base-url`'s tab-completer.                                                                |
-| `--default-base-url: string` | spec / none      | Override the base URL embedded in the module. **Required** for GraphQL (introspection schemas don't carry an endpoint URL). |
+| `--default-base-url: string` | spec / none      | Override the base URL embedded in the module.                                                                              |
 | `--spec-headers: record`   | `{}`               | Headers used when fetching a remote spec (e.g. `{Authorization: "Bearer …"}`). Does not appear in the generated client.    |
 
 ### Filtering
 
-Filters apply to both `<format>` and `<format> preview`. Combine freely.
+Filters apply to both the generation command and `preview`. Combine freely.
 
-| Flag                            | Applies to | Description                                                                              |
-| ------------------------------- | ---------- | ---------------------------------------------------------------------------------------- |
-| `--tags: list<string>`          | OpenAPI    | Only operations tagged with one of these.                                                |
-| `--prefixes: list<string>`      | Both       | OpenAPI: paths starting with the prefix (e.g. `["/pet"]`). GraphQL: kebab-cased field-name prefixes. |
-| `--methods: list<string>`       | OpenAPI    | Only these HTTP methods (e.g. `[get post]`). Case-insensitive.                           |
-| `--exclude-deprecated`          | Both       | Skip operations/fields marked deprecated in the spec.                                    |
+| Flag                            | Description                                                                              |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| `--tags: list<string>`          | Only operations tagged with one of these.                                                |
+| `--prefixes: list<string>`      | Only paths starting with one of these prefixes (e.g. `["/pet"]`).                        |
+| `--methods: list<string>`       | Only these HTTP methods (e.g. `[get post]`). Case-insensitive.                           |
+| `--exclude-deprecated`          | Skip operations marked deprecated in the spec.                                           |
 
 ### Naming
 
@@ -142,7 +134,7 @@ These flags control the behaviour of the *generated* commands. They don't affect
 
 | Flag                  | Default | Description                                                                                                                          |
 | --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `--body-threshold: int` | `0`     | When the body has more than this many fields, collapse them into a single `--body: record` flag. `0` = never collapse. Same flag also controls the analogous collapse of GraphQL `INPUT_OBJECT` args. |
+| `--body-threshold: int` | `0`     | When the body has more than this many fields, collapse them into a single `--body: record` flag. `0` = never collapse. |
 | `--no-introspection`  | off     | Omit the auto-generated `commands` subcommand from the module.                                                                       |
 | `--no-descriptions`   | off     | Omit the `# description` comments next to each parameter in the generated signatures. Keeps doc lines above each `def` regardless.   |
 
@@ -254,23 +246,6 @@ petstore commands | get params | first 5
 Names follow `<resource> <verb>`: the path segments form the resource - with path params and version chunks like `v1`/`v2` stripped - and the verb comes from the operation's `operationId` (its trailing camelCase chunk) or the HTTP method. So `GET /pet/{petId}` becomes `pet get`, and `POST /pet/{petId}/uploadImage` becomes `pet-upload-image uploadFile`.
 
 Collisions get resolved in a few specific ways. The most common case is a collection-vs-item pair, where two GET endpoints differ only by a single path parameter (imagine a spec with both `GET /users` and `GET /users/{userId}`); in that case the collection variant is renamed `list` rather than suffixed. Any other collision is disambiguated by appending `-by-<path-param-name>` - you'd end up with `users get-by-userId` - and if even that leaves duplicates, a numeric suffix (`-1`, `-2`) is appended on top. An `operationId` ending in `_<number>` (a common pattern in machine-generated specs) triggers the `-by-<params>` rename pre-emptively so you don't end up with numeric suffixes everywhere. Reserved Nushell identifiers (`get`, `delete`, `in`, `version`, `nothing`) are forbidden as standalone names and get sanitized whenever they'd otherwise appear bare.
-
----
-
-## GraphQL specifics
-
-GraphQL clients can be generated from a live endpoint URL, a pre-downloaded introspection JSON file, or a GraphQL SDL text file (`.graphql` - conversion needs Node.js with the `graphql` npm package). When you point at a URL the generator tries `GET <url>` first, and if that doesn't yield introspection it POSTs an introspection query, falling through a cascade of progressively shallower variants (`full → compat → minimal → shallow`).
-
-Generated commands look much like the REST ones, except every name is prefixed `query` or `mutation` and every command picks up two extra flags. `--fields` controls the selection set: each entry is either a bare field name or a nested chunk like `"title { romaji }"`. `--query` lets you bypass the auto-built query and supply your own raw GraphQL string instead; the auto-generated `variables` record is still sent, so you can mix a hand-written query with the flag-built variables when you need to:
-
-```nu
-countries query country "IT" --fields [name capital emoji]
-countries query countries --filter {code: {eq: "IT"}} --fields [name capital]
-```
-
-`INPUT_OBJECT` arguments behave a lot like REST bodies. By default the generator expands each one into individual prefixed flags - an arg `filter: CountryFilterInput { code, continent }` becomes `--filter-code` and `--filter-continent` rather than a single `--filter: record` - and `--body-threshold N` collapses it back to the single-flag form when the expanded count would exceed N. Required scalar args are positional, the rest are flags, and a piped record gets merged deeply into the `variables` map the same way REST bodies do.
-
-If you don't pass `--fields`, the generator picks every scalar field at depth 1 of the return type, so you get something useful out of the box and reach for `--fields` only when you need nested types or a tighter selection. Commands that return a bare scalar (`String`, `[String]`, an enum, …) skip the selection set entirely - the field just comes back directly.
 
 ---
 

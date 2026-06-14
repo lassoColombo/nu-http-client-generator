@@ -17,14 +17,13 @@ export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
 
 # Fetch a URL as raw text, decoding binary responses to UTF-8.
 #
-# Used by both REST and GraphQL spec loaders to bypass `http get`'s
-# auto-parser. The auto-parser would be ideal — one call, parsed record
-# back — but it doesn't survive real-world specs served with content-types
-# nushell doesn't recognize (e.g. `application/vnd.oai.openapi+json` from
-# api.weather.gov, or `application/graphql+json` from some GraphQL servers).
-# When the auto-parser doesn't know a media type, it hands back a bare string
-# and downstream `from json` / `spec detect` panics. Fetching raw and parsing
-# explicitly downstream sidesteps the issue.
+# Used by the spec loader to bypass `http get`'s auto-parser. The auto-parser
+# would be ideal — one call, parsed record back — but it doesn't survive
+# real-world specs served with content-types nushell doesn't recognize (e.g.
+# `application/vnd.oai.openapi+json` from api.weather.gov). When the auto-
+# parser doesn't know a media type, it hands back a bare string and downstream
+# `from json` / `spec detect` panics. Fetching raw and parsing explicitly
+# downstream sidesteps the issue.
 export def fetch-text [url: string, headers: record = {}] {
   let raw = (http get --raw --headers $headers $url)
   if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
@@ -143,19 +142,6 @@ export def is-nullable [schema: record] {
   if ($t != null) and ($t | describe | str starts-with "list") { "null" in $t } else { false }
 }
 
-# Filter parameters: return path/query/header/cookie params, exclude body/formData
-export def get-non-body-params [params: list] {
-  $params | where {|p|
-    let loc = ($p.in? | default "")
-    $loc in ["path" "query" "header" "cookie"]
-  }
-}
-
-# Get the description from a parameter
-export def get-param-description [param: record] {
-  $param.description? | default ""
-}
-
 # Detect schema type and major version from a parsed spec.
 export def detect [spec: record] {
   if ($spec.openapi? | is-not-empty) {
@@ -164,8 +150,6 @@ export def detect [spec: record] {
   } else if ($spec.swagger? | is-not-empty) {
     let major = ($spec.swagger | split row '.' | first)
     {schema: "swagger", version: $major}
-  } else if ($spec.data?.__schema? | is-not-empty) {
-    {schema: "graphql", version: "introspection"}
   } else {
     error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }
@@ -327,175 +311,5 @@ export def build-description [desc_base: string, extras: list] {
     $extra
   } else {
     $desc_base
-  }
-}
-
-# ── GraphQL introspection helpers ───────────────────────────────────
-
-# Recursively peel NON_NULL/LIST wrappers from a GraphQL type reference.
-# Returns {name: string, is_list: bool, is_required: bool}.
-export def unwrap-gql-type [type_ref: record, is_list: bool = false, is_required: bool = false] {
-  if $type_ref.kind == "NON_NULL" {
-    if ($type_ref.ofType? != null) {
-      unwrap-gql-type $type_ref.ofType $is_list true
-    } else {
-      {name: "any", is_list: $is_list, is_required: true, is_truncated: true}
-    }
-  } else if $type_ref.kind == "LIST" {
-    # Once inside a LIST, inner NON_NULL marks element nullability, not field requiredness.
-    # Stop propagating is_required from inner wrappers.
-    if ($type_ref.ofType? != null) {
-      let inner = (unwrap-gql-type $type_ref.ofType true false)
-      {name: $inner.name, is_list: true, is_required: $is_required, is_truncated: ($inner.is_truncated? | default false)}
-    } else {
-      {name: "any", is_list: true, is_required: $is_required, is_truncated: true}
-    }
-  } else {
-    {name: $type_ref.name, is_list: $is_list, is_required: $is_required, is_truncated: false}
-  }
-}
-
-# Reconstruct GraphQL type syntax string from a type_ref for variable declarations.
-# E.g. NON_NULL(LIST(NON_NULL(SCALAR "Country"))) → "[Country!]!"
-export def gql-type-to-signature [type_ref: record] {
-  if $type_ref.kind == "NON_NULL" {
-    if ($type_ref.ofType? != null) {
-      $"(gql-type-to-signature $type_ref.ofType)!"
-    } else {
-      "any!"
-    }
-  } else if $type_ref.kind == "LIST" {
-    if ($type_ref.ofType? != null) {
-      $"[(gql-type-to-signature $type_ref.ofType)]"
-    } else {
-      "[any]"
-    }
-  } else {
-    $type_ref.name? | default "any"
-  }
-}
-
-# Map a GraphQL scalar name to an OpenAPI-style type string.
-export def gql-scalar-to-openapi [name: string] {
-  match $name {
-    "String" => "string"
-    "Int" => "integer"
-    "Float" => "number"
-    "Boolean" => "boolean"
-    "ID" => "string"
-    "JSON" | "Json" | "jsonb" | "JSONObject" | "JsonString" => "any"
-    "BigInt" | "Long" => "integer"
-    "Date" | "DateTime" | "ISO8601Date" | "ISO8601DateTime"
-      | "Time" | "Timestamp" | "timestamptz" | "Duration" => "string"
-    "Upload" => "file"
-    _ => "string"  # custom scalars default to string
-  }
-}
-
-# Walk the type chain to find the leaf's kind (SCALAR, ENUM, INPUT_OBJECT, etc.)
-export def gql-leaf-kind [type_ref: record] {
-  if $type_ref.kind == "NON_NULL" or $type_ref.kind == "LIST" {
-    if ($type_ref.ofType? != null) { gql-leaf-kind $type_ref.ofType } else { "OBJECT" }
-  } else {
-    $type_ref.kind? | default "OBJECT"
-  }
-}
-
-# Given a type name and a type index, collect scalar/enum field names at depth=1.
-# For UNION types, generates inline fragments for up to 3 possible types.
-export def compute-default-selection [type_name: string, type_index: record] {
-  let typ = ($type_index | get -o $type_name)
-  if ($typ == null) { return "" }
-
-  # UNION types: no fields, but possibleTypes with concrete members
-  if ($typ.kind? == "UNION") and ($typ.possibleTypes? != null) {
-    let fragments = ($typ.possibleTypes | first ([($typ.possibleTypes | length) 3] | math min) | each {|pt|
-      let member = ($type_index | get -o $pt.name)
-      if ($member == null) or ($member.fields? == null) { return $"... on ($pt.name) { __typename }" }
-      let fields = ($member.fields
-        | where {|f|
-          let leaf_kind = (gql-leaf-kind $f.type)
-          $leaf_kind == "SCALAR" or $leaf_kind == "ENUM"
-        }
-        | get name
-        | str join " ")
-      if ($fields | is-empty) { $"... on ($pt.name) { __typename }" } else { $"... on ($pt.name) { ($fields) }" }
-    })
-    return (["__typename"] | append $fragments | str join " ")
-  }
-
-  if ($typ.fields? == null) { return "" }
-  let base_fields = ($typ.fields
-    | where {|f|
-      let leaf_kind = (gql-leaf-kind $f.type)
-      $leaf_kind == "SCALAR" or $leaf_kind == "ENUM"
-    }
-    | get name)
-  let base_selection = ($base_fields | str join " ")
-
-  # INTERFACE types: append inline fragments for extra fields from implementing types
-  if ($typ.kind? == "INTERFACE") and ($typ.possibleTypes? != null) {
-    let fragments = ($typ.possibleTypes | first ([($typ.possibleTypes | length) 3] | math min) | each {|pt|
-      let member = ($type_index | get -o $pt.name)
-      if ($member == null) or ($member.fields? == null) { return null }
-      let extra_fields = ($member.fields
-        | where {|f|
-          let leaf_kind = (gql-leaf-kind $f.type)
-          ($leaf_kind == "SCALAR" or $leaf_kind == "ENUM") and ($f.name not-in $base_fields)
-        }
-        | get name
-        | str join " ")
-      if ($extra_fields | is-empty) { null } else { $"... on ($pt.name) { ($extra_fields) }" }
-    } | compact)
-    if ($fragments | is-not-empty) {
-      return ($base_selection + " " + ($fragments | str join " "))
-    }
-  }
-
-  $base_selection
-}
-
-# Resolve shared GraphQL type-resolution pipeline for a single field/arg record.
-# The record must have .type, and optionally .description?, .defaultValue?, .isDeprecated?, .deprecationReason?.
-# Returns {type: string, enum: list, required: bool, deprecated: bool, desc_base: string, deprecation_reason: any, unwrapped: record}.
-export def resolve-gql-field [field: record, type_index: record] {
-  let unwrapped = (unwrap-gql-type $field.type)
-  let leaf_kind = (gql-leaf-kind $field.type)
-  let param_type = if $leaf_kind == "INPUT_OBJECT" { "record" } else if $leaf_kind == "ENUM" { "string" } else { gql-scalar-to-openapi $unwrapped.name }
-  let enum_vals = if $leaf_kind == "ENUM" {
-    let enum_type = ($type_index | get -o $unwrapped.name)
-    if ($enum_type != null) and ($enum_type.enumValues? != null) { $enum_type.enumValues | get name } else { [] }
-  } else { [] }
-  let is_required = if ($field.defaultValue? != null) { false } else { $unwrapped.is_required }
-  let deprecated = ($field.isDeprecated? | default false)
-  let reason = ($field.deprecationReason? | default null)
-  let desc_base = ($field.description? | default "")
-  {
-    type: $param_type
-    enum: $enum_vals
-    required: $is_required
-    deprecated: $deprecated
-    desc_base: $desc_base
-    deprecation_reason: $reason
-    unwrapped: $unwrapped
-  }
-}
-
-# Extract inputFields from a GraphQL INPUT_OBJECT type, returning body-field-like records.
-export def extract-gql-input-fields [type_name: string, type_index: record] {
-  let typ = ($type_index | get -o $type_name)
-  if ($typ == null) or ($typ.inputFields? == null) { return [] }
-  $typ.inputFields | each {|f|
-    let resolved = (resolve-gql-field $f $type_index)
-    let description = if $resolved.deprecated and ($resolved.deprecation_reason != null) { $"DEPRECATED: ($resolved.deprecation_reason) ($resolved.desc_base)" | str trim } else if $resolved.deprecated { $"DEPRECATED ($resolved.desc_base)" | str trim } else { $resolved.desc_base }
-    {
-      name: $f.name
-      type: $resolved.type
-      required: $resolved.required
-      nullable: false
-      enum: $resolved.enum
-      description: $description
-      deprecated: $resolved.deprecated
-    }
   }
 }

@@ -2,7 +2,7 @@
 # Extracted from the unified dispatch table in spec.nu.
 
 use spec.nu
-use ../log
+use ../log.nu
 
 # ── Private helpers ───────────────────────────────────────────────
 

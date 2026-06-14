@@ -7,12 +7,8 @@ use lib.nu
 def run-variant [name: string] {
     let variant = lib variants | where {|v| $v.name == $name } | first
     let specs = lib discover
-    let gql_base = lib gql-base-url
 
-    $specs
-    | where {|s| not ($variant.rest_only and $s.format == "graphql") }
-    | par-each {|spec|
-        let base_url = if $spec.format == "graphql" { $gql_base } else { null }
+    $specs | par-each {|spec|
         let golden = lib golden-path $spec.format $spec.stem $name
         let label = $"($spec.format)/($spec.stem)"
 
@@ -23,7 +19,7 @@ def run-variant [name: string] {
         let tmp = mktemp --directory
         let out = $tmp | path join "out.nu"
         let result = try {
-            do $variant.gen $spec.path $out $base_url
+            do $variant.gen $spec.path $out
             let actual = open $out --raw | lib normalize
             let expected = open $golden --raw
             if $actual == $expected {

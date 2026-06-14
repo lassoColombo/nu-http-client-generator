@@ -6,7 +6,7 @@
 # Usage:
 #   nu tests/regenerate.nu                    # regenerate all
 #   nu tests/regenerate.nu dumbo              # cases matching "dumbo"
-#   nu tests/regenerate.nu graphql/           # all graphql cases
+#   nu tests/regenerate.nu openapi-v3/        # all openapi-v3 cases
 #   nu tests/regenerate.nu no-introspection   # a specific variant across all specs
 
 use lib.nu
@@ -40,7 +40,7 @@ def main [filter?: string] {
         let tmp = mktemp --directory
         let out = $tmp | path join "out.nu"
         let result = try {
-            do $case.gen $case.spec $out $case.base_url
+            do $case.gen $case.spec $out
             let content = open $out --raw | lib normalize
             let is_new = not ($case.golden | path exists)
             let changed = if $is_new {
