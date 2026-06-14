@@ -173,8 +173,6 @@ petstore pet get 10
 petstore pet-find-by-status findPetsByStatus --status available
 ```
 
-If a query, header, or cookie name happens to collide with a Nushell keyword or with one of the built-in flags above (`token`, `raw`, …), the generator prefixes the flag with `qp-`, `hdr-`, or `ck-` accordingly.
-
 ### Request bodies
 
 Request bodies show up in one of two shapes, depending on the spec. When the body schema exposes flat top-level fields, each one becomes its own flag and required scalars become positional - the most ergonomic form, but only available when the schema is clean enough to enumerate. When the schema is freeform, deeply nested, or has been collapsed by `--body-threshold`, the entire payload goes through a single `--body: record` flag instead:
