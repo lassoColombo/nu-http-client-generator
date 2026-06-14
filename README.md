@@ -38,13 +38,13 @@ nu-http-client-generator --help
 use nu-http-client-generator
 
 # Generate from a file
-nu-http-client-generator openapi ./petstore.yaml -o ./petstore.nu
+nu-http-client-generator openapi ./docker-hub.yaml -o ./docker-hub.nu
 
 # Generate from a URL
-nu-http-client-generator openapi "https://petstore3.swagger.io/api/v3/openapi.json" -o ./petstore.nu
+nu-http-client-generator openapi "https://api.apis.guru/v2/specs/docker.com/hub/beta/openapi.json" -o ./docker-hub.nu
 
 # Preview what would be generated (no file written)
-nu-http-client-generator openapi preview ./petstore.yaml
+nu-http-client-generator openapi preview ./docker-hub.yaml
 
 # GraphQL — auto-introspects the endpoint
 nu-http-client-generator graphql "https://countries.trevorblades.com/graphql" \
@@ -54,11 +54,11 @@ nu-http-client-generator graphql "https://countries.trevorblades.com/graphql" \
 Then use it:
 
 ```nu
-use petstore.nu
+use docker-hub.nu
 
-petstore pet add --name "fluffy" --status available
-petstore pet find-by-status --status [available pending] | where id > 100
-petstore store inventory --token $env.PETSTORE_TOKEN
+docker-hub namespaces-repositories-tags list "library" "nginx" --page-size 50 | get results | where tag_status == "active"
+docker-hub access-tokens get "f0c3a1ce-8cf4-4..."
+docker-hub access-tokens list --token $env.DOCKER_HUB_API_TOKEN
 ```
 
 ---
@@ -132,9 +132,9 @@ These flags control the behaviour of the *generated* commands. They don't affect
 Generated clients are regular Nushell modules. Import them namespaced — never glob-imported — so the command names don't shadow Nushell builtins like `get`, `delete`, or `in`.
 
 ```nu
-use petstore.nu
+use docker-hub.nu
 
-petstore pet find-by-status --status available
+docker-hub namespaces-repositories-tags list "library" "nginx"
 ```
 
 Each generated command is `<resource> <verb>`: object first, action second. This avoids the verb-first form (`get pet`, `delete user`) that collides with Nushell builtins.
@@ -159,7 +159,8 @@ Each generated command is `<resource> <verb>`: object first, action second. This
 Required path params are **positional**:
 
 ```nu
-petstore pet get-by-id 42
+docker-hub access-tokens get "f0c3a1ce-8cf4-4..."
+docker-hub namespaces-repositories-tags get "library" "nginx" "latest"
 ```
 
 #### Query, header, cookie parameters
@@ -167,39 +168,36 @@ petstore pet get-by-id 42
 All `--flag`. Enum-typed params get tab-completion. Boolean query params are switches (no `: bool` annotation, just `--flag`).
 
 ```nu
-petstore pet find-by-status --status [available pending]
-petstore user login --username alice --password $env.PW
+docker-hub namespaces-repositories-tags list "library" "nginx" --page-size 50
+docker-hub namespaces-repositories-tags list "library" "nginx" --page-size 50 --page 2
 ```
 
 When a query param's name collides with a Nushell keyword or with a built-in flag (e.g. `token`, `raw`), it's automatically prefixed with `qp-` / `hdr-` / `ck-`.
 
 #### Request body
 
-Two ways, depending on the spec and your taste:
+Bodies can be passed three ways, often interchangeably:
 
-1. **Per-field flags** (default for small bodies). Each top-level body field becomes its own flag. Required scalar fields are positional.
+**Per-field flags** — when the spec exposes flat top-level body fields, each becomes its own flag (required scalars become positional). Whether you get this shape depends on the spec — many service-style APIs use deeply nested or freeform schemas and end up with the `--body` flag below instead.
 
-   ```nu
-   petstore pet add --name "fluffy" --status available --tags [{id: 1, name: "kitten"}]
-   ```
-
-2. **Pipeline input**. Every command that takes a body has a signature of `]: any -> any` and starts with `let input = $in`. Pipe a record in and it gets merged deeply with whatever the per-field flags produced. Useful when you already have the body as data.
-
-   ```nu
-   open new-pet.json | petstore pet add
-   {name: "fluffy", status: available} | petstore pet add
-   ```
-
-When per-field flags and pipeline input conflict, **flags win** — the flag-built body is merged on top of the pipeline value.
-
-#### `--body-threshold` and the `--body` flag
-
-If you generated with `--body-threshold N` and a particular endpoint has more than N body fields, the per-field flags collapse into a single `--body: record`. Same for GraphQL `INPUT_OBJECT` args. Use this on huge specs where the flag count would otherwise blow past Nushell's signature limits.
+**The `--body` flag** — when the body schema is freeform, has no enumerable top-level fields, or has been collapsed via `--body-threshold`, the whole payload goes in one flag:
 
 ```nu
-# Generated with --body-threshold 10
-petstore pet add --body {name: "fluffy", status: available, tags: [...]}
+docker-hub scim-20-users post --body {userName: "alice", emails: [{value: "alice@example.com", primary: true}], active: true}
 ```
+
+**Pipeline input** — every command with a body accepts a piped record. Every body-bearing command has signature `]: any -> any` and starts with `let input = $in`; the piped value is merged deeply with whatever the flags produced:
+
+```nu
+{userName: "alice", emails: [{value: "alice@example.com", primary: true}], active: true} | docker-hub scim-20-users post
+open new-user.json | docker-hub scim-20-users post
+```
+
+When flags and pipeline input conflict, **flags win** — the flag-built body is merged on top of the pipeline value.
+
+#### `--body-threshold`
+
+If you generated with `--body-threshold N` and a particular endpoint has more than N body fields, the per-field flags collapse into a single `--body: record`. Same mechanism applies to GraphQL `INPUT_OBJECT` args. Use this on huge specs where the per-endpoint flag count would otherwise blow past Nushell's signature limits.
 
 #### Field-name collisions
 
@@ -207,10 +205,10 @@ Body fields whose sanitized name collides with a path param, with Nushell keywor
 
 #### Multipart / file uploads
 
-Body fields typed as `file` accept a path (string). The generator opens the file with `open --raw` and inserts the bytes into the multipart body before sending.
+Body fields typed as `file` accept a path (string). The generator opens the file with `open --raw` and inserts the bytes into the multipart body before sending. For example, Box's file-content endpoint takes the file id as a path param and the file bytes as a body field:
 
 ```nu
-petstore pet upload-image 42 --additional-metadata "x-ray" --file ~/scan.png
+box files-content content-by-file_id 12345 {name: "report.pdf", parent: {id: "0"}} ~/Documents/report.pdf
 ```
 
 #### `DELETE` with a body
@@ -230,8 +228,8 @@ Schemes the generator recognises and renders match-arms for: `jwt`, `bearer`, `b
 The default scheme and the env-var name are baked into the generated module header:
 
 ```nu
-# Auth: --token flag or $env.PETSTORE_TOKEN
-const BASE_URL = "https://petstore3.swagger.io/api/v3"
+# Auth: --token flag or $env.DOCKER_HUB_API_TOKEN
+const BASE_URL = "https://hub.docker.com"
 const DEFAULT_AUTH = "bearer"
 ```
 
@@ -246,16 +244,16 @@ const DEFAULT_AUTH = "bearer"
 Returns the request that would be sent, without sending it:
 
 ```nu
-> petstore pet add --name "fluffy" --status available --dry-run
-╭────────────────┬──────────────────────────────────────────────╮
-│ method         │ post                                         │
-│ url            │ https://petstore3.swagger.io/api/v3/pet      │
-│ headers        │ {Authorization: "Bearer …", Accept: "applic…"│
-│ query_string   │                                              │
-│ content_type   │ application/json                             │
-│ timeout        │ 30min                                        │
-│ body           │ {name: "fluffy", status: "available"}        │
-╰────────────────┴──────────────────────────────────────────────╯
+> docker-hub scim-20-users post --body {userName: "alice", active: true} --dry-run
+╭────────────────┬────────────────────────────────────────────────────────╮
+│ method         │ post                                                   │
+│ url            │ https://hub.docker.com/v2/scim/2.0/Users               │
+│ headers        │ {Authorization: "Bearer …", Accept: "application/json"}│
+│ query_string   │                                                        │
+│ content_type   │ application/json                                       │
+│ timeout        │ 30min                                                  │
+│ body           │ {userName: "alice", active: true}                      │
+╰────────────────┴────────────────────────────────────────────────────────╯
 ```
 
 ### The `commands` subcommand
@@ -263,8 +261,8 @@ Returns the request that would be sent, without sending it:
 Every generated module exposes a `commands` introspection subcommand (unless generated with `--no-introspection`). It returns a table of every command with its parameters, types, optional/required-ness, descriptions, and return type — useful for scripting against the client itself.
 
 ```nu
-petstore commands | where name =~ "pet" | select name return_type
-petstore commands | get params | first 5
+docker-hub commands | where name =~ "access-tokens" | select name return_type
+docker-hub commands | get params | first 5
 ```
 
 ---
@@ -272,8 +270,8 @@ petstore commands | get params | first 5
 ## Command-name conventions
 
 - Names are `<resource> <verb>` — object first, action second. Path segments form the resource (path params and version segments like `v1`/`v2` are stripped); the verb comes from `operationId` (last camelCase chunk) or the HTTP method.
-- **Collection vs item collisions**: when two GET endpoints differ only by one path parameter (`GET /pets` and `GET /pets/{id}`), the collection variant is renamed `list` rather than suffixed.
-- **Other collisions**: disambiguated by appending `-by-<path-param-name>` (e.g. `pet get-by-id`). If that still leaves duplicates, a numeric suffix is appended (`-1`, `-2`).
+- **Collection vs item collisions**: when two GET endpoints differ only by one path parameter (`GET /access-tokens` and `GET /access-tokens/{uuid}`), the collection variant is renamed `list` rather than suffixed.
+- **Other collisions**: disambiguated by appending `-by-<path-param-name>` (e.g. `access-tokens get-by-uuid`). If that still leaves duplicates, a numeric suffix is appended (`-1`, `-2`).
 - **`operationId` ending in `_<number>`** (a common pattern in machine-generated specs for de-duplication) triggers the `-by-<params>` rename pre-emptively.
 - Reserved Nushell names (`get`, `delete`, `in`, `version`, `nothing`) are forbidden as standalone command/flag names and are sanitized accordingly.
 
