@@ -66,13 +66,13 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def anchorsite-override-completer [] { ["Ashburn, VA" "Chicago, IL" "San Jose, CA"] }
-def literal-quoted-completer [] { ["\"Ashburn, VA\"" "\"Latency\""] }
+def literal-quoted-completer [] { ["Ashburn, VA" "Latency"] }
 
 
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
 # operationId: certificates_get
-export def "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thumbprint get" [
+export def "certificates get" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL

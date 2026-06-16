@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Enum Quote Edge Cases
+  version: 1.0.0
+servers:
+  - url: https://example.test
+paths:
+  /quoted:
+    get:
+      operationId: getQuoted
+      summary: Operation with literal-quoted enum values
+      parameters:
+        - name: anchorsite_override
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - '"Ashburn, VA"'
+              - '"Chicago, IL"'
+              - '"Latency"'
+      responses:
+        '200':
+          description: ok
+  /clean:
+    get:
+      operationId: getClean
+      summary: Operation with clean enum values
+      parameters:
+        - name: anchorsite_override
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "Ashburn, VA"
+              - "Chicago, IL"
+              - "Latency"
+      responses:
+        '200':
+          description: ok

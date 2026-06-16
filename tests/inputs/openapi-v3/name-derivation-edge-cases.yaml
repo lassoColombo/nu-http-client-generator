@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: name-derivation-edge-cases
+  version: 0.1.0
+  description: Synthetic spec exercising verb extraction and OData function-path naming edge cases
+paths:
+  # Docker-style trailing-verb PascalCase
+  /containers/{id}:
+    delete:
+      operationId: ContainerDelete
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '204': {description: deleted}
+  /configs:
+    get:
+      operationId: ConfigList
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  /images/build:
+    post:
+      operationId: ImageBuild
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  /system/ping:
+    get:
+      operationId: SystemPing
+      responses:
+        '200':
+          description: ok
+  # Extended verb prefixes (k8s-style)
+  /configmaps/{name}:
+    get:
+      operationId: readNamespacedConfigMap
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+    put:
+      operationId: replaceNamespacedConfigMap
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  /configmaps:
+    get:
+      operationId: watchNamespacedConfigMap
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  # Append verb
+  /blocks/{id}/children:
+    post:
+      operationId: appendBlockChildren
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  # Single-word PascalCase verb (Azure batch)
+  /certificates:
+    post:
+      operationId: Add
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: {type: object}
+  # OData function path (Azure-style)
+  /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint}):
+    get:
+      operationId: GetCertificate
+      parameters:
+        - in: path
+          name: thumbprintAlgorithm
+          required: true
+          schema: {type: string}
+        - in: path
+          name: thumbprint
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  # k8s deep resource-token dedup
+  /namespaces/{namespace}/configmaps/{name}/status:
+    get:
+      operationId: readCoreV1NamespacedConfigMapStatus
+      parameters:
+        - in: path
+          name: namespace
+          required: true
+          schema: {type: string}
+        - in: path
+          name: name
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}

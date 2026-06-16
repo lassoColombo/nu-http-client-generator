@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Positional Order Edge Cases
+  version: 1.0.0
+servers:
+  - url: https://example.test
+paths:
+  # Path params declared alphabetically in the spec but URL order is non-alphabetical.
+  # Required: signature must be (petId, accountId, zoneId) — not the spec's
+  # alphabetical (accountId, petId, zoneId).
+  /items/{petId}/sub/{accountId}/{zoneId}:
+    get:
+      operationId: getItemSub
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: petId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: zoneId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { type: object }
+
+  # Mixed path-level + operation-level: `a` declared at path level, `b` at
+  # operation level. URL order is {b}/{a} — signature must be (b, a).
+  /mixed/{b}/{a}:
+    parameters:
+      - name: a
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getMixed
+      parameters:
+        - name: b
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { type: object }

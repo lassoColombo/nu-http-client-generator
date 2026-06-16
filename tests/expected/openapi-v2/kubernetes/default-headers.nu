@@ -74,7 +74,7 @@ def accept-completer-2 [] { ["application/cbor" "application/cbor-seq" "applicat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-service-account-issuer-open-id-configuration" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-service-account-issuer-open" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # GET /.well-known/openid-configuration/
 # operationId: getServiceAccountIssuerOpenIDConfiguration
-export def "well-known-openid-configuration get-service-account-issuer-open-id-configuration" [
+export def "well-known-openid-configuration get-service-account-issuer-open" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "componentstatuses list-core-v1-component-status" [
 #
 # GET /api/v1/componentstatuses/{name}
 # operationId: readCoreV1ComponentStatus
-export def "componentstatuses readCoreV1ComponentStatus" [
+export def "componentstatuses get-core-v1-component-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "limitranges list-core-v1-limit-range-for-all-namespaces" [
 #
 # GET /api/v1/namespaces
 # operationId: listCoreV1Namespace
-export def "namespaces list-core-v1-namespace" [
+export def "namespaces list-core-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "namespaces list-core-v1-namespace" [
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --spec shape: {finalizers?: list}
 # --status shape: {conditions?: list, phase?: string}
-export def "namespaces create-core-v1-namespace" [
+export def "namespaces create-core-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "namespaces create-core-v1-namespace" [
 # operationId: createCoreV1NamespacedBinding
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --target shape: {apiVersion?: string, fieldPath?: string, kind?: string, name?: string, namespace?: string, resourceVersion?: string, uid?: string}
-export def "namespaces-bindings create-core-v1-namespaced-binding" [
+export def "namespaces-bindings create-core-v1-namespaced" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "namespaces-bindings create-core-v1-namespaced-binding" [
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps
 # operationId: deleteCoreV1CollectionNamespacedConfigMap
-export def "namespaces-configmaps delete-core-v1-collection-namespaced-config-map" [
+export def "namespaces-configmaps delete-core-v1-collection-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "namespaces-configmaps delete-core-v1-collection-namespaced-config-ma
 #
 # GET /api/v1/namespaces/{namespace}/configmaps
 # operationId: listCoreV1NamespacedConfigMap
-export def "namespaces-configmaps list-core-v1-namespaced-config-map" [
+export def "namespaces-configmaps list-core-v1-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "namespaces-configmaps list-core-v1-namespaced-config-map" [
 # POST /api/v1/namespaces/{namespace}/configmaps
 # operationId: createCoreV1NamespacedConfigMap
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-configmaps create-core-v1-namespaced-config-map" [
+export def "namespaces-configmaps create-core-v1-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -596,9 +596,9 @@ export def "namespaces-configmaps create-core-v1-namespaced-config-map" [
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: deleteCoreV1NamespacedConfigMap
-export def "namespaces-configmaps delete-core-v1-namespaced-config-map" [
-  name: string
+export def "namespaces-configmaps delete-core-v1-namespaced" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "namespaces-configmaps delete-core-v1-namespaced-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,9 +627,9 @@ export def "namespaces-configmaps delete-core-v1-namespaced-config-map" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: readCoreV1NamespacedConfigMap
-export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
-  name: string
+export def "namespaces-configmaps get-core-v1-namespaced" [
   namespace: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,9 +654,9 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
 #
 # PATCH /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: patchCoreV1NamespacedConfigMap
-export def "namespaces-configmaps update-core-v1-namespaced-config-map" [
-  name: string
+export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "namespaces-configmaps update-core-v1-namespaced-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -685,9 +685,9 @@ export def "namespaces-configmaps update-core-v1-namespaced-config-map" [
 # PUT /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: replaceCoreV1NamespacedConfigMap
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
-export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
-  name: string
+export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name-1" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
@@ -723,7 +723,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints
 # operationId: deleteCoreV1CollectionNamespacedEndpoints
-export def "namespaces-endpoints delete-core-v1-collection-namespaced-endpoints" [
+export def "namespaces-endpoints delete-core-v1-collection-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "namespaces-endpoints delete-core-v1-collection-namespaced-endpoints"
 #
 # GET /api/v1/namespaces/{namespace}/endpoints
 # operationId: listCoreV1NamespacedEndpoints
-export def "namespaces-endpoints list-core-v1-namespaced-endpoints" [
+export def "namespaces-endpoints list-core-v1-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "namespaces-endpoints list-core-v1-namespaced-endpoints" [
 # operationId: createCoreV1NamespacedEndpoints
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --subsets item shape: {addresses?: list, notReadyAddresses?: list, ports?: list}
-export def "namespaces-endpoints create-core-v1-namespaced-endpoints" [
+export def "namespaces-endpoints create-core-v1-namespaced" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,9 +835,9 @@ export def "namespaces-endpoints create-core-v1-namespaced-endpoints" [
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: deleteCoreV1NamespacedEndpoints
-export def "namespaces-endpoints delete-core-v1-namespaced-endpoints" [
-  name: string
+export def "namespaces-endpoints delete-core-v1-namespaced" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "namespaces-endpoints delete-core-v1-namespaced-endpoints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,9 +866,9 @@ export def "namespaces-endpoints delete-core-v1-namespaced-endpoints" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: readCoreV1NamespacedEndpoints
-export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
-  name: string
+export def "namespaces-endpoints get-core-v1-namespaced" [
   namespace: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -893,9 +893,9 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
 #
 # PATCH /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: patchCoreV1NamespacedEndpoints
-export def "namespaces-endpoints update-core-v1-namespaced-endpoints" [
-  name: string
+export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "namespaces-endpoints update-core-v1-namespaced-endpoints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -925,9 +925,9 @@ export def "namespaces-endpoints update-core-v1-namespaced-endpoints" [
 # operationId: replaceCoreV1NamespacedEndpoints
 # --metadata shape: {annotations?: record, creationTimestamp?: string, deletionGracePeriodSeconds?: int, deletionTimestamp?: string, finalizers?: list, generateName?: string, generation?: int, labels?: record, managedFields?: list, name?: string, namespace?: string, ownerReferences?: list, resourceVersion?: string, selfLink?: string, uid?: string}
 # --subsets item shape: {addresses?: list, notReadyAddresses?: list, ports?: list}
-export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
-  name: string
+export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name-1" [
   namespace: any
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,7 +949,7 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name, namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")

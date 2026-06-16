@@ -116,9 +116,9 @@ export def "idrs-analysis-filename create" [
 # POST /api/v1/idrs/{idrs}/analysis/filename/{filename}/
 #
 # operationId: v1_idrs_analysis_filename_create_2
-export def "idrs-analysis-filename create-by-filename-idrs" [
-  filename: string
+export def "idrs-analysis-filename create-by-idrs-filename" [
   idrs: string
+  filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "idrs-analysis-filename create-by-filename-idrs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({filename: $filename, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/{filename}/"))
+  let full_url = (build-url $base ({idrs: $idrs, filename: $filename} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/{filename}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,8 +207,8 @@ export def "idrs-tasks-list get" [
 #
 # operationId: v1_idrs_tasks_report_full_retrieve
 export def "idrs-tasks-report-full get" [
-  id: string
   idrs: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "idrs-tasks-report-full get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/full/"))
+  let full_url = (build-url $base ({idrs: $idrs, id: $id} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/full/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,8 +230,8 @@ export def "idrs-tasks-report-full get" [
 #
 # operationId: v1_idrs_tasks_report_summary_retrieve
 export def "idrs-tasks-report-summary get" [
-  id: string
   idrs: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "idrs-tasks-report-summary get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/summary/"))
+  let full_url = (build-url $base ({idrs: $idrs, id: $id} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/summary/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,8 +253,8 @@ export def "idrs-tasks-report-summary get" [
 #
 # operationId: v1_idrs_tasks_status_retrieve
 export def "idrs-tasks-status get" [
-  id: string
   idrs: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "idrs-tasks-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/status/{id}/"))
+  let full_url = (build-url $base ({idrs: $idrs, id: $id} | format pattern "/api/v1/idrs/{idrs}/tasks/status/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

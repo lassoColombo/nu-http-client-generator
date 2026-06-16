@@ -130,7 +130,7 @@ export def "pet-upload-image uploadFile" [
 # operationId: addPet
 # --category shape: {id?: int, name?: string}
 # --tags item shape: {id?: int, name?: string}
-export def "pet addPet" [
+export def "pet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

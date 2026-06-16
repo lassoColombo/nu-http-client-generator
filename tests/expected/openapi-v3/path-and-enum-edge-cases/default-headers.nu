@@ -67,12 +67,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def anchorsite-override-completer [] { ["Ashburn, VA" "Chicago, IL" "San Jose, CA"] }
-def literal-quoted-completer [] { ["\"Ashburn, VA\"" "\"Latency\""] }
+def literal-quoted-completer [] { ["Ashburn, VA" "Latency"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thumbprint get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificates get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
 # operationId: certificates_get
-export def "certificatesthumbprint-algorithm-thumbprint-algorithm-thumbprint-thumbprint get" [
+export def "certificates get" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -125,6 +125,31 @@ export def resolve-ref [val: any, schemas: record] {
   if ($resolved == null) { $val } else { $resolved }
 }
 
+# Clean enum values: strip a matching pair of outer ASCII quotes once.
+# Some specs encode string-literal enum values with the literal quotes
+# included (e.g. value `"\"Ashburn, VA\""` whose payload is the 13-character
+# `"Ashburn, VA"`). Tab-completion would then offer the quoted form and the
+# API would reject it. This strips exactly one matching outer pair; values
+# like `"weird"middle"` (no matching outer pair) are left untouched.
+export def clean-enum-values [vals: list]: nothing -> list {
+  # `each` drops nulls; wrap each item in a record so nulls survive, then unwrap.
+  $vals | each {|v| {v: $v} } | each {|w|
+    let v = $w.v
+    if (($v | describe) == "string") and (($v | str length) >= 2) {
+      let n = ($v | str length)
+      let first = ($v | str substring 0..<1)
+      let last = ($v | str substring ($n - 1)..<$n)
+      if (($first == '"') and ($last == '"')) or (($first == "'") and ($last == "'")) {
+        {v: ($v | str substring 1..<($n - 1))}
+      } else {
+        $w
+      }
+    } else {
+      $w
+    }
+  } | get v
+}
+
 # Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
 export def normalize-type [type_val: any] {
   if ($type_val == null) { return null }

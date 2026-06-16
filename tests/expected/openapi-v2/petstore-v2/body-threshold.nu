@@ -128,7 +128,7 @@ export def "pet-upload-image uploadFile" [
 # POST /pet
 # operationId: addPet
 # --body shape: {id?: int, category?: record, name: string, photoUrls: list, tags?: list, status?: "available"|"pending"|"sold"}
-export def "pet addPet" [
+export def "pet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

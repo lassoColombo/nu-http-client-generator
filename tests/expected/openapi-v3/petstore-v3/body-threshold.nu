@@ -126,7 +126,7 @@ export def "pet update" [
 # POST /pet
 # operationId: addPet
 # --body shape: {id?: int, name: string, category?: record, photoUrls: list, tags?: list, status?: "available"|"pending"|"sold"}
-export def "pet addPet" [
+export def "pet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -85,7 +85,7 @@ def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_
 #
 # GET /api/v4/groups/{id}/access_requests
 # operationId: getApiV4GroupsIdAccessRequests
-export def "groups-access-requests get-api-v4-groups-id-access-requests" [
+export def "groups-access-requests get-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,7 +111,7 @@ export def "groups-access-requests get-api-v4-groups-id-access-requests" [
 #
 # POST /api/v4/groups/{id}/access_requests
 # operationId: postApiV4GroupsIdAccessRequests
-export def "groups-access-requests create-api-v4-groups-id-access-requests" [
+export def "groups-access-requests create-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "groups-access-requests create-api-v4-groups-id-access-requests" [
 #
 # PUT /api/v4/groups/{id}/access_requests/{user_id}/approve
 # operationId: putApiV4GroupsIdAccessRequestsUserIdApprove
-export def "groups-access-requests-approve update-api-v4-groups-id-access-requests-user-id-approve" [
+export def "groups-access-requests-approve update-api-v4-groups-access-requests-user" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +162,7 @@ export def "groups-access-requests-approve update-api-v4-groups-id-access-reques
 #
 # DELETE /api/v4/groups/{id}/access_requests/{user_id}
 # operationId: deleteApiV4GroupsIdAccessRequestsUserId
-export def "groups-access-requests delete-api-v4-groups-id-access-requests-user-id" [
+export def "groups-access-requests delete-api-v4-groups-access-requests-user" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -186,7 +186,7 @@ export def "groups-access-requests delete-api-v4-groups-id-access-requests-user-
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmoji
-export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-emoji" [
+export def "groups-epics-award-emoji list" [
   id: string
   epic_iid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -213,7 +213,7 @@ export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-e
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidAwardEmoji
-export def "groups-epics-award-emoji create-api-v4-groups-id-epics-epic-iid-award-emoji" [
+export def "groups-epics-award-emoji create-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -241,10 +241,10 @@ export def "groups-epics-award-emoji create-api-v4-groups-id-epics-epic-iid-awar
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-emoji-award-id" [
-  award_id: int
+export def "groups-epics-award-emoji get-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
+  award_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-e
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({award_id: $award_id, id: $id, epic_iid: $epic_iid} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,10 +266,10 @@ export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-e
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji delete-api-v4-groups-id-epics-epic-iid-award-emoji-award-id" [
-  award_id: int
+export def "groups-epics-award-emoji delete-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
+  award_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "groups-epics-award-emoji delete-api-v4-groups-id-epics-epic-iid-awar
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({award_id: $award_id, id: $id, epic_iid: $epic_iid} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +291,7 @@ export def "groups-epics-award-emoji delete-api-v4-groups-id-epics-epic-iid-awar
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
-export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji" [
+export def "groups-epics-notes-award-emoji list" [
   id: int
   epic_iid: int
   note_id: int
@@ -319,7 +319,7 @@ export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-n
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
-export def "groups-epics-notes-award-emoji create-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji" [
+export def "groups-epics-notes-award-emoji create-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
   note_id: int
@@ -348,11 +348,11 @@ export def "groups-epics-notes-award-emoji create-api-v4-groups-id-epics-epic-ii
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji-award-id" [
-  award_id: int
+export def "groups-epics-notes-award-emoji get-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
   note_id: int
+  award_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-n
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({award_id: $award_id, id: $id, epic_iid: $epic_iid, note_id: $note_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,11 +374,11 @@ export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-n
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji delete-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji-award-id" [
-  award_id: int
+export def "groups-epics-notes-award-emoji delete-api-v4-groups-epics-epic-iid" [
   id: int
   epic_iid: int
   note_id: int
+  award_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "groups-epics-notes-award-emoji delete-api-v4-groups-id-epics-epic-ii
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({award_id: $award_id, id: $id, epic_iid: $epic_iid, note_id: $note_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +400,7 @@ export def "groups-epics-notes-award-emoji delete-api-v4-groups-id-epics-epic-ii
 #
 # GET /api/v4/groups/{id}/badges
 # operationId: getApiV4GroupsIdBadges
-export def "groups-badges get-api-v4-groups-id-badges" [
+export def "groups-badges list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "groups-badges get-api-v4-groups-id-badges" [
 #
 # POST /api/v4/groups/{id}/badges
 # operationId: postApiV4GroupsIdBadges
-export def "groups-badges create-api-v4-groups-id-badges" [
+export def "groups-badges create-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "groups-badges create-api-v4-groups-id-badges" [
 #
 # GET /api/v4/groups/{id}/badges/render
 # operationId: getApiV4GroupsIdBadgesRender
-export def "groups-badges-render get-api-v4-groups-id-badges-render" [
+export def "groups-badges-render get-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "groups-badges-render get-api-v4-groups-id-badges-render" [
 #
 # GET /api/v4/groups/{id}/badges/{badge_id}
 # operationId: getApiV4GroupsIdBadgesBadgeId
-export def "groups-badges get-api-v4-groups-id-badges-badge-id" [
+export def "groups-badges get-api-v4" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -506,7 +506,7 @@ export def "groups-badges get-api-v4-groups-id-badges-badge-id" [
 #
 # PUT /api/v4/groups/{id}/badges/{badge_id}
 # operationId: putApiV4GroupsIdBadgesBadgeId
-export def "groups-badges update-api-v4-groups-id-badges-badge-id" [
+export def "groups-badges update-api-v4" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "groups-badges update-api-v4-groups-id-badges-badge-id" [
 #
 # DELETE /api/v4/groups/{id}/badges/{badge_id}
 # operationId: deleteApiV4GroupsIdBadgesBadgeId
-export def "groups-badges delete-api-v4-groups-id-badges-badge-id" [
+export def "groups-badges delete-api-v4" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +560,7 @@ export def "groups-badges delete-api-v4-groups-id-badges-badge-id" [
 #
 # GET /api/v4/groups/{id}/custom_attributes
 # operationId: getApiV4GroupsIdCustomAttributes
-export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes" [
+export def "groups-custom-attributes list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,9 +583,9 @@ export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes" [
 #
 # GET /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: getApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes-key" [
-  key: string
+export def "groups-custom-attributes get-api-v4" [
   id: int
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes-key"
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, id: $id} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,9 +607,9 @@ export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes-key"
 #
 # PUT /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: putApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes update-api-v4-groups-id-custom-attributes-key" [
-  key: string
+export def "groups-custom-attributes update-api-v4" [
   id: int
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "groups-custom-attributes update-api-v4-groups-id-custom-attributes-k
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, id: $id} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -635,9 +635,9 @@ export def "groups-custom-attributes update-api-v4-groups-id-custom-attributes-k
 #
 # DELETE /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: deleteApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes delete-api-v4-groups-id-custom-attributes-key" [
-  key: string
+export def "groups-custom-attributes delete-api-v4" [
   id: int
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "groups-custom-attributes delete-api-v4-groups-id-custom-attributes-k
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({key: $key, id: $id} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +659,7 @@ export def "groups-custom-attributes delete-api-v4-groups-id-custom-attributes-k
 #
 # GET /api/v4/groups
 # operationId: getApiV4Groups
-export def "groups get-api-v4-groups" [
+export def "groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "groups get-api-v4-groups" [
 #
 # POST /api/v4/groups
 # operationId: postApiV4Groups
-export def "groups create-api-v4-groups" [
+export def "groups create-api-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +765,7 @@ export def "groups create-api-v4-groups" [
 #
 # PUT /api/v4/groups/{id}
 # operationId: putApiV4GroupsId
-export def "groups update-api-v4-groups-id" [
+export def "groups update-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "groups update-api-v4-groups-id" [
 #
 # GET /api/v4/groups/{id}
 # operationId: getApiV4GroupsId
-export def "groups get-api-v4-groups-id" [
+export def "groups get-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -886,7 +886,7 @@ export def "groups get-api-v4-groups-id" [
 #
 # DELETE /api/v4/groups/{id}
 # operationId: deleteApiV4GroupsId
-export def "groups delete-api-v4-groups-id" [
+export def "groups delete-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +909,7 @@ export def "groups delete-api-v4-groups-id" [
 #
 # POST /api/v4/groups/{id}/archive
 # operationId: postApiV4GroupsIdArchive
-export def "groups-archive create-api-v4-groups-id-archive" [
+export def "groups-archive create-api-v4" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

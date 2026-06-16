@@ -68,7 +68,7 @@ def process-simple-params [params: list, location: string, h: record] {
         (if $deprecated { "DEPRECATED" } else { null })
         (if ($example != null) { $"e.g. ($example)" } else { null })
       ])
-      enum: (do $h.get-param-enum $p)
+      enum: (spec clean-enum-values (do $h.get-param-enum $p))
       deprecated: $deprecated
     }
   }
@@ -150,7 +150,7 @@ def extract-body-fields [schema: record, schemas: record] {
     not ($field.field_spec.readOnly? | default false)
   } | each {|field|
     let field_type = (spec normalize-type ($field.field_spec.type? | default "any"))
-    let enum_vals = ($field.field_spec.enum? | default [])
+    let enum_vals = (spec clean-enum-values ($field.field_spec.enum? | default []))
     let nullable = (spec is-nullable $field.field_spec)
     let desc_base = ($field.field_spec.description? | default "")
     let default_val = ($field.field_spec.default? | default null)
@@ -229,8 +229,38 @@ def canonical-verb [prefix: string] {
     "insert" => "create"
     "remove" => "delete"
     "destroy" => "delete"
+    # Extended verb vocabulary — k8s, Docker, Notion, Azure batch, etc.
+    "read" => "get"
+    "replace" => "update"
+    "watch" => "watch"
+    "append" => "create"
+    "query" => "list"
+    "inspect" => "get"
+    "attach" => "attach"
+    "prune" => "prune"
+    "exec" => "exec"
+    "commit" => "commit"
+    "build" => "build"
+    "ping" => "ping"
+    "cancel" => "cancel"
+    "enable" => "enable"
+    "disable" => "disable"
+    "wait" => "wait"
+    "restart" => "restart"
+    "start" => "start"
+    "stop" => "stop"
+    "clone" => "clone"
+    "copy" => "copy"
+    "move" => "move"
+    "add" => "create"
     _ => $prefix
   }
+}
+
+# Regex alternation listing every verb canonical-verb knows about. Used by
+# both the leading-verb and trailing-verb detectors.
+def known-verbs-regex [] {
+  'get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy|read|replace|watch|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add'
 }
 
 # Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
@@ -253,7 +283,9 @@ def to-kebab [s: string] {
 # Returns {matched: bool, verb: string, remainder: string} where remainder is
 # the chunk after the verb (kebab-cased, with leading article stripped).
 def parse-verb-prefix [action_raw: string] {
-  let m = ($action_raw | parse --regex '(?i)^(?<verb>get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy)(?<rest>([A-Z_].*)?)$')
+  let verbs = (known-verbs-regex)
+  let pattern = ('(?i)^(?<verb>(' + $verbs + '))(?<rest>([A-Z_].*)?)$')
+  let m = ($action_raw | parse --regex $pattern)
   if ($m | is-empty) {
     {matched: false, verb: "", remainder: ""}
   } else {
@@ -263,6 +295,41 @@ def parse-verb-prefix [action_raw: string] {
     let rest_no_article = ($rest_raw | str replace --regex '^(A|An|The)([A-Z_].*)?$' '$2')
     let remainder = (to-kebab $rest_no_article)
     {matched: true, verb: (canonical-verb $row.verb), remainder: $remainder}
+  }
+}
+
+# Try to interpret an operationId as a PascalCase resource followed by a
+# trailing verb token (Docker style: ContainerDelete, ConfigList, ImageBuild).
+# Returns {matched: bool, verb: string, remainder: string} where remainder is
+# the kebab-cased resource part (which is usually discarded since the path
+# already carries the resource).
+def parse-trailing-verb [action_raw: string] {
+  let verbs = (known-verbs-regex)
+  # Require the resource prefix to start uppercase and the trailing verb to
+  # start uppercase too — keeps clean camelCase (findPetsByStatus) untouched
+  # while catching PascalCase ContainerDelete / ConfigList.
+  let pattern = ('^(?<rest>[A-Z][a-z][A-Za-z0-9]*?)(?<verb>(?:' + (
+    $verbs | split row '|' | each {|v| ($v | str substring 0..0 | str upcase) + ($v | str substring 1..) } | str join '|'
+  ) + '))$')
+  let m = ($action_raw | parse --regex $pattern)
+  if ($m | is-empty) {
+    {matched: false, verb: "", remainder: ""}
+  } else {
+    let row = ($m | first)
+    {matched: true, verb: (canonical-verb $row.verb), remainder: (to-kebab $row.rest)}
+  }
+}
+
+# Detect a single-word PascalCase verb (Azure batch: Add, Get, List, Delete).
+# Returns {matched: bool, verb: string}.
+def parse-single-verb [action_raw: string] {
+  let verbs = (known-verbs-regex)
+  let pattern = ('(?i)^(?<verb>(' + $verbs + '))$')
+  let m = ($action_raw | parse --regex $pattern)
+  if ($m | is-empty) {
+    {matched: false, verb: ""}
+  } else {
+    {matched: true, verb: (canonical-verb ($m | first | get verb))}
   }
 }
 
@@ -380,7 +447,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
       type: $param_type
       required: ($p.required? | default false)
       description: $description
-      enum: (do $h.get-param-enum $p)
+      enum: (spec clean-enum-values (do $h.get-param-enum $p))
       collection_style: $collection_style
       deprecated: $deprecated
     }
@@ -468,6 +535,11 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   })
   let resource = if ($path_segments | length) > 0 {
     $path_segments | where {|s| $s != "-" and $s != "--" }
+    # Strip OData function-call suffixes from path segments —
+    # `certificates(thumbprintAlgorithm={a},thumbprint={t})` → `certificates`.
+    # The {placeholders} inside add no useful naming signal and turn the
+    # resource into a mangled string when joined back together.
+    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
     | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",.$#!@%^&+~`]' '' }
     | where {|s| $s | is-not-empty }
     | str join '-' | str kebab-case
@@ -483,7 +555,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '/') {
     let segs = ($operation_id | split row '/' | where {|s| $s | is-not-empty })
     let last = ($segs | last)
-    if ($last =~ '(?i)^(get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy)') {
+    if ($last =~ '(?i)^(get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy|read|replace|watch|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add)') {
       $last
     } else {
       $segs | str join '-'
@@ -507,13 +579,33 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     $method
   }
 
-  # Apply custom verb map override, then HTTP-verb-prefix detector, then default mapping.
+  # Resource-token containment check used by both leading- and trailing-verb
+  # detectors. Lowercases + singularizes, ignores trivial id/path-param tokens.
+  # Returns the cleaned remainder string (with resource-overlapping tokens
+  # removed). If the remainder reduces to nothing, the verb alone suffices.
+  let resource_lower = ($resource | str downcase)
+  let resource_tokens = ($resource_lower | split row '-' | each {|t| naive-singular $t })
+  let path_param_names = ($path_params | each {|p| $p.name | str downcase })
+  let ignorable_tokens = ($path_param_names | append ["id"] | uniq)
+
+  # Apply custom verb map override, then verb-prefix / trailing-verb / single-word
+  # detectors, then default mapping.
   let action_mapped = ($verb_map | get -o $action_raw | default null)
   let action_picked = if ($action_mapped != null) {
     $action_mapped
   } else {
-    let parsed = (parse-verb-prefix $action_raw)
-    if $parsed.matched {
+    # Detect single-word PascalCase verb FIRST (Azure batch: Add, Get, List).
+    # The check is intentionally restricted to PascalCase to avoid clobbering
+    # lowercase `_`-style suffixes like `op_retrieve` which need the legacy
+    # `action-verb` mapping (retrieve→get) inside parse-verb-prefix's empty-
+    # remainder branch.
+    let is_pascal_single = ($action_raw =~ '^[A-Z][a-z]+$')
+    let parsed_single_first = if $is_pascal_single { (parse-single-verb $action_raw) } else { {matched: false, verb: ""} }
+    let parsed = if $parsed_single_first.matched { {matched: false, verb: "", remainder: ""} } else { (parse-verb-prefix $action_raw) }
+    let parsed_trail = if $parsed_single_first.matched or $parsed.matched { {matched: false, verb: "", remainder: ""} } else { (parse-trailing-verb $action_raw) }
+    if $parsed_single_first.matched {
+      $parsed_single_first.verb
+    } else if $parsed.matched {
       if ($parsed.remainder | is-empty) {
         # No suffix → preserve legacy single-word verb mapping (retrieve→get etc).
         action-verb $action_raw
@@ -527,28 +619,103 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
         # Split off any "-by-..." suffix.
         let by_split = ($remainder_lower | split row --regex '-by-')
         let prefix_part = ($by_split | first)
-        let resource_lower = ($resource | str downcase)
-        let resource_tokens = ($resource_lower | split row '-' | each {|t| naive-singular $t })
-        # Drop trivial "id"/path-param tokens — they're stand-ins for the resource
-        # identifier and shouldn't block the containment check.
-        let path_param_names = ($path_params | each {|p| $p.name | str downcase })
-        let ignorable_tokens = ($path_param_names | append ["id"] | uniq)
-        let remainder_tokens = (
+        # Two parallel lists: the original token strings (preserved verbatim
+        # for output) and their singularized form (used only for the dedup
+        # comparison against the resource tokens).
+        let remainder_raw = (
           $prefix_part
           | split row '-'
-          | each {|t| naive-singular $t }
-          | where {|t| not ($t in $ignorable_tokens) }
+          | where {|t| not ((naive-singular $t) in $ignorable_tokens) }
         )
-        let contained = ($remainder_tokens | is-empty) or ($remainder_tokens | all {|t| $t in $resource_tokens })
-        if $contained {
+        let remainder_tokens = ($remainder_raw | each {|t| naive-singular $t })
+        # Drop any tokens that overlap the path-derived resource. This is the
+        # "Resource+Method+Resource+Suffix" dedup case — k8s
+        # `readCoreV1NamespacedConfigMap` on `/configmaps/...` →
+        # remainder tokens `core`, `v1`, `namespaced`, `config`, `map`;
+        # `config-map` (joined) matches resource token `configmap` (singular
+        # of `configmaps`) so drop both `config` and `map`, keep
+        # `core-v1-namespaced`.
+        # Preserve the old behavior when ALL remainder tokens are in the
+        # resource — drop everything, return bare verb (this is the
+        # `accounts get-accounts` stutter case).
+        let all_contained = ($remainder_tokens | is-empty) or ($remainder_tokens | all {|t| $t in $resource_tokens })
+        let kept_tokens = if $all_contained {
+          []
+        } else {
+          # Trailing-token dedup: walk from the END, dropping tokens that
+          # match the resource (singular or joined with predecessor).
+          # Stop at the first non-match. This handles the k8s
+          # `CoreV1NamespacedConfigMap` case (trailing `ConfigMap` matches
+          # `configmaps`) without nuking head tokens that overlap.
+          let n = ($remainder_tokens | length)
+          mut drop_from = $n
+          mut i = ($n - 1)
+          while $i >= 0 {
+            let t = ($remainder_tokens | get $i)
+            let prev = if $i > 0 { ($remainder_tokens | get ($i - 1)) } else { "" }
+            let joined = ($prev + $t)
+            let joined_sing = (naive-singular $joined)
+            let single_match = ($t in $resource_tokens)
+            let joined_match = ($i > 0) and (($joined in $resource_tokens) or ($joined_sing in $resource_tokens))
+            if $joined_match {
+              $drop_from = ($i - 1)
+              $i = ($i - 2)
+            } else if $single_match {
+              $drop_from = $i
+              $i = ($i - 1)
+            } else {
+              break
+            }
+          }
+          if $drop_from >= $n {
+            $remainder_raw
+          } else if $drop_from <= 0 {
+            []
+          } else {
+            $remainder_raw | take $drop_from
+          }
+        }
+        if ($kept_tokens | is-empty) {
           $parsed.verb
         } else {
-          $"($parsed.verb)-($parsed.remainder)"
+          $"($parsed.verb)-($kept_tokens | str join '-')"
         }
+      }
+    } else if $parsed_trail.matched {
+      # Trailing-verb (Docker: ContainerDelete). The resource part is already
+      # carried by the URL path; verify it actually overlaps the path-derived
+      # resource so we don't strip a legitimate camelCase name like
+      # `findPetsByStatus` (which doesn't match anyway since `status` is the
+      # verb and `findPetsBy` is the prefix — rejected below). If the prefix
+      # doesn't overlap, keep the original action_raw to be safe.
+      let trail_tokens = (
+        $parsed_trail.remainder
+        | split row '-'
+        | each {|t| naive-singular $t }
+        | where {|t| not ($t in $ignorable_tokens) }
+      )
+      let overlaps = ($trail_tokens | any {|t| $t in $resource_tokens })
+      if $overlaps or ($trail_tokens | is-empty) {
+        $parsed_trail.verb
+      } else {
+        # Prefix didn't overlap the resource — fall through to default.
+        action-verb $action_raw
       }
     } else {
       action-verb $action_raw
     }
+  }
+
+  # No-operationId fallback: if the picked action ended up empty or trivially
+  # equal to the resource (sendgrid: `alerts alerts`), fall back to the HTTP
+  # method as the verb.
+  let action_picked = if (
+    ($action_picked | is-empty) or
+    (($action_picked | str downcase) == $resource_lower)
+  ) {
+    $method
+  } else {
+    $action_picked
   }
 
   # Strip chars that break `def "..." [...]` names. Some specs (e.g. Sentry)
@@ -633,6 +800,17 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
       let params = if ($extra_path_params | is-empty) { $params } else {
         $params | update path_params ($params.path_params | append $extra_path_params)
       }
+      # Reorder path_params to match URL template order. Path-param emission and
+      # positional-flag order are taken straight from this list, so a spec that
+      # declares params in a different order (e.g. alphabetical) than the URL
+      # template would route calls to the wrong endpoint (e.g. `{namespace}/{name}`
+      # called as `(name, namespace)` would swap them).
+      let path_str = $path_entry.path
+      let params = $params | update path_params ($params.path_params | sort-by {|p|
+        let token = $"{($p.original_name? | default $p.name)}"
+        let idx = ($path_str | str index-of $token)
+        if $idx < 0 { 999999 } else { $idx }
+      })
       let body = (extract-body-info $op $schemas $h)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
       let cmd_name = (derive-command-name $path_entry.path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)

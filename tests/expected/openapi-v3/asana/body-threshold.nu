@@ -196,7 +196,7 @@ export def "access-requests-reject rejectAccessRequest" [
 #
 # GET /workspaces/{workspace_gid}/agents
 # operationId: getAgentsForWorkspace
-export def "workspaces-agents get-agents-for-workspace" [
+export def "workspaces-agents get-agents-for" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "budgets delete" [
 #
 # GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
-export def "projects-custom-field-settings get-custom-field-settings-for-project" [
+export def "projects-custom-field-settings get-custom-field-settings-for" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "projects-custom-field-settings get-custom-field-settings-for-project
 #
 # GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
-export def "portfolios-custom-field-settings get-custom-field-settings-for-portfolio" [
+export def "portfolios-custom-field-settings get-custom-field-settings-for" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
