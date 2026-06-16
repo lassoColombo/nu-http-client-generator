@@ -56,9 +56,8 @@ def collect-oa3-urls [spec_data: record] {
     }
   }
   # path-level and operation-level servers
-  let paths = ($spec_data.paths? | default {})
-  # Skip vendor extensions (`x-*`) at the Paths-Object level (OpenAPI-compliant).
-  for entry in ($paths | transpose path methods | where {|e| not ($e.path | str starts-with "x-") }) {
+  let paths = ($spec_data.paths? | default {} | spec drop-vendor-extensions)
+  for entry in ($paths | transpose path methods) {
     let path_servers = ($entry.methods.servers? | default [])
     for s in $path_servers {
       $urls = ($urls | append (resolve-server-url $s))
