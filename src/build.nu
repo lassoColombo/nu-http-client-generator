@@ -754,7 +754,11 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 
 # Build the command model list from a parsed+resolved REST spec.
 export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
-  $spec_data.paths | transpose path methods | each {|path_entry|
+  # The OpenAPI spec permits vendor extensions (`x-*`) as siblings of real
+  # path entries inside the Paths Object — apicurio has `x-codegen-contextRoot`,
+  # for example. Skip them so they don't flow into `resolve-path-item` as
+  # bogus path items.
+  $spec_data.paths | transpose path methods | where {|e| not ($e.path | str starts-with "x-") } | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | length) > 0 {
       let matches = ($config.filter_prefixes | any {|prefix| $path_entry.path | str starts-with $prefix })

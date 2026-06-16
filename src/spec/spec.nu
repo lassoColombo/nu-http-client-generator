@@ -25,7 +25,11 @@ export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
 # `from json` / `spec detect` panics. Fetching raw and parsing explicitly
 # downstream sidesteps the issue.
 export def fetch-text [url: string, headers: record = {}] {
-  let raw = (http get --raw --headers $headers $url)
+  # Percent-encode unsafe characters that Nushell's `http get` rejects as
+  # "invalid uri character". Most common offender in real registries: a literal
+  # space in a version path segment (e.g. `v2.0 preview/swagger.json`).
+  let safe_url = ($url | str replace --all ' ' '%20')
+  let raw = (http get --raw --headers $headers $safe_url)
   if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
 }
 

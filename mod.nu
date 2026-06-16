@@ -144,7 +144,15 @@ export def main [
 ] {
   let loaded = (build load-spec $source ($spec_headers | default {}))
   if ($loaded.data.paths? | is-empty) {
-    error make --unspanned { msg: "not a valid OpenAPI/Swagger spec: missing 'paths' field" }
+    # OpenAPI 3.1 promoted `webhooks` to a top-level Paths-sibling for specs
+    # that describe only inbound server-to-client events. There are no callable
+    # endpoints to generate — skip cleanly with a clear message rather than
+    # failing as "malformed".
+    if ($loaded.data.webhooks? | is-not-empty) {
+      log warn $"spec at ($loaded.source) defines only webhooks \(server-to-client events\), no callable endpoints — nothing to generate"
+      return null
+    }
+    error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
   }
   let config = {
     filter_tags: ($tags | default [])

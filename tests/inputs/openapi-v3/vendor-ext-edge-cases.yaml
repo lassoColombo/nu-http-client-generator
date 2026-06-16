@@ -1,0 +1,24 @@
+openapi: 3.0.0
+info:
+  title: vendor-ext-edge-cases
+  version: '1'
+servers:
+  - url: https://example.com
+paths:
+  # vendor extension at the Paths-Object level — OpenAPI-compliant; previously
+  # crashed the generator when it tried to treat the string value as a Path Item.
+  x-codegen-contextRoot: /api/v1
+  /things:
+    get:
+      operationId: listThings
+      responses:
+        '200': { description: ok }
+  /things/{id}:
+    # vendor extension at the Path-Item level — sibling of HTTP methods.
+    x-internal: true
+    get:
+      operationId: getThing
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: ok }
