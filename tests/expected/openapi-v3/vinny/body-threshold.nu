@@ -110,7 +110,7 @@ export def "avcfg-asset get" [
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/asset/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/asset/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +135,7 @@ export def "avcfg-asset-enable patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/asset/enable/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/asset/enable/{id}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "avcfg-chart-endpoints list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/chart/endpoints/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/chart/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/alerts/acknowledge/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/alerts/acknowledge/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -302,7 +302,7 @@ export def "avcfg-cynet-alerts-list list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/alerts/list/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/alerts/list/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/alerts/list/scangroup/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/alerts/list/scangroup/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +431,7 @@ export def "avcfg-cynet-alerts-summary list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/alerts/summary/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,7 +477,7 @@ export def "avcfg-cynet-carpet-endpoints list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/carpet/endpoints/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/carpet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +499,7 @@ export def "avcfg-cynet-endpoint-ci get" [
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/endpoint/ci/($atlantis_id)/")
+  let full_url = (build-url $base ({atlantis_id: $atlantis_id} | format pattern "/avcfg/cynet/endpoint/ci/{atlantis_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,7 +531,7 @@ export def "avcfg-cynet-endpoints list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cynet_info__last_seen_at__gte" $cynet_info_last_seen_at_gte "scalar") (serialize-qp "cynet_info__last_seen_at__lte" $cynet_info_last_seen_at_lte "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "scan_group" $scan_group "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/endpoints/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -595,7 +595,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/avcfg/cynet/endpoints/alerts/summary/($idrs)/" $qp)
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/avcfg/cynet/endpoints/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +617,7 @@ export def "avcfg-cynet-tenant get" [
 ]: nothing -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -642,7 +642,7 @@ export def "avcfg-cynet-tenant update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,7 +668,7 @@ export def "avcfg-cynet-tenant patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
+  let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

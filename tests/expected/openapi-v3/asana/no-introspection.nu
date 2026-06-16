@@ -141,7 +141,7 @@ export def "access-requests-approve approveAccessRequest" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/access_requests/($access_request_gid)/approve")
+  let full_url = (build-url $base ({access_request_gid: $access_request_gid} | format pattern "/access_requests/{access_request_gid}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "access-requests-reject rejectAccessRequest" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/access_requests/($access_request_gid)/reject")
+  let full_url = (build-url $base ({access_request_gid: $access_request_gid} | format pattern "/access_requests/{access_request_gid}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +191,7 @@ export def "workspaces-agents get-agents-for-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/agents" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/agents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +217,7 @@ export def "agents get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/agents/($agent_gid)" $qp)
+  let full_url = (build-url $base ({agent_gid: $agent_gid} | format pattern "/agents/{agent_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -243,7 +243,7 @@ export def "allocations get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
+  let full_url = (build-url $base ({allocation_gid: $allocation_gid} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,7 +271,7 @@ export def "allocations update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
+  let full_url = (build-url $base ({allocation_gid: $allocation_gid} | format pattern "/allocations/{allocation_gid}") $qp)
   let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -298,7 +298,7 @@ export def "allocations delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
+  let full_url = (build-url $base ({allocation_gid: $allocation_gid} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +382,7 @@ export def "attachments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
+  let full_url = (build-url $base ({attachment_gid: $attachment_gid} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -407,7 +407,7 @@ export def "attachments delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/attachments/($attachment_gid)" $qp)
+  let full_url = (build-url $base ({attachment_gid: $attachment_gid} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,7 +500,7 @@ export def "workspaces-audit-log-events get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "actor_type" $actor_type "scalar") (serialize-qp "actor_gid" $actor_gid "scalar") (serialize-qp "resource_gid" $resource_gid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_gid)/audit_log_events" $qp)
+  let full_url = (build-url $base ({workspace_gid: $workspace_gid} | format pattern "/workspaces/{workspace_gid}/audit_log_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +609,7 @@ export def "budgets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
+  let full_url = (build-url $base ({budget_gid: $budget_gid} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,7 +637,7 @@ export def "budgets update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
+  let full_url = (build-url $base ({budget_gid: $budget_gid} | format pattern "/budgets/{budget_gid}") $qp)
   let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -664,7 +664,7 @@ export def "budgets delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
+  let full_url = (build-url $base ({budget_gid: $budget_gid} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -692,7 +692,7 @@ export def "projects-custom-field-settings get-custom-field-settings-for-project
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_gid)/custom_field_settings" $qp)
+  let full_url = (build-url $base ({project_gid: $project_gid} | format pattern "/projects/{project_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -720,7 +720,7 @@ export def "portfolios-custom-field-settings get-custom-field-settings-for-portf
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/portfolios/($portfolio_gid)/custom_field_settings" $qp)
+  let full_url = (build-url $base ({portfolio_gid: $portfolio_gid} | format pattern "/portfolios/{portfolio_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

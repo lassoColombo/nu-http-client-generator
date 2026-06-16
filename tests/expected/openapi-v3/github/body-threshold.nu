@@ -179,7 +179,7 @@ export def "advisories get-global-advisory" [
 ]: nothing -> record<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: table<type: string, value: string>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: table<package: record, vulnerable_version_range: string, first_patched_version: string, vulnerable_functions: list>, cvss: record<vector_string: string, score: float>, cvss_severities: record<cvss_v3: record<vector_string: string, score: float>, cvss_v4: record<vector_string: string, score: float>>, epss: record<percentage: float, percentile: float>, cwes: table<cwe_id: string, name: string>, credits: table<user: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/advisories/($ghsa_id)")
+  let full_url = (build-url $base ({ghsa_id: $ghsa_id} | format pattern "/advisories/{ghsa_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +213,7 @@ export def "agents-repos-tasks list-tasks-for-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "is_archived" $is_archived "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "creator_id" $creator_id "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/agents/repos/($owner)/($repo)/tasks" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/agents/repos/{owner}/{repo}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,7 +241,7 @@ export def "agents-repos-tasks create-task-in-repo" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agents/repos/($owner)/($repo)/tasks")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/agents/repos/{owner}/{repo}/tasks"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,7 +268,7 @@ export def "agents-repos-tasks get-task-by-repo-and-id" [
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agents/repos/($owner)/($repo)/tasks/($task_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, task_id: $task_id} | format pattern "/agents/repos/{owner}/{repo}/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +323,7 @@ export def "agents-tasks get-task-by-id" [
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/agents/tasks/($task_id)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/agents/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,7 +370,7 @@ export def "app-manifests-conversions create-from-manifest" [
 ]: nothing -> record<id: int, slug: string, node_id: string, client_id: string, owner: any, name: string, description: string, external_url: string, html_url: string, created_at: string, updated_at: string, permissions: record<issues: string, checks: string, metadata: string, contents: string, deployments: string>, events: list<string>, installations_count: int, client_secret: string, webhook_secret: string, pem: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app-manifests/($code)/conversions")
+  let full_url = (build-url $base ({code: $code} | format pattern "/app-manifests/{code}/conversions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,7 +471,7 @@ export def "app-hook-deliveries get-webhook-delivery" [
 ]: nothing -> record<id: int, guid: string, delivered_at: string, redelivery: bool, duration: float, status: string, status_code: int, event: string, action: string, installation_id: int, repository_id: int, throttled_at: string, url: string, request: record<headers: record, payload: record>, response: record<headers: record, payload: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app/hook/deliveries/($delivery_id)")
+  let full_url = (build-url $base ({delivery_id: $delivery_id} | format pattern "/app/hook/deliveries/{delivery_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,7 +495,7 @@ export def "app-hook-deliveries-attempts apps-redeliver-webhook-delivery" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/app/hook/deliveries/($delivery_id)/attempts")
+  let full_url = (build-url $base ({delivery_id: $delivery_id} | format pattern "/app/hook/deliveries/{delivery_id}/attempts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

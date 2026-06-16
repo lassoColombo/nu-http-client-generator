@@ -163,7 +163,7 @@ export def "dmilog get" [
 ]: nothing -> record<id: int, atl_id: int, idrs: string, name: string, domain: string, public_domain: string, private_ip: string, vpn_ip: string, services: table<id: int, name: string, category: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/dmilog/($name)/")
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilog/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,7 +188,7 @@ export def "dmilog update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/dmilog/($name)/")
+  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilog/{name}/"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/jobs/($queue_name)/($job_id)/")
+  let full_url = (build-url $base ({job_id: $job_id, queue_name: $queue_name} | format pattern "/api/v1/jobs/{queue_name}/{job_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

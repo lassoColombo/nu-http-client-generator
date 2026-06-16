@@ -115,8 +115,7 @@ def render-param-record [params: list, prefix: string, --quote-keys] {
   $params | each {|p|
     let var = (effective-flag-var $p.name $prefix)
     if $quote_keys {
-      let escaped = ($p.name | str replace --all '\' '\\' | str replace --all '"' '\"')
-      $'"($escaped)": $($var)'
+      $'($p.name | to nuon): $($var)'
     } else {
       $'($p.name): $($var)'
     }
@@ -161,10 +160,7 @@ export def collect-completers [commands: list] {
 # string literal is well-formed.
 export def render-completers [completers: record] {
   $completers | transpose name values | each {|c|
-    let vals = ($c.values | each {|v|
-      let escaped = ($v | str replace --all '\' '\\' | str replace --all '"' '\"')
-      $'"($escaped)"'
-    } | str join ' ')
+    let vals = ($c.values | each {|v| ($v | to nuon) } | str join ' ')
     $'def ($c.name) [] { [($vals)] }'
   } | str join "\n"
 }
@@ -423,28 +419,23 @@ export def build-body-code [cmd: record, config: record] {
   }
 
   let path_expr = if ($cmd.path_params | length) > 0 {
-    # Escape characters that have meaning inside $"..." interpolation strings:
-    # backslash, double-quote, and parens (which open a sub-expression).
-    # Done BEFORE param substitution so the inserted ($var) syntax is preserved.
-    mut path_str = ($cmd.path_template
-      | str replace --all '\' '\\'
-      | str replace --all '"' '\"'
-      | str replace --all '(' '\('
-      | str replace --all ')' '\)')
+    # Emit a `format pattern` call so the path text is a plain string literal —
+    # parens, quotes, backslashes pass through untouched (only `{` and `}` are
+    # meta to format pattern). Translate each spec placeholder name to its
+    # sanitized var name so it matches the record field.
+    mut pattern = $cmd.path_template
     for p in $cmd.path_params {
       let orig = ($p.original_name? | default $p.name)
-      let placeholder = $'{($orig)}'
       let pvar = (effective-positional-var $p.name)
-      let replacement = $"\($($pvar)\)"
-      $path_str = ($path_str | str replace $placeholder $replacement)
+      $pattern = ($pattern | str replace $'{($orig)}' $'{($pvar)}')
     }
-    $"$\"($path_str)\""
+    let record_fields = ($cmd.path_params | each {|p|
+      let pvar = (effective-positional-var $p.name)
+      $'($pvar): $($pvar)'
+    } | str join ", ")
+    $"\({($record_fields)} | format pattern ($pattern | to nuon)\)"
   } else {
-    # No interpolation: emit as a plain double-quoted string with escapes.
-    let escaped = ($cmd.path_template
-      | str replace --all '\' '\\'
-      | str replace --all '"' '\"')
-    $"\"($escaped)\""
+    $cmd.path_template | to nuon
   }
 
   if ($cmd.query_params | length) > 0 {
@@ -481,8 +472,7 @@ export def build-body-code [cmd: record, config: record] {
         # sanitizer reduced it to ""). Always quote the key so names with
         # spaces, slashes, or colons are valid Nushell record syntax.
         let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
-        let escaped_key = ($key | str replace --all '\' '\\' | str replace --all '"' '\"')
-        $'"($escaped_key)": ($var_name)'
+        $'($key | to nuon): ($var_name)'
       } | str join ", "
       $lines = ($lines | append ($"  let body = {($body_parts)} | compact"))
     }
@@ -674,8 +664,8 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   if $cmd.deprecated {
     let reason = ($cmd.deprecation_reason? | default null)
     if ($reason != null) and ($reason | is-not-empty) {
-      let escaped = ($reason | str replace --all '"' '\"' | str replace --all "\n" " ")
-      $annotations = ($annotations | append $'@deprecated "($escaped)"')
+      let flat = ($reason | str replace --all "\n" " ")
+      $annotations = ($annotations | append $"@deprecated ($flat | to nuon)")
     } else {
       $annotations = ($annotations | append '@deprecated')
     }

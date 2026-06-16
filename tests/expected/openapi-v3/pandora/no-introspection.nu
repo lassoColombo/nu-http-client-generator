@@ -85,7 +85,7 @@ export def "idrs-analysis-filename create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/analysis/filename/")
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -108,7 +108,7 @@ export def "idrs-analysis-filename create-by-filename-idrs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/analysis/filename/($filename)/")
+  let full_url = (build-url $base ({filename: $filename, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/{filename}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,7 +130,7 @@ export def "idrs-analysis-sha256 create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/analysis/sha256/")
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/analysis/sha256/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,7 +153,7 @@ export def "idrs-analysis-url create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/analysis/url/($url)/")
+  let full_url = (build-url $base ({idrs: $idrs, url: $url} | format pattern "/api/v1/idrs/{idrs}/analysis/url/{url}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,7 +175,7 @@ export def "idrs-tasks-list get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/tasks/list/")
+  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/list/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +198,7 @@ export def "idrs-tasks-report-full get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/tasks/report/($id)/full/")
+  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/full/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +221,7 @@ export def "idrs-tasks-report-summary get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/tasks/report/($id)/summary/")
+  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/summary/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "idrs-tasks-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/idrs/($idrs)/tasks/status/($id)/")
+  let full_url = (build-url $base ({id: $id, idrs: $idrs} | format pattern "/api/v1/idrs/{idrs}/tasks/status/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
