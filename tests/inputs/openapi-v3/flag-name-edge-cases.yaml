@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: flag-name-edge-cases
+  version: 1.0.0
+  description: Synthetic spec exercising flag-name sanitization edge cases.
+servers:
+  - url: https://example.com
+paths:
+  /widgets:
+    get:
+      operationId: widgets_list
+      tags:
+        - widgets
+      parameters:
+        - name: Notion-Version
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Request-Id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: XCustomHeader
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: "{field-name}"
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object

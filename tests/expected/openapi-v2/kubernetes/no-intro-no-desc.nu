@@ -75,7 +75,7 @@ def accept-completer-2 [] { ["application/cbor" "application/cbor-seq" "applicat
 #
 # GET /.well-known/openid-configuration/
 # operationId: getServiceAccountIssuerOpenIDConfiguration
-export def "well-known-openid-configuration get" [
+export def "well-known-openid-configuration get-service-account-issuer-open-id-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -97,7 +97,7 @@ export def "well-known-openid-configuration get" [
 #
 # GET /api/
 # operationId: getCoreAPIVersions
-export def "core get" [
+export def "core get-core-api-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "core get" [
 #
 # GET /api/v1/
 # operationId: getCoreV1APIResources
-export def "core-v1 get" [
+export def "core-v1 get-core-v1api-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "core-v1 get" [
 #
 # GET /api/v1/componentstatuses
 # operationId: listCoreV1ComponentStatus
-export def "componentstatuses listCoreV1ComponentStatus" [
+export def "componentstatuses list-core-v1-component-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,22 +153,22 @@ export def "componentstatuses listCoreV1ComponentStatus" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
   --pretty: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, conditions: list, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/componentstatuses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,7 +205,7 @@ export def "componentstatuses readCoreV1ComponentStatus" [
 #
 # GET /api/v1/configmaps
 # operationId: listCoreV1ConfigMapForAllNamespaces
-export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
+export def "configmaps list-core-v1-config-map-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,22 +215,22 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
   --pretty: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "configmaps listCoreV1ConfigMapForAllNamespaces" [
 #
 # GET /api/v1/endpoints
 # operationId: listCoreV1EndpointsForAllNamespaces
-export def "endpoints listCoreV1EndpointsForAllNamespaces" [
+export def "endpoints list-core-v1-endpoints-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,22 +251,22 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
   --pretty: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, subsets: list>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -277,7 +277,7 @@ export def "endpoints listCoreV1EndpointsForAllNamespaces" [
 #
 # GET /api/v1/events
 # operationId: listCoreV1EventForAllNamespaces
-export def "events listCoreV1EventForAllNamespaces" [
+export def "events list-core-v1-event-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,22 +287,22 @@ export def "events listCoreV1EventForAllNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
   --pretty: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<action: string, apiVersion: string, count: int, eventTime: string, firstTimestamp: string, involvedObject: record, kind: string, lastTimestamp: string, message: string, metadata: record, reason: string, related: record, reportingComponent: string, reportingInstance: string, series: record, source: record, type: string>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "events listCoreV1EventForAllNamespaces" [
 #
 # GET /api/v1/limitranges
 # operationId: listCoreV1LimitRangeForAllNamespaces
-export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
+export def "limitranges list-core-v1-limit-range-for-all-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,22 +323,22 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
   --pretty: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, spec: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/limitranges" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,7 +349,7 @@ export def "limitranges listCoreV1LimitRangeForAllNamespaces" [
 #
 # GET /api/v1/namespaces
 # operationId: listCoreV1Namespace
-export def "namespaces listCoreV1Namespace" [
+export def "namespaces list-core-v1-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,21 +359,21 @@ export def "namespaces listCoreV1Namespace" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, spec: record, status: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "namespaces listCoreV1Namespace" [
 #
 # POST /api/v1/namespaces
 # operationId: createCoreV1Namespace
-export def "namespaces createCoreV1Namespace" [
+export def "namespaces create-core-v1-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,10 +394,10 @@ export def "namespaces createCoreV1Namespace" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
-  --apiVersion: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
+  --api-version: string
   --kind: string
   --metadata: record
   --spec: record
@@ -406,9 +406,9 @@ export def "namespaces createCoreV1Namespace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
-  let body = {apiVersion: $apiVersion, kind: $kind, metadata: $metadata, spec: $spec, status: $status} | compact
+  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, spec: $spec, status: $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "namespaces createCoreV1Namespace" [
 #
 # POST /api/v1/namespaces/{namespace}/bindings
 # operationId: createCoreV1NamespacedBinding
-export def "namespaces-bindings createCoreV1NamespacedBinding" [
+export def "namespaces-bindings create-core-v1-namespaced-binding" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -430,11 +430,11 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
   --pretty: string
-  --apiVersion: string
+  --api-version: string
   --kind: string
   --metadata: record
   target: record
@@ -442,9 +442,9 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/bindings" $qp)
-  let body = {apiVersion: $apiVersion, kind: $kind, metadata: $metadata, target: $target} | compact
+  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, target: $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,7 +455,7 @@ export def "namespaces-bindings createCoreV1NamespacedBinding" [
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps
 # operationId: deleteCoreV1CollectionNamespacedConfigMap
-export def "namespaces-configmaps delete-by-namespace" [
+export def "namespaces-configmaps delete-core-v1-collection-namespaced-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,23 +467,23 @@ export def "namespaces-configmaps delete-by-namespace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string
-  --dryRun: string
-  --fieldSelector: string
-  --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
-  --labelSelector: string
+  --qp-dry-run: string
+  --field-selector: string
+  --grace-period-seconds: int
+  --ignore-store-read-error-with-cluster-breaking-potential: oneof<nothing, bool>
+  --label-selector: string
   --limit: int
-  --orphanDependents: oneof<nothing, bool>
-  --propagationPolicy: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --orphan-dependents: oneof<nothing, bool>
+  --propagation-policy: string
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "gracePeriodSeconds" $gracePeriodSeconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignoreStoreReadErrorWithClusterBreakingPotential "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphanDependents "scalar") (serialize-qp "propagationPolicy" $propagationPolicy "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,7 +494,7 @@ export def "namespaces-configmaps delete-by-namespace" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps
 # operationId: listCoreV1NamespacedConfigMap
-export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
+export def "namespaces-configmaps list-core-v1-namespaced-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,21 +505,21 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,7 +530,7 @@ export def "namespaces-configmaps listCoreV1NamespacedConfigMap" [
 #
 # POST /api/v1/namespaces/{namespace}/configmaps
 # operationId: createCoreV1NamespacedConfigMap
-export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
+export def "namespaces-configmaps create-core-v1-namespaced-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,11 +541,11 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
-  --apiVersion: string
-  --binaryData: record
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
+  --api-version: string
+  --binary-data: record
   --data: record
   --immutable: oneof<nothing, bool>
   --kind: string
@@ -554,9 +554,9 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
-  let body = {apiVersion: $apiVersion, binaryData: $binaryData, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
+  let body = {apiVersion: $api_version, binaryData: $binary_data, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -567,7 +567,7 @@ export def "namespaces-configmaps createCoreV1NamespacedConfigMap" [
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: deleteCoreV1NamespacedConfigMap
-export def "namespaces-configmaps delete-by-name-namespace" [
+export def "namespaces-configmaps delete-core-v1-namespaced-config-map" [
   name: string
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,15 +579,15 @@ export def "namespaces-configmaps delete-by-name-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
-  --orphanDependents: oneof<nothing, bool>
-  --propagationPolicy: string
+  --qp-dry-run: string
+  --grace-period-seconds: int
+  --ignore-store-read-error-with-cluster-breaking-potential: oneof<nothing, bool>
+  --orphan-dependents: oneof<nothing, bool>
+  --propagation-policy: string
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "gracePeriodSeconds" $gracePeriodSeconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignoreStoreReadErrorWithClusterBreakingPotential "scalar") (serialize-qp "orphanDependents" $orphanDependents "scalar") (serialize-qp "propagationPolicy" $propagationPolicy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -625,7 +625,7 @@ export def "namespaces-configmaps readCoreV1NamespacedConfigMap" [
 #
 # PATCH /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: patchCoreV1NamespacedConfigMap
-export def "namespaces-configmaps patch" [
+export def "namespaces-configmaps update-core-v1-namespaced-config-map" [
   name: string
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,14 +637,14 @@ export def "namespaces-configmaps patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
   --force: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, binaryData: record, data: record, immutable: bool, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -667,11 +667,11 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
-  --apiVersion: string
-  --binaryData: record
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
+  --api-version: string
+  --binary-data: record
   --data: record
   --immutable: oneof<nothing, bool>
   --kind: string
@@ -680,9 +680,9 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
-  let body = {apiVersion: $apiVersion, binaryData: $binaryData, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
+  let body = {apiVersion: $api_version, binaryData: $binary_data, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -693,7 +693,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints
 # operationId: deleteCoreV1CollectionNamespacedEndpoints
-export def "namespaces-endpoints delete-by-namespace" [
+export def "namespaces-endpoints delete-core-v1-collection-namespaced-endpoints" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -705,23 +705,23 @@ export def "namespaces-endpoints delete-by-namespace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string
-  --dryRun: string
-  --fieldSelector: string
-  --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
-  --labelSelector: string
+  --qp-dry-run: string
+  --field-selector: string
+  --grace-period-seconds: int
+  --ignore-store-read-error-with-cluster-breaking-potential: oneof<nothing, bool>
+  --label-selector: string
   --limit: int
-  --orphanDependents: oneof<nothing, bool>
-  --propagationPolicy: string
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --orphan-dependents: oneof<nothing, bool>
+  --propagation-policy: string
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "gracePeriodSeconds" $gracePeriodSeconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignoreStoreReadErrorWithClusterBreakingPotential "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphanDependents "scalar") (serialize-qp "propagationPolicy" $propagationPolicy "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -732,7 +732,7 @@ export def "namespaces-endpoints delete-by-namespace" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints
 # operationId: listCoreV1NamespacedEndpoints
-export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
+export def "namespaces-endpoints list-core-v1-namespaced-endpoints" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,21 +743,21 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --allowWatchBookmarks: oneof<nothing, bool>
+  --allow-watch-bookmarks: oneof<nothing, bool>
   --qp-continue: string
-  --fieldSelector: string
-  --labelSelector: string
+  --field-selector: string
+  --label-selector: string
   --limit: int
-  --resourceVersion: string
-  --resourceVersionMatch: string
-  --sendInitialEvents: oneof<nothing, bool>
-  --shardSelector: string
-  --timeoutSeconds: int
+  --resource-version: string
+  --resource-version-match: string
+  --send-initial-events: oneof<nothing, bool>
+  --shard-selector: string
+  --timeout-seconds: int
   --watch: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, items: table<apiVersion: string, kind: string, metadata: record, subsets: list>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowWatchBookmarks" $allowWatchBookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $fieldSelector "scalar") (serialize-qp "labelSelector" $labelSelector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resourceVersion "scalar") (serialize-qp "resourceVersionMatch" $resourceVersionMatch "scalar") (serialize-qp "sendInitialEvents" $sendInitialEvents "scalar") (serialize-qp "shardSelector" $shardSelector "scalar") (serialize-qp "timeoutSeconds" $timeoutSeconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,7 +768,7 @@ export def "namespaces-endpoints listCoreV1NamespacedEndpoints" [
 #
 # POST /api/v1/namespaces/{namespace}/endpoints
 # operationId: createCoreV1NamespacedEndpoints
-export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
+export def "namespaces-endpoints create-core-v1-namespaced-endpoints" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,10 +779,10 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
-  --apiVersion: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
+  --api-version: string
   --kind: string
   --metadata: record
   --subsets: list
@@ -790,9 +790,9 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
-  let body = {apiVersion: $apiVersion, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
+  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "namespaces-endpoints createCoreV1NamespacedEndpoints" [
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: deleteCoreV1NamespacedEndpoints
-export def "namespaces-endpoints delete-by-name-namespace" [
+export def "namespaces-endpoints delete-core-v1-namespaced-endpoints" [
   name: string
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,15 +815,15 @@ export def "namespaces-endpoints delete-by-name-namespace" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --gracePeriodSeconds: int
-  --ignoreStoreReadErrorWithClusterBreakingPotential: oneof<nothing, bool>
-  --orphanDependents: oneof<nothing, bool>
-  --propagationPolicy: string
+  --qp-dry-run: string
+  --grace-period-seconds: int
+  --ignore-store-read-error-with-cluster-breaking-potential: oneof<nothing, bool>
+  --orphan-dependents: oneof<nothing, bool>
+  --propagation-policy: string
 ]: nothing -> record<apiVersion: string, code: int, details: record<causes: list<record>, group: string, kind: string, name: string, retryAfterSeconds: int, uid: string>, kind: string, message: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "gracePeriodSeconds" $gracePeriodSeconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignoreStoreReadErrorWithClusterBreakingPotential "scalar") (serialize-qp "orphanDependents" $orphanDependents "scalar") (serialize-qp "propagationPolicy" $propagationPolicy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -861,7 +861,7 @@ export def "namespaces-endpoints readCoreV1NamespacedEndpoints" [
 #
 # PATCH /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: patchCoreV1NamespacedEndpoints
-export def "namespaces-endpoints patch" [
+export def "namespaces-endpoints update-core-v1-namespaced-endpoints" [
   name: string
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,14 +873,14 @@ export def "namespaces-endpoints patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
   --force: oneof<nothing, bool>
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, subsets: table<addresses: list, notReadyAddresses: list, ports: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,10 +903,10 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --dryRun: string
-  --fieldManager: string
-  --fieldValidation: string
-  --apiVersion: string
+  --qp-dry-run: string
+  --field-manager: string
+  --field-validation: string
+  --api-version: string
   --kind: string
   --metadata: record
   --subsets: list
@@ -914,9 +914,9 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dryRun" $dryRun "scalar") (serialize-qp "fieldManager" $fieldManager "scalar") (serialize-qp "fieldValidation" $fieldValidation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
-  let body = {apiVersion: $apiVersion, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
+  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

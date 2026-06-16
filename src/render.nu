@@ -56,7 +56,11 @@ const RESERVED_VARS = [
 
 # Convert param names to valid nushell flag names
 export def to-flag-name [name: string] {
-  let cleaned = $name | str replace --all '_' '-' | str replace --all --regex '[\\$()\[\].*/\x27"#!@%^&+=~`]' '' | str replace --regex '-{2,}' '-' | str trim --char '-'
+  let cleaned = $name
+    | str kebab-case
+    | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' ''
+    | str replace --regex '-{2,}' '-'
+    | str trim --char '-'
   if ($cleaned in $RESERVED_NAMES) or ($cleaned | is-empty) {
     $"($cleaned)-param" | str trim --char '-'
   } else {
@@ -66,7 +70,7 @@ export def to-flag-name [name: string] {
 
 # Sanitize a field name to a valid nushell variable name (underscores, no special chars)
 def to-var-name [name: string] {
-  $name | str replace --all '-' '_' | str replace --all --regex '[\\$()\[\].*/\x27"#!@%^&+=~`]' '' | str replace --regex '_{2,}' '_' | str trim --char '_'
+  $name | str replace --all '-' '_' | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' '' | str replace --regex '_{2,}' '_' | str trim --char '_'
 }
 
 # Convert a parameter name to a nushell variable name (flag-style then underscored)

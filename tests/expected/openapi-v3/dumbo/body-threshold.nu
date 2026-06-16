@@ -68,7 +68,7 @@ def base-url-completer [] { ["https://dumbo.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
 # Completers for enum parameters
-def networkType-completer [] { ["dhcp" "static"] }
+def network-type-completer [] { ["dhcp" "static"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {

@@ -101,7 +101,7 @@ export def "access-requests get" [
 #
 # POST /access_requests
 # operationId: createAccessRequest
-export def "access-requests createAccessRequest" [
+export def "access-requests create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "access-requests-reject rejectAccessRequest" [
 #
 # GET /workspaces/{workspace_gid}/agents
 # operationId: getAgentsForWorkspace
-export def "workspaces-agents get" [
+export def "workspaces-agents get-agents-for-workspace" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "allocations get" [
 #
 # PUT /allocations/{allocation_gid}
 # operationId: updateAllocation
-export def "allocations updateAllocation" [
+export def "allocations update" [
   allocation_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +336,7 @@ export def "allocations list" [
 #
 # POST /allocations
 # operationId: createAllocation
-export def "allocations createAllocation" [
+export def "allocations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "attachments delete" [
 #
 # GET /attachments
 # operationId: getAttachmentsForObject
-export def "attachments list" [
+export def "attachments get-attachments-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "attachments list" [
 #
 # POST /attachments
 # operationId: createAttachmentForObject
-export def "attachments createAttachmentForObject" [
+export def "attachments create-attachment-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "workspaces-audit-log-events get" [
 #
 # POST /batch
 # operationId: createBatchRequest
-export def "batch createBatchRequest" [
+export def "batch create-batch-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "budgets list" [
 #
 # POST /budgets
 # operationId: createBudget
-export def "budgets createBudget" [
+export def "budgets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "budgets get" [
 #
 # PUT /budgets/{budget_gid}
 # operationId: updateBudget
-export def "budgets updateBudget" [
+export def "budgets update" [
   budget_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -672,7 +672,7 @@ export def "budgets delete" [
 #
 # GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
-export def "projects-custom-field-settings get" [
+export def "projects-custom-field-settings get-custom-field-settings-for-project" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "projects-custom-field-settings get" [
 #
 # GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
-export def "portfolios-custom-field-settings get" [
+export def "portfolios-custom-field-settings get-custom-field-settings-for-portfolio" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

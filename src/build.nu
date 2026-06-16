@@ -213,6 +213,59 @@ def action-verb [action: string] {
   }
 }
 
+# Canonical verb mapping for HTTP-verb-prefixed operationIds.
+def canonical-verb [prefix: string] {
+  match ($prefix | str downcase) {
+    "get" => "get"
+    "post" => "create"
+    "put" => "update"
+    "patch" => "update"
+    "delete" => "delete"
+    "list" => "list"
+    "create" => "create"
+    "update" => "update"
+    "retrieve" => "retrieve"
+    "fetch" => "get"
+    "insert" => "create"
+    "remove" => "delete"
+    "destroy" => "delete"
+    _ => $prefix
+  }
+}
+
+# Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
+def naive-singular [word: string] {
+  if ($word | str ends-with "ss") {
+    $word
+  } else if ($word | str ends-with "s") and (($word | str length) > 1) {
+    $word | str substring 0..<(($word | str length) - 1)
+  } else {
+    $word
+  }
+}
+
+# Convert a CamelCase / PascalCase / mixed token to kebab-case.
+def to-kebab [s: string] {
+  $s | str kebab-case
+}
+
+# Try to interpret an operationId as a HTTP-verb-prefixed name.
+# Returns {matched: bool, verb: string, remainder: string} where remainder is
+# the chunk after the verb (kebab-cased, with leading article stripped).
+def parse-verb-prefix [action_raw: string] {
+  let m = ($action_raw | parse --regex '(?i)^(?<verb>get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy)(?<rest>([A-Z_].*)?)$')
+  if ($m | is-empty) {
+    {matched: false, verb: "", remainder: ""}
+  } else {
+    let row = ($m | first)
+    let rest_raw = ($row.rest | default "" | str trim --char '_')
+    # Strip leading article (A / An / The) when followed by uppercase or end.
+    let rest_no_article = ($rest_raw | str replace --regex '^(A|An|The)([A-Z_].*)?$' '$2')
+    let remainder = (to-kebab $rest_no_article)
+    {matched: true, verb: (canonical-verb $row.verb), remainder: $remainder}
+  }
+}
+
 # Resolve PathItem-level $ref. Returns the methods record.
 def resolve-path-item [path_entry: record, schemas: record] {
   if ($path_entry.methods | columns | any {|c| $c == "$ref"}) {
@@ -424,8 +477,23 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     "api"
   }
 
-  let action_raw = if ($operation_id | is-not-empty) {
-    let parts = ($operation_id | split row '_')
+  # Normalize slash-bearing operationIds (e.g. "repos/list-for-user").
+  # If the trailing segment is verb-like, drop the leading namespace; otherwise
+  # join with hyphens so the rest of the pipeline can deal with it.
+  let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '/') {
+    let segs = ($operation_id | split row '/' | where {|s| $s | is-not-empty })
+    let last = ($segs | last)
+    if ($last =~ '(?i)^(get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy)') {
+      $last
+    } else {
+      $segs | str join '-'
+    }
+  } else {
+    $operation_id
+  }
+
+  let action_raw = if ($normalized_opid | is-not-empty) {
+    let parts = ($normalized_opid | split row '_')
     let last_part = ($parts | last)
     if ($last_part =~ '^\d+$') and ($parts | length) >= 2 {
       let action_part = ($parts | get (($parts | length) - 2))
@@ -439,14 +507,48 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     $method
   }
 
-  # Apply custom verb map override, then camelCase check, then default mapping
+  # Apply custom verb map override, then HTTP-verb-prefix detector, then default mapping.
   let action_mapped = ($verb_map | get -o $action_raw | default null)
   let action_picked = if ($action_mapped != null) {
     $action_mapped
-  } else if ($action_raw =~ '^(get|post|put|patch|delete)[A-Z]') {
-    $method
   } else {
-    action-verb $action_raw
+    let parsed = (parse-verb-prefix $action_raw)
+    if $parsed.matched {
+      if ($parsed.remainder | is-empty) {
+        # No suffix → preserve legacy single-word verb mapping (retrieve→get etc).
+        action-verb $action_raw
+      } else {
+        # If the remainder (lowercased + naively singularized) is contained in the
+        # resource segments, the verb alone is enough — avoids stutters like
+        # `accounts get-accounts`. The "-by-X" tail (e.g. `getUserByName`) is
+        # treated as discriminator metadata, not signal — strip it for the
+        # containment check.
+        let remainder_lower = ($parsed.remainder | str downcase)
+        # Split off any "-by-..." suffix.
+        let by_split = ($remainder_lower | split row --regex '-by-')
+        let prefix_part = ($by_split | first)
+        let resource_lower = ($resource | str downcase)
+        let resource_tokens = ($resource_lower | split row '-' | each {|t| naive-singular $t })
+        # Drop trivial "id"/path-param tokens — they're stand-ins for the resource
+        # identifier and shouldn't block the containment check.
+        let path_param_names = ($path_params | each {|p| $p.name | str downcase })
+        let ignorable_tokens = ($path_param_names | append ["id"] | uniq)
+        let remainder_tokens = (
+          $prefix_part
+          | split row '-'
+          | each {|t| naive-singular $t }
+          | where {|t| not ($t in $ignorable_tokens) }
+        )
+        let contained = ($remainder_tokens | is-empty) or ($remainder_tokens | all {|t| $t in $resource_tokens })
+        if $contained {
+          $parsed.verb
+        } else {
+          $"($parsed.verb)-($parsed.remainder)"
+        }
+      }
+    } else {
+      action-verb $action_raw
+    }
   }
 
   # Strip chars that break `def "..." [...]` names. Some specs (e.g. Sentry)
@@ -467,8 +569,8 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   }
 
   # detect _2 deduplication pattern
-  let is_duplicate = if ($operation_id | is-not-empty) {
-    let parts = ($operation_id | split row '_')
+  let is_duplicate = if ($normalized_opid | is-not-empty) {
+    let parts = ($normalized_opid | split row '_')
     let last_part = ($parts | last)
     ($last_part =~ '^\d+$') and ($parts | length) >= 2
   } else {

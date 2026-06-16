@@ -77,7 +77,7 @@ def status-completer [] { ["failure" "success"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta meta/root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta meta-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +102,7 @@ export def commands []: nothing -> table {
 # GET /
 # Docs: https://docs.github.com/rest/meta/meta#github-api-root — API method documentation
 # operationId: meta/root
-export def "meta meta/root" [
+export def "meta meta-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +125,7 @@ export def "meta meta/root" [
 # GET /advisories
 # Docs: https://docs.github.com/rest/security-advisories/global-advisories#list-global-security-advisories — API method documentation
 # operationId: security-advisories/list-global-advisories
-export def "advisories security-advisories/list-global-advisories" [
+export def "advisories list-global-advisories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "advisories security-advisories/list-global-advisories" [
 # GET /advisories/{ghsa_id}
 # Docs: https://docs.github.com/rest/security-advisories/global-advisories#get-a-global-security-advisory — API method documentation
 # operationId: security-advisories/get-global-advisory
-export def "advisories security-advisories/get-global-advisory" [
+export def "advisories get-global-advisory" [
   ghsa_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -191,7 +191,7 @@ export def "advisories security-advisories/get-global-advisory" [
 # GET /agents/repos/{owner}/{repo}/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#list-tasks-for-repository — API method documentation
 # operationId: agent-tasks/list-tasks-for-repo
-export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
+export def "agents-repos-tasks list-tasks-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -225,7 +225,7 @@ export def "agents-repos-tasks agent-tasks/list-tasks-for-repo" [
 # POST /agents/repos/{owner}/{repo}/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#start-a-task — API method documentation
 # operationId: agent-tasks/create-task-in-repo
-export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
+export def "agents-repos-tasks create-task-in-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +258,7 @@ export def "agents-repos-tasks agent-tasks/create-task-in-repo" [
 # GET /agents/repos/{owner}/{repo}/tasks/{task_id}
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#get-a-task-by-repo — API method documentation
 # operationId: agent-tasks/get-task-by-repo-and-id
-export def "agents-repos-tasks agent-tasks/get-task-by-repo-and-id" [
+export def "agents-repos-tasks get-task-by-repo-and-id" [
   owner: string
   repo: string
   task_id: string
@@ -284,7 +284,7 @@ export def "agents-repos-tasks agent-tasks/get-task-by-repo-and-id" [
 # GET /agents/tasks
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#list-tasks — API method documentation
 # operationId: agent-tasks/list-tasks
-export def "agents-tasks agent-tasks/list-tasks" [
+export def "agents-tasks list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "agents-tasks agent-tasks/list-tasks" [
 # GET /agents/tasks/{task_id}
 # Docs: https://docs.github.com/rest/agent-tasks/agent-tasks#get-a-task-by-id — API method documentation
 # operationId: agent-tasks/get-task-by-id
-export def "agents-tasks agent-tasks/get-task-by-id" [
+export def "agents-tasks get-task-by-id" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "agents-tasks agent-tasks/get-task-by-id" [
 # GET /app
 # Docs: https://docs.github.com/rest/apps/apps#get-the-authenticated-app — API method documentation
 # operationId: apps/get-authenticated
-export def "app apps/get-authenticated" [
+export def "app get-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "app apps/get-authenticated" [
 # POST /app-manifests/{code}/conversions
 # Docs: https://docs.github.com/rest/apps/apps#create-a-github-app-from-a-manifest — API method documentation
 # operationId: apps/create-from-manifest
-export def "app-manifests-conversions apps/create-from-manifest" [
+export def "app-manifests-conversions create-from-manifest" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "app-manifests-conversions apps/create-from-manifest" [
 # GET /app/hook/config
 # Docs: https://docs.github.com/rest/apps/webhooks#get-a-webhook-configuration-for-an-app — API method documentation
 # operationId: apps/get-webhook-config-for-app
-export def "app-hook-config apps/get-webhook-config-for-app" [
+export def "app-hook-config get-webhook-config-for-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "app-hook-config apps/get-webhook-config-for-app" [
 # PATCH /app/hook/config
 # Docs: https://docs.github.com/rest/apps/webhooks#update-a-webhook-configuration-for-an-app — API method documentation
 # operationId: apps/update-webhook-config-for-app
-export def "app-hook-config apps/update-webhook-config-for-app" [
+export def "app-hook-config update-webhook-config-for-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "app-hook-config apps/update-webhook-config-for-app" [
 # GET /app/hook/deliveries
 # Docs: https://docs.github.com/rest/apps/webhooks#list-deliveries-for-an-app-webhook — API method documentation
 # operationId: apps/list-webhook-deliveries
-export def "app-hook-deliveries apps/list-webhook-deliveries" [
+export def "app-hook-deliveries list-webhook-deliveries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "app-hook-deliveries apps/list-webhook-deliveries" [
 # GET /app/hook/deliveries/{delivery_id}
 # Docs: https://docs.github.com/rest/apps/webhooks#get-a-delivery-for-an-app-webhook — API method documentation
 # operationId: apps/get-webhook-delivery
-export def "app-hook-deliveries apps/get-webhook-delivery" [
+export def "app-hook-deliveries get-webhook-delivery" [
   delivery_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "app-hook-deliveries apps/get-webhook-delivery" [
 # POST /app/hook/deliveries/{delivery_id}/attempts
 # Docs: https://docs.github.com/rest/apps/webhooks#redeliver-a-delivery-for-an-app-webhook — API method documentation
 # operationId: apps/redeliver-webhook-delivery
-export def "app-hook-deliveries-attempts apps/redeliver-webhook-delivery" [
+export def "app-hook-deliveries-attempts apps-redeliver-webhook-delivery" [
   delivery_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "app-hook-deliveries-attempts apps/redeliver-webhook-delivery" [
 # GET /app/installation-requests
 # Docs: https://docs.github.com/rest/apps/apps#list-installation-requests-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installation-requests-for-authenticated-app
-export def "app-installation-requests apps/list-installation-requests-for-authenticated-app" [
+export def "app-installation-requests list-installation-requests-for-authenticated-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "app-installation-requests apps/list-installation-requests-for-authen
 # GET /app/installations
 # Docs: https://docs.github.com/rest/apps/apps#list-installations-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installations
-export def "app-installations apps/list-installations" [
+export def "app-installations list-installations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

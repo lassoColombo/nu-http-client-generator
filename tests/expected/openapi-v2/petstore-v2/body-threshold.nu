@@ -108,14 +108,14 @@ export def "pet-upload-image uploadFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --additionalMetadata: string # Additional data to pass to server
+  --additional-metadata: string # Additional data to pass to server
   --file: path # file to upload
 ]: any -> record<code: int, type: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/pet/($petId)/uploadImage")
-  let body = {additionalMetadata: $additionalMetadata, file: $file} | compact
+  let body = {additionalMetadata: $additional_metadata, file: $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,7 +155,7 @@ export def "pet addPet" [
 # PUT /pet
 # operationId: updatePet
 # --body shape: {id?: int, category?: record, name: string, photoUrls: list, tags?: list, status?: "available"|"pending"|"sold"}
-export def "pet updatePet" [
+export def "pet update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "pet get" [
 #
 # POST /pet/{petId}
 # operationId: updatePetWithForm
-export def "pet updatePetWithForm" [
+export def "pet update-pet-with-form" [
   petId: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "store-order delete" [
 #
 # POST /user/createWithList
 # operationId: createUsersWithListInput
-export def "user-create-with-list createUsersWithListInput" [
+export def "user-create-with-list create-users-with-list-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "user get" [
 # PUT /user/{username}
 # operationId: updateUser
 # --body shape: {id?: int, username?: string, firstName?: string, lastName?: string, email?: string, password?: string, phone?: string, userStatus?: int}
-export def "user updateUser" [
+export def "user update" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +561,7 @@ export def "user-logout logoutUser" [
 #
 # POST /user/createWithArray
 # operationId: createUsersWithArrayInput
-export def "user-create-with-array createUsersWithArrayInput" [
+export def "user-create-with-array create-users-with-array-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "user-create-with-array createUsersWithArrayInput" [
 # POST /user
 # operationId: createUser
 # --body shape: {id?: int, username?: string, firstName?: string, lastName?: string, email?: string, password?: string, phone?: string, userStatus?: int}
-export def "user createUser" [
+export def "user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

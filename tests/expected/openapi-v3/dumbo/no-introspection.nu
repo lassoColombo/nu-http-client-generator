@@ -68,7 +68,7 @@ def base-url-completer [] { ["https://dumbo.k8s.elmec.ad"] }
 def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
 # Completers for enum parameters
-def networkType-completer [] { ["dhcp" "static"] }
+def network-type-completer [] { ["dhcp" "static"] }
 
 
 # POST /api/v1/cloud-init/
@@ -83,18 +83,18 @@ export def "cloud-init create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  networkType: string@networkType-completer # * `dhcp` - dhcp * `static` - static
+  networkType: string@network-type-completer # * `dhcp` - dhcp * `static` - static
   otpVpn: string
-  --ipAddress: string
+  --ip-address: string
   --gateway: string
-  --primaryDns: string
-  --secondaryDns: string
+  --primary-dns: string
+  --secondary-dns: string
 ]: any -> record<networkType: string, otpVpn: string, ipAddress: string, gateway: string, primaryDns: string, secondaryDns: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/cloud-init/")
-  let body = {networkType: $networkType, otpVpn: $otpVpn, ipAddress: $ipAddress, gateway: $gateway, primaryDns: $primaryDns, secondaryDns: $secondaryDns} | compact
+  let body = {networkType: $networkType, otpVpn: $otpVpn, ipAddress: $ip_address, gateway: $gateway, primaryDns: $primary_dns, secondaryDns: $secondary_dns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

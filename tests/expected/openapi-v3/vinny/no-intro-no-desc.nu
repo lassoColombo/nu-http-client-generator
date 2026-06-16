@@ -547,8 +547,8 @@ export def "avcfg-cynet-endpoints list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cynet-info-last-seen-at--gte: string
-  --cynet-info-last-seen-at--lte: string
+  --cynet-info-last-seen-at-gte: string
+  --cynet-info-last-seen-at-lte: string
   --hostname: string
   --ordering: string
   --page: int
@@ -559,7 +559,7 @@ export def "avcfg-cynet-endpoints list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cynet_info__last_seen_at__gte" $cynet_info_last_seen_at__gte "scalar") (serialize-qp "cynet_info__last_seen_at__lte" $cynet_info_last_seen_at__lte "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "scan_group" $scan_group "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cynet_info__last_seen_at__gte" $cynet_info_last_seen_at_gte "scalar") (serialize-qp "cynet_info__last_seen_at__lte" $cynet_info_last_seen_at_lte "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "scan_group" $scan_group "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/avcfg/cynet/endpoints/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

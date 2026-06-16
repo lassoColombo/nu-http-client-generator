@@ -84,7 +84,7 @@ def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-access-requests get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-access-requests get-api-v4-groups-id-access-requests" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +108,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v4/groups/{id}/access_requests
 # operationId: getApiV4GroupsIdAccessRequests
-export def "groups-access-requests get" [
+export def "groups-access-requests get-api-v4-groups-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "groups-access-requests get" [
 #
 # POST /api/v4/groups/{id}/access_requests
 # operationId: postApiV4GroupsIdAccessRequests
-export def "groups-access-requests post" [
+export def "groups-access-requests create-api-v4-groups-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "groups-access-requests post" [
 #
 # PUT /api/v4/groups/{id}/access_requests/{user_id}/approve
 # operationId: putApiV4GroupsIdAccessRequestsUserIdApprove
-export def "groups-access-requests-approve put" [
+export def "groups-access-requests-approve update-api-v4-groups-id-access-requests-user-id-approve" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -185,7 +185,7 @@ export def "groups-access-requests-approve put" [
 #
 # DELETE /api/v4/groups/{id}/access_requests/{user_id}
 # operationId: deleteApiV4GroupsIdAccessRequestsUserId
-export def "groups-access-requests delete" [
+export def "groups-access-requests delete-api-v4-groups-id-access-requests-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +209,7 @@ export def "groups-access-requests delete" [
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmoji
-export def "groups-epics-award-emoji list" [
+export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-emoji" [
   id: string
   epic_iid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -236,7 +236,7 @@ export def "groups-epics-award-emoji list" [
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidAwardEmoji
-export def "groups-epics-award-emoji post" [
+export def "groups-epics-award-emoji create-api-v4-groups-id-epics-epic-iid-award-emoji" [
   id: int
   epic_iid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +264,7 @@ export def "groups-epics-award-emoji post" [
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji get" [
+export def "groups-epics-award-emoji get-api-v4-groups-id-epics-epic-iid-award-emoji-award-id" [
   award_id: int
   id: int
   epic_iid: int
@@ -289,7 +289,7 @@ export def "groups-epics-award-emoji get" [
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji delete" [
+export def "groups-epics-award-emoji delete-api-v4-groups-id-epics-epic-iid-award-emoji-award-id" [
   award_id: int
   id: int
   epic_iid: int
@@ -314,7 +314,7 @@ export def "groups-epics-award-emoji delete" [
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
-export def "groups-epics-notes-award-emoji list" [
+export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji" [
   id: int
   epic_iid: int
   note_id: int
@@ -342,7 +342,7 @@ export def "groups-epics-notes-award-emoji list" [
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
-export def "groups-epics-notes-award-emoji post" [
+export def "groups-epics-notes-award-emoji create-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji" [
   id: int
   epic_iid: int
   note_id: int
@@ -371,7 +371,7 @@ export def "groups-epics-notes-award-emoji post" [
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji get" [
+export def "groups-epics-notes-award-emoji get-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji-award-id" [
   award_id: int
   id: int
   epic_iid: int
@@ -397,7 +397,7 @@ export def "groups-epics-notes-award-emoji get" [
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji delete" [
+export def "groups-epics-notes-award-emoji delete-api-v4-groups-id-epics-epic-iid-notes-note-id-award-emoji-award-id" [
   award_id: int
   id: int
   epic_iid: int
@@ -423,7 +423,7 @@ export def "groups-epics-notes-award-emoji delete" [
 #
 # GET /api/v4/groups/{id}/badges
 # operationId: getApiV4GroupsIdBadges
-export def "groups-badges list" [
+export def "groups-badges get-api-v4-groups-id-badges" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "groups-badges list" [
 #
 # POST /api/v4/groups/{id}/badges
 # operationId: postApiV4GroupsIdBadges
-export def "groups-badges post" [
+export def "groups-badges create-api-v4-groups-id-badges" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "groups-badges post" [
 #
 # GET /api/v4/groups/{id}/badges/render
 # operationId: getApiV4GroupsIdBadgesRender
-export def "groups-badges-render get" [
+export def "groups-badges-render get-api-v4-groups-id-badges-render" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "groups-badges-render get" [
 #
 # GET /api/v4/groups/{id}/badges/{badge_id}
 # operationId: getApiV4GroupsIdBadgesBadgeId
-export def "groups-badges get" [
+export def "groups-badges get-api-v4-groups-id-badges-badge-id" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,7 +529,7 @@ export def "groups-badges get" [
 #
 # PUT /api/v4/groups/{id}/badges/{badge_id}
 # operationId: putApiV4GroupsIdBadgesBadgeId
-export def "groups-badges put" [
+export def "groups-badges update-api-v4-groups-id-badges-badge-id" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -559,7 +559,7 @@ export def "groups-badges put" [
 #
 # DELETE /api/v4/groups/{id}/badges/{badge_id}
 # operationId: deleteApiV4GroupsIdBadgesBadgeId
-export def "groups-badges delete" [
+export def "groups-badges delete-api-v4-groups-id-badges-badge-id" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "groups-badges delete" [
 #
 # GET /api/v4/groups/{id}/custom_attributes
 # operationId: getApiV4GroupsIdCustomAttributes
-export def "groups-custom-attributes list" [
+export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "groups-custom-attributes list" [
 #
 # GET /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: getApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes get" [
+export def "groups-custom-attributes get-api-v4-groups-id-custom-attributes-key" [
   key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "groups-custom-attributes get" [
 #
 # PUT /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: putApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes put" [
+export def "groups-custom-attributes update-api-v4-groups-id-custom-attributes-key" [
   key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -658,7 +658,7 @@ export def "groups-custom-attributes put" [
 #
 # DELETE /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: deleteApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes delete" [
+export def "groups-custom-attributes delete-api-v4-groups-id-custom-attributes-key" [
   key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,7 +682,7 @@ export def "groups-custom-attributes delete" [
 #
 # GET /api/v4/groups
 # operationId: getApiV4Groups
-export def "groups list" [
+export def "groups get-api-v4-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "groups list" [
 # --default_branch_protection_defaults shape: {allowed_to_push?: list, allow_force_push?: bool, allowed_to_merge?: list, code_owner_approval_required?: bool, developer_can_initial_push?: bool}
 # --foundational_agents_statuses item shape: {reference: string, enabled: bool}
 # --ai_settings_attributes shape: {duo_agent_platform_enabled?: bool, duo_workflow_mcp_enabled?: bool, ai_usage_data_collection_enabled?: bool, ai_catalog_restricted_to_group_hierarchy?: bool, foundational_agents_default_enabled?: bool, prompt_injection_protection_level?: "no_checks"|"log_only"|"interrupt", include_recommended_allowed?: bool, allow_all_unix_sockets?: bool, allow_project_extension?: bool, minimum_access_level_execute?: "10"|"15"|"20"|"30"|"40"|"50", minimum_access_level_execute_async?: "30"|"40"|"50", minimum_access_level_manage?: "30"|"40"|"50", minimum_access_level_enable_on_projects?: "30"|"40"|"50"}
-export def "groups post" [
+export def "groups create-api-v4-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "groups post" [
 # --foundational_agents_statuses item shape: {reference: string, enabled: bool}
 # --ai_settings_attributes shape: {duo_agent_platform_enabled?: bool, duo_workflow_mcp_enabled?: bool, ai_usage_data_collection_enabled?: bool, ai_catalog_restricted_to_group_hierarchy?: bool, foundational_agents_default_enabled?: bool, prompt_injection_protection_level?: "no_checks"|"log_only"|"interrupt", include_recommended_allowed?: bool, allow_all_unix_sockets?: bool, allow_project_extension?: bool, minimum_access_level_execute?: "10"|"15"|"20"|"30"|"40"|"50", minimum_access_level_execute_async?: "30"|"40"|"50", minimum_access_level_manage?: "30"|"40"|"50", minimum_access_level_enable_on_projects?: "30"|"40"|"50"}
 # --duo_namespace_access_rules item shape: {through_namespace?: record, features: list}
-export def "groups put" [
+export def "groups update-api-v4-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -890,7 +890,7 @@ export def "groups put" [
 #
 # GET /api/v4/groups/{id}
 # operationId: getApiV4GroupsId
-export def "groups get" [
+export def "groups get-api-v4-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "groups get" [
 #
 # DELETE /api/v4/groups/{id}
 # operationId: deleteApiV4GroupsId
-export def "groups delete" [
+export def "groups delete-api-v4-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -939,7 +939,7 @@ export def "groups delete" [
 #
 # POST /api/v4/groups/{id}/archive
 # operationId: postApiV4GroupsIdArchive
-export def "groups-archive post" [
+export def "groups-archive create-api-v4-groups-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
