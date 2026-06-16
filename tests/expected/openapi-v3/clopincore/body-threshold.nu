@@ -158,7 +158,7 @@ export def "customers update-by-idrs" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/($idrs)/customers/")
-  let body = {idrs: $body_idrs} | compact
+  let body = {"idrs": $body_idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,7 +547,7 @@ export def "customers create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/customers/")
-  let body = {idrs: $idrs} | compact
+  let body = {"idrs": $idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,7 +595,7 @@ export def "customers update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/customers/($id)/")
-  let body = {idrs: $idrs} | compact
+  let body = {"idrs": $idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,7 +664,7 @@ export def "dmilogs create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dmilogs/")
-  let body = {name: $name, customer: $customer} | compact
+  let body = {"name": $name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -713,7 +713,7 @@ export def "dmilogs update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/dmilogs/($id)/")
-  let body = {name: $name, customer: $customer} | compact
+  let body = {"name": $name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,7 +784,7 @@ export def "dmilogs update-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/dmilogs/($name)/")
-  let body = {name: $body_name, customer: $customer} | compact
+  let body = {"name": $body_name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -970,7 +970,7 @@ export def "domains create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/domains/")
-  let body = {name: $name, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1020,7 +1020,7 @@ export def "domains update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/domains/($id)/")
-  let body = {name: $name, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,7 +1092,7 @@ export def "domains update-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/domains/($name)/")
-  let body = {name: $body_name, customer: $customer, state: $state} | compact
+  let body = {"name": $body_name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

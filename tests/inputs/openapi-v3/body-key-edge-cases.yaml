@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: body-key-edge-cases
+  version: 1.0.0
+  description: |
+    Synthetic spec exercising body record key and positional sanitization edge cases.
+    Body property names contain spaces, slashes, colons, and one that fully
+    sanitizes to empty. Also exercises a path/query param whose source name
+    ends in a colon.
+servers:
+  - url: https://example.com
+paths:
+  /things:
+    post:
+      operationId: things_create
+      tags:
+        - things
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - "harry potter"
+                - "Aux Price"
+                - "Location:"
+                - "osdb:body_data"
+                - "Upload Yaml/Yml File"
+                - ":"
+              properties:
+                "harry potter":
+                  type: string
+                "Aux Price":
+                  type: string
+                "Location:":
+                  type: string
+                "osdb:body_data":
+                  type: string
+                "Upload Yaml/Yml File":
+                  type: string
+                ":":
+                  type: string
+                "address":
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /things/{insight_id:}:
+    get:
+      operationId: insights_get
+      tags:
+        - insights
+      parameters:
+        - name: "insight_id:"
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object

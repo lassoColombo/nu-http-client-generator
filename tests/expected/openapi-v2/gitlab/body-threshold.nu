@@ -173,7 +173,7 @@ export def "groups-access-requests-approve update-api-v4-groups-id-access-reques
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/access_requests/($user_id)/approve")
-  let body = {access_level: $access_level} | compact
+  let body = {"access_level": $access_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -252,7 +252,7 @@ export def "groups-epics-award-emoji create-api-v4-groups-id-epics-epic-iid-awar
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/epics/($epic_iid)/award_emoji")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "groups-epics-notes-award-emoji create-api-v4-groups-id-epics-epic-ii
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/epics/($epic_iid)/notes/($note_id)/award_emoji")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "groups-badges create-api-v4-groups-id-badges" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/badges")
-  let body = {link_url: $link_url, image_url: $image_url, name: $name} | compact
+  let body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,7 +547,7 @@ export def "groups-badges update-api-v4-groups-id-badges-badge-id" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/badges/($badge_id)")
-  let body = {link_url: $link_url, image_url: $image_url, name: $name} | compact
+  let body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,7 +646,7 @@ export def "groups-custom-attributes update-api-v4-groups-id-custom-attributes-k
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v4/groups/($id)/custom_attributes/($key)")
-  let body = {value: $value} | compact
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -158,7 +158,7 @@ export def "customers update-by-idrs" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/($idrs)/customers/")
-  let body = {idrs: $body_idrs} | compact
+  let body = {"idrs": $body_idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,7 +361,7 @@ export def "sspm create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/SSPM/")
-  let body = {tech: $tech, customer: $customer, activation_date: $activation_date, dismission_date: $dismission_date} | compact
+  let body = {"tech": $tech, "customer": $customer, "activation_date": $activation_date, "dismission_date": $dismission_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "sspm update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/SSPM/($customer)/($tech)/")
-  let body = {tech: $body_tech, customer: $body_customer, activation_date: $activation_date, dismission_date: $dismission_date} | compact
+  let body = {"tech": $body_tech, "customer": $body_customer, "activation_date": $activation_date, "dismission_date": $dismission_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +488,7 @@ export def "sspm update-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/SSPM/($id)/")
-  let body = {tech: $tech, customer: $customer, activation_date: $activation_date, dismission_date: $dismission_date} | compact
+  let body = {"tech": $tech, "customer": $customer, "activation_date": $activation_date, "dismission_date": $dismission_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,7 +556,7 @@ export def "customers create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/customers/")
-  let body = {idrs: $idrs} | compact
+  let body = {"idrs": $idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,7 +604,7 @@ export def "customers update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/customers/($id)/")
-  let body = {idrs: $idrs} | compact
+  let body = {"idrs": $idrs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +673,7 @@ export def "dmilogs create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dmilogs/")
-  let body = {name: $name, customer: $customer} | compact
+  let body = {"name": $name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,7 +722,7 @@ export def "dmilogs update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/dmilogs/($id)/")
-  let body = {name: $name, customer: $customer} | compact
+  let body = {"name": $name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -793,7 +793,7 @@ export def "dmilogs update-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/dmilogs/($name)/")
-  let body = {name: $body_name, customer: $customer} | compact
+  let body = {"name": $body_name, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -867,7 +867,7 @@ export def "domain-findings create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/domain-findings/")
-  let body = {insertion_date: $insertion_date, url: $body_url, domain: $domain, username: $username, password: $password, kind: $kind, anti_virus: $anti_virus} | compact
+  let body = {"insertion_date": $insertion_date, "url": $body_url, "domain": $domain, "username": $username, "password": $password, "kind": $kind, "anti_virus": $anti_virus} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,7 +921,7 @@ export def "domain-findings update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/domain-findings/($id)/")
-  let body = {insertion_date: $insertion_date, url: $body_url, domain: $domain, username: $username, password: $password, kind: $kind, anti_virus: $anti_virus} | compact
+  let body = {"insertion_date": $insertion_date, "url": $body_url, "domain": $domain, "username": $username, "password": $password, "kind": $kind, "anti_virus": $anti_virus} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,7 +991,7 @@ export def "domains create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/domains/")
-  let body = {name: $name, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "domains update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/domains/($id)/")
-  let body = {name: $name, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1113,7 +1113,7 @@ export def "domains update-by-name" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/domains/($name)/")
-  let body = {name: $body_name, customer: $customer, state: $state} | compact
+  let body = {"name": $body_name, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1186,7 +1186,7 @@ export def "pegasus-sources create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/pegasus-sources/")
-  let body = {customer: $customer, dmilog: $dmilog, provider: $provider, identity: $identity, auth_expiry: $auth_expiry, source: $body_source} | compact
+  let body = {"customer": $customer, "dmilog": $dmilog, "provider": $provider, "identity": $identity, "auth_expiry": $auth_expiry, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1239,7 +1239,7 @@ export def "pegasus-sources update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/pegasus-sources/($id)/")
-  let body = {customer: $customer, dmilog: $dmilog, provider: $provider, identity: $identity, auth_expiry: $auth_expiry, source: $body_source} | compact
+  let body = {"customer": $customer, "dmilog": $dmilog, "provider": $provider, "identity": $identity, "auth_expiry": $auth_expiry, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1310,7 +1310,7 @@ export def "startupvariables create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/startupvariables/")
-  let body = {name: $name, dmilog: $dmilog, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "dmilog": $dmilog, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1363,7 +1363,7 @@ export def "startupvariables update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/startupvariables/($dmilog)/($name)/")
-  let body = {name: $body_name, dmilog: $body_dmilog, customer: $customer, state: $state} | compact
+  let body = {"name": $body_name, "dmilog": $body_dmilog, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1437,7 +1437,7 @@ export def "startupvariables update-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/startupvariables/($id)/")
-  let body = {name: $name, dmilog: $dmilog, customer: $customer, state: $state} | compact
+  let body = {"name": $name, "dmilog": $dmilog, "customer": $customer, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1532,7 +1532,7 @@ export def "timonextractor create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/timonextractor/")
-  let body = {customer: $customer, dmilog: $dmilog, size_limit: $size_limit, submit: $submit} | compact
+  let body = {"customer": $customer, "dmilog": $dmilog, "size_limit": $size_limit, "submit": $submit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,7 +1583,7 @@ export def "timonextractor update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/timonextractor/($id)/")
-  let body = {customer: $customer, dmilog: $dmilog, size_limit: $size_limit, submit: $submit} | compact
+  let body = {"customer": $customer, "dmilog": $dmilog, "size_limit": $size_limit, "submit": $submit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

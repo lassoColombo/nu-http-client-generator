@@ -83,8 +83,8 @@ export def "cloud-init create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  networkType: string@network-type-completer
-  otpVpn: string
+  network_type: string@network-type-completer
+  otp_vpn: string
   --ip-address: string
   --gateway: string
   --primary-dns: string
@@ -94,7 +94,7 @@ export def "cloud-init create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/cloud-init/")
-  let body = {networkType: $networkType, otpVpn: $otpVpn, ipAddress: $ip_address, gateway: $gateway, primaryDns: $primary_dns, secondaryDns: $secondary_dns} | compact
+  let body = {"networkType": $network_type, "otpVpn": $otp_vpn, "ipAddress": $ip_address, "gateway": $gateway, "primaryDns": $primary_dns, "secondaryDns": $secondary_dns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "dmilog update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/v1/dmilog/($name)/")
-  let body = {name: $body_name, activate: $activate, deactivate: $deactivate, commit_message: $commit_message} | compact
+  let body = {"name": $body_name, "activate": $activate, "deactivate": $deactivate, "commit_message": $commit_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "hooks-chart create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/chart")
-  let body = {version: $version, project_id: $project_id} | compact
+  let body = {"version": $version, "project_id": $project_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "hooks-dmilog create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/dmilog")
-  let body = {sha: $sha, project_id: $project_id, commit_message: $commit_message} | compact
+  let body = {"sha": $sha, "project_id": $project_id, "commit_message": $commit_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

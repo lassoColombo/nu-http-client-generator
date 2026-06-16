@@ -138,7 +138,7 @@ export def "access-requests create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/access_requests")
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +293,7 @@ export def "allocations update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/allocations/($allocation_gid)" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,7 +376,7 @@ export def "allocations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/allocations" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +488,7 @@ export def "attachments create-attachment-for-object" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/attachments" $qp)
-  let body = {resource_subtype: $resource_subtype, file: $file, parent: $parent, url: $body_url, name: $name, connect_to_app: $connect_to_app} | compact
+  let body = {"resource_subtype": $resource_subtype, "file": $file, "parent": $parent, "url": $body_url, "name": $name, "connect_to_app": $connect_to_app} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,7 +549,7 @@ export def "batch create-batch-request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/batch" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,7 +602,7 @@ export def "budgets create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/budgets" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -658,7 +658,7 @@ export def "budgets update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base $"/budgets/($budget_gid)" $qp)
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

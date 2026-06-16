@@ -1,0 +1,71 @@
+openapi: 3.0.3
+info:
+  title: Reserved Name Edge Cases
+  version: 1.0.0
+servers:
+  - url: https://example.com/api
+paths:
+  /search:
+    get:
+      operationId: searchByEnv
+      tags: [search]
+      parameters:
+        - name: env
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  /things/{in}:
+    get:
+      operationId: getThingByIn
+      tags: [things]
+      parameters:
+        - name: in
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  /envs/{env}:
+    get:
+      operationId: getEnvByName
+      tags: [envs]
+      parameters:
+        - name: env
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  /jobs:
+    post:
+      operationId: createJob
+      tags: [jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dryRun, raw, baseUrl]
+              properties:
+                dryRun:
+                  type: boolean
+                raw:
+                  type: string
+                baseUrl:
+                  type: string
+                token:
+                  type: string
+                accept:
+                  type: string
+      responses:
+        '200':
+          description: ok

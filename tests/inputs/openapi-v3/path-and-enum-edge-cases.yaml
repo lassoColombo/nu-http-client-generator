@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: path-and-enum-edge-cases
+  version: 1.0.0
+  description: |
+    Synthetic spec exercising edge cases in path-template emission and enum
+    completer rendering.
+    - Path template containing literal parens around interpolated path params
+      (Azure-style OData composite keys).
+    - Multiple operations sharing an enum with values that contain commas and
+      spaces, plus enum values that include embedded double-quotes — verifies
+      completer dedup + safe escaping.
+servers:
+  - url: https://example.com
+paths:
+  /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint}):
+    get:
+      operationId: certificates_get
+      tags:
+        - certificates
+      parameters:
+        - name: thumbprintAlgorithm
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: thumbprint
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /sites:
+    get:
+      operationId: sites_list
+      tags:
+        - sites
+      parameters:
+        - name: anchorsite_override
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "Ashburn, VA"
+              - "Chicago, IL"
+              - "San Jose, CA"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /sites/active:
+    get:
+      operationId: sites_list_active
+      tags:
+        - sites
+      parameters:
+        - name: anchorsite_override
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "Ashburn, VA"
+              - "Chicago, IL"
+              - "San Jose, CA"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /quoted-enum:
+    get:
+      operationId: quoted_enum_get
+      tags:
+        - quoted
+      parameters:
+        - name: literal_quoted
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - "\"Latency\""
+              - "\"Ashburn, VA\""
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object

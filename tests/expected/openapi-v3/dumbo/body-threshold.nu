@@ -214,7 +214,7 @@ export def "hooks-chart create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/chart")
-  let body = {version: $version, project_id: $project_id} | compact
+  let body = {"version": $version, "project_id": $project_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "hooks-dmilog create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/dmilog")
-  let body = {sha: $sha, project_id: $project_id, commit_message: $commit_message} | compact
+  let body = {"sha": $sha, "project_id": $project_id, "commit_message": $commit_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

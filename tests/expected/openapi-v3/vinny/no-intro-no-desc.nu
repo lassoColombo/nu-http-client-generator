@@ -120,7 +120,7 @@ export def "avcfg-asset-enable patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/asset/enable/($id)/")
-  let body = {type: $type, hostname: $hostname, last_seen: $last_seen, health_status: $health_status, active_av: $active_av, person_name: $person_name, via_login: $via_login, atlantis_id: $atlantis_id} | compact
+  let body = {"type": $type, "hostname": $hostname, "last_seen": $last_seen, "health_status": $health_status, "active_av": $active_av, "person_name": $person_name, "via_login": $via_login, "atlantis_id": $atlantis_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,7 +218,7 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/alerts/acknowledge/($id)/")
-  let body = {uniqueness: $uniqueness, incident_name: $incident_name, eps_prevention: $eps_prevention, eps_prevention_success: $eps_prevention_success, path: $path, command_line: $command_line, alert_ip: $alert_ip, alert_domain: $alert_domain, alert_url: $alert_url, username: $username, severity: $severity, status: $status, alert_type: $alert_type, date_in: $date_in, last_seen: $last_seen, date_changed: $date_changed, remediation_status: $remediation_status, scan_group_name: $scan_group_name, file: $file, acknowledged: $acknowledged, notified_llama: $notified_llama, notified_cardinalis: $notified_cardinalis, customer: $customer} | compact
+  let body = {"uniqueness": $uniqueness, "incident_name": $incident_name, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "path": $path, "command_line": $command_line, "alert_ip": $alert_ip, "alert_domain": $alert_domain, "alert_url": $alert_url, "username": $username, "severity": $severity, "status": $status, "alert_type": $alert_type, "date_in": $date_in, "last_seen": $last_seen, "date_changed": $date_changed, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "file": $file, "acknowledged": $acknowledged, "notified_llama": $notified_llama, "notified_cardinalis": $notified_cardinalis, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/alerts/acknowledge/($id)/")
-  let body = {uniqueness: $uniqueness, incident_name: $incident_name, eps_prevention: $eps_prevention, eps_prevention_success: $eps_prevention_success, path: $path, command_line: $command_line, alert_ip: $alert_ip, alert_domain: $alert_domain, alert_url: $alert_url, username: $username, severity: $severity, status: $status, alert_type: $alert_type, date_in: $date_in, last_seen: $last_seen, date_changed: $date_changed, remediation_status: $remediation_status, scan_group_name: $scan_group_name, file: $file, acknowledged: $acknowledged, notified_llama: $notified_llama, notified_cardinalis: $notified_cardinalis, customer: $customer} | compact
+  let body = {"uniqueness": $uniqueness, "incident_name": $incident_name, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "path": $path, "command_line": $command_line, "alert_ip": $alert_ip, "alert_domain": $alert_domain, "alert_url": $alert_url, "username": $username, "severity": $severity, "status": $status, "alert_type": $alert_type, "date_in": $date_in, "last_seen": $last_seen, "date_changed": $date_changed, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "file": $file, "acknowledged": $acknowledged, "notified_llama": $notified_llama, "notified_cardinalis": $notified_cardinalis, "customer": $customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,7 +676,7 @@ export def "avcfg-cynet-tenant update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
-  let body = {name: $name, enable: $enable, note: $note, alert: $alert, discovery: $discovery, cynet_info: $cynet_info} | compact
+  let body = {"name": $name, "enable": $enable, "note": $note, "alert": $alert, "discovery": $discovery, "cynet_info": $cynet_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +707,7 @@ export def "avcfg-cynet-tenant patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/avcfg/cynet/tenant/($id)/")
-  let body = {name: $name, enable: $enable, note: $note, alert: $alert, discovery: $discovery, cynet_info: $cynet_info} | compact
+  let body = {"name": $name, "enable": $enable, "note": $note, "alert": $alert, "discovery": $discovery, "cynet_info": $cynet_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,7 +737,7 @@ export def "avcfg-cynet-tenant-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/avcfg/cynet/tenant/create/")
-  let body = {name: $name, enable: $enable, note: $note, alert: $alert, discovery: $discovery, cynet_info: $cynet_info} | compact
+  let body = {"name": $name, "enable": $enable, "note": $note, "alert": $alert, "discovery": $discovery, "cynet_info": $cynet_info} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

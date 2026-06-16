@@ -41,8 +41,8 @@ const RESERVED_NAMES = [in nu nothing]
 # Variable names reserved in generated commands — body/query/header fields that
 # match any of these get a prefix to avoid shadowing.
 const RESERVED_VARS = [
-  # nushell language keywords
-  in nu nothing null true false
+  # nushell language keywords and built-in variables
+  in nu nothing null true false env
   if else match for while loop break continue return
   let mut const def export use module source overlay
   where each error try catch not do
@@ -70,7 +70,7 @@ export def to-flag-name [name: string] {
 
 # Sanitize a field name to a valid nushell variable name (underscores, no special chars)
 def to-var-name [name: string] {
-  $name | str replace --all '-' '_' | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' '' | str replace --regex '_{2,}' '_' | str trim --char '_'
+  $name | str kebab-case | str replace --all '-' '_' | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' '' | str replace --regex '_{2,}' '_' | str trim --char '_'
 }
 
 # Convert a parameter name to a nushell variable name (flag-style then underscored)
@@ -90,11 +90,36 @@ def effective-flag-var [name: string, prefix: string] {
   effective-flag-name $name $prefix | str replace --all '-' '_'
 }
 
+# Names that cannot appear as a positional parameter on a generated `def`.
+# Narrower than RESERVED_VARS — body-code `let` bindings can safely shadow
+# positionals, so we only block actual language keywords, built-in variables,
+# and the universal signature flags that share the same def block.
+const RESERVED_POSITIONALS = [
+  in nu nothing null true false env
+  if else match for while loop break continue return
+  let mut const def export use module source overlay
+  base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
+]
+
+# Effective positional path-param variable name. Sanitizes the path param's
+# variable form and, if it collides with a Nushell reserved name, prefixes
+# with `path_` so the generated `def` parameter is valid.
+export def effective-positional-var [name: string] {
+  let sanitized = (to-var-name $name)
+  let cleaned = if ($sanitized | is-empty) { "param" } else { $sanitized }
+  if ($cleaned in $RESERVED_POSITIONALS) { $"path_($cleaned)" } else { $cleaned }
+}
+
 # Render a list of params as a nushell record literal string (e.g. "key": $var, ...)
 def render-param-record [params: list, prefix: string, --quote-keys] {
   $params | each {|p|
     let var = (effective-flag-var $p.name $prefix)
-    if $quote_keys { $'"($p.name)": $($var)' } else { $'($p.name): $($var)' }
+    if $quote_keys {
+      let escaped = ($p.name | str replace --all '\' '\\' | str replace --all '"' '\"')
+      $'"($escaped)": $($var)'
+    } else {
+      $'($p.name): $($var)'
+    }
   } | str join ", "
 }
 
@@ -130,10 +155,16 @@ export def collect-completers [commands: list] {
   {completers: $completers, mapping: $mapping}
 }
 
-# Render completer functions as nushell source
+# Render completer functions as nushell source.
+# Values may contain embedded double-quotes or backslashes (e.g. specs that
+# include `"\"Latency\""` as an enum value). Escape those so the emitted
+# string literal is well-formed.
 export def render-completers [completers: record] {
   $completers | transpose name values | each {|c|
-    let vals = $c.values | each {|v| $'"($v)"' } | str join ' '
+    let vals = ($c.values | each {|v|
+      let escaped = ($v | str replace --all '\' '\\' | str replace --all '"' '\"')
+      $'"($escaped)"'
+    } | str join ' ')
     $'def ($c.name) [] { [($vals)] }'
   } | str join "\n"
 }
@@ -207,7 +238,8 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 
   for p in $cmd.path_params {
     let nu_type = (openapi-to-nu-type $p.type)
-    $parts = ($parts | append $"  ($p.name): ($nu_type)")
+    let pname = (effective-positional-var $p.name)
+    $parts = ($parts | append $"  ($pname): ($nu_type)")
   }
 
   $parts = ($parts | append [
@@ -256,7 +288,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
       let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
       $parts = ($parts | append $"  --body: record($body_desc)")
     } else {
-      let path_param_names = ($cmd.path_params | each {|p| $p.name })
+      let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       for f in $cmd.body_fields {
         let nu_type = (openapi-to-nu-type $f.type)
         let shape_hint = (lookup-shape $f.name $shapes)
@@ -264,7 +296,8 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
         let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
         let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
         let sanitized_name = (to-var-name $f.name)
-        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        let flag_var = (to-flag-var $f.name)
+        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
         let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
         let is_nullable = ($f.nullable? | default false)
         if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
@@ -390,16 +423,28 @@ export def build-body-code [cmd: record, config: record] {
   }
 
   let path_expr = if ($cmd.path_params | length) > 0 {
-    mut path_str = $cmd.path_template
+    # Escape characters that have meaning inside $"..." interpolation strings:
+    # backslash, double-quote, and parens (which open a sub-expression).
+    # Done BEFORE param substitution so the inserted ($var) syntax is preserved.
+    mut path_str = ($cmd.path_template
+      | str replace --all '\' '\\'
+      | str replace --all '"' '\"'
+      | str replace --all '(' '\('
+      | str replace --all ')' '\)')
     for p in $cmd.path_params {
       let orig = ($p.original_name? | default $p.name)
       let placeholder = $'{($orig)}'
-      let replacement = $"\($($p.name)\)"
+      let pvar = (effective-positional-var $p.name)
+      let replacement = $"\($($pvar)\)"
       $path_str = ($path_str | str replace $placeholder $replacement)
     }
     $"$\"($path_str)\""
   } else {
-    $"\"($cmd.path_template)\""
+    # No interpolation: emit as a plain double-quoted string with escapes.
+    let escaped = ($cmd.path_template
+      | str replace --all '\' '\\'
+      | str replace --all '"' '\"')
+    $"\"($escaped)\""
   }
 
   if ($cmd.query_params | length) > 0 {
@@ -416,20 +461,28 @@ export def build-body-code [cmd: record, config: record] {
   if $cmd.has_body and ($cmd.body_fields | length) > 0 {
     let use_collapsed = ($config.body_threshold > 0) and (($cmd.body_fields | length) > $config.body_threshold)
     if not $use_collapsed {
-      let path_param_names = ($cmd.path_params | each {|p| $p.name })
-      let body_parts = $cmd.body_fields | each {|f|
+      let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
+      let body_parts = $cmd.body_fields | enumerate | each {|item|
+        let f = $item.item
+        let idx = $item.index
         let sanitized_name = (to-var-name $f.name)
-        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        let flag_base = (to-flag-var $f.name)
+        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_base in $RESERVED_VARS) or ($sanitized_name | is-empty)
         let nu_type = (openapi-to-nu-type $f.type)
         let is_nullable = ($f.nullable? | default false)
         let var_name = if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
           $'$($sanitized_name)'
         } else {
-          let flag_base = (to-flag-var $f.name)
           let flag = if $collides { $'body_($flag_base)' } else { $flag_base }
           $'$($flag)'
         }
-        $'($f.name): ($var_name)'
+        # Use the original spec field name as the body key, but fall back to a
+        # synthetic name when it is empty (e.g. the field name was ":" and the
+        # sanitizer reduced it to ""). Always quote the key so names with
+        # spaces, slashes, or colons are valid Nushell record syntax.
+        let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
+        let escaped_key = ($key | str replace --all '\' '\\' | str replace --all '"' '\"')
+        $'"($escaped_key)": ($var_name)'
       } | str join ", "
       $lines = ($lines | append ($"  let body = {($body_parts)} | compact"))
     }
@@ -446,7 +499,7 @@ export def build-body-code [cmd: record, config: record] {
   }
 
   if ($cmd.cookie_params | length) > 0 {
-    let cp_record = (render-param-record $cmd.cookie_params "ck")
+    let cp_record = (render-param-record $cmd.cookie_params "ck" --quote-keys)
     $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | transpose k v | where { $in.v != null } | each { $\"\($in.k\)=\($in.v\)\" } | str join \"; \""))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
@@ -461,10 +514,17 @@ export def build-body-code [cmd: record, config: record] {
 
   if $cmd.has_body and ($cmd.content_type == "multipart/form-data") and ($cmd.body_fields | length) > 0 {
     let file_fields = ($cmd.body_fields | where {|f| $f.type == "file" })
+    let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
     for f in $file_fields {
       let sanitized = (to-var-name $f.name)
       let flag_var = (to-flag-var $f.name)
-      let var = if $f.required { $'$($sanitized)' } else { $'$($flag_var)' }
+      let collides = ($sanitized in $path_param_names) or ($sanitized in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized | is-empty)
+      let var = if $f.required and (not $collides) {
+        $'$($sanitized)'
+      } else {
+        let flag = if $collides { $'body_($flag_var)' } else { $flag_var }
+        $'$($flag)'
+      }
       $lines = ($lines | append ($"  let body = if \(($var) | is-not-empty\) { $body | upsert ($f.name) \(open -r ($var)\) } else { $body }"))
     }
   }

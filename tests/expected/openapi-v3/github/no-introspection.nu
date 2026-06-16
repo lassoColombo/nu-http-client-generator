@@ -223,7 +223,7 @@ export def "agents-repos-tasks create-task-in-repo" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/agents/repos/($owner)/($repo)/tasks")
-  let body = {prompt: $prompt, model: $model, create_pull_request: $create_pull_request, base_ref: $base_ref, head_ref: $head_ref} | compact
+  let body = {"prompt": $prompt, "model": $model, "create_pull_request": $create_pull_request, "base_ref": $base_ref, "head_ref": $head_ref} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "app-hook-config update-webhook-config-for-app" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/hook/config")
-  let body = {url: $body_url, content_type: $content_type, secret: $secret, insecure_ssl: $insecure_ssl} | compact
+  let body = {"url": $body_url, "content_type": $content_type, "secret": $secret, "insecure_ssl": $insecure_ssl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

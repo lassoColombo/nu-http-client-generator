@@ -114,7 +114,7 @@ export def "pet update" [
   --id: int # format: int64, e.g. 10
   name: string # e.g. doggie
   --category: record # shape: {id?: int, name?: string}
-  photoUrls: list
+  photo_urls: list
   --tags: list # item shape: {id?: int, name?: string}
   --status: string@status-completer # pet status in the store
 ]: any -> record<id: int, name: string, category: record<id: int, name: string>, photoUrls: list<string>, tags: table<id: int, name: string>, status: string> {
@@ -122,7 +122,7 @@ export def "pet update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pet")
-  let body = {id: $id, name: $name, category: $category, photoUrls: $photoUrls, tags: $tags, status: $status} | compact
+  let body = {"id": $id, "name": $name, "category": $category, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,7 +148,7 @@ export def "pet addPet" [
   --id: int # format: int64, e.g. 10
   name: string # e.g. doggie
   --category: record # shape: {id?: int, name?: string}
-  photoUrls: list
+  photo_urls: list
   --tags: list # item shape: {id?: int, name?: string}
   --status: string@status-completer # pet status in the store
 ]: any -> record<id: int, name: string, category: record<id: int, name: string>, photoUrls: list<string>, tags: table<id: int, name: string>, status: string> {
@@ -156,7 +156,7 @@ export def "pet addPet" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pet")
-  let body = {id: $id, name: $name, category: $category, photoUrls: $photoUrls, tags: $tags, status: $status} | compact
+  let body = {"id": $id, "name": $name, "category": $category, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,7 +218,7 @@ export def "pet-find-by-tags findPetsByTags" [
 # GET /pet/{petId}
 # operationId: getPetById
 export def "pet get" [
-  petId: int
+  pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "pet get" [
 ]: nothing -> record<id: int, name: string, category: record<id: int, name: string>, photoUrls: list<string>, tags: table<id: int, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pet/($petId)")
+  let full_url = (build-url $base $"/pet/($pet_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,7 +242,7 @@ export def "pet get" [
 # POST /pet/{petId}
 # operationId: updatePetWithForm
 export def "pet update-pet-with-form" [
-  petId: int
+  pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "pet update-pet-with-form" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pet/($petId)" $qp)
+  let full_url = (build-url $base $"/pet/($pet_id)" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "pet update-pet-with-form" [
 # DELETE /pet/{petId}
 # operationId: deletePet
 export def "pet delete" [
-  petId: int
+  pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "pet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pet/($petId)")
+  let full_url = (build-url $base $"/pet/($pet_id)")
   let extra_headers = {"api_key": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -295,7 +295,7 @@ export def "pet delete" [
 # POST /pet/{petId}/uploadImage
 # operationId: uploadFile
 export def "pet-upload-image uploadFile" [
-  petId: int
+  pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "pet-upload-image uploadFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "additionalMetadata" $additional_metadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pet/($petId)/uploadImage" $qp)
+  let full_url = (build-url $base $"/pet/($pet_id)/uploadImage" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,7 +364,7 @@ export def "store-order placeOrder" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/store/order")
-  let body = {id: $id, petId: $pet_id, quantity: $quantity, shipDate: $ship_date, status: $status, complete: $complete} | compact
+  let body = {"id": $id, "petId": $pet_id, "quantity": $quantity, "shipDate": $ship_date, "status": $status, "complete": $complete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,7 +376,7 @@ export def "store-order placeOrder" [
 # GET /store/order/{orderId}
 # operationId: getOrderById
 export def "store-order get" [
-  orderId: int
+  order_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "store-order get" [
 ]: nothing -> record<id: int, petId: int, quantity: int, shipDate: string, status: string, complete: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/store/order/($orderId)")
+  let full_url = (build-url $base $"/store/order/($order_id)")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +400,7 @@ export def "store-order get" [
 # DELETE /store/order/{orderId}
 # operationId: deleteOrder
 export def "store-order delete" [
-  orderId: int
+  order_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "store-order delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/store/order/($orderId)")
+  let full_url = (build-url $base $"/store/order/($order_id)")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,7 +445,7 @@ export def "user create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
-  let body = {id: $id, username: $username, firstName: $first_name, lastName: $last_name, email: $email, password: $password, phone: $phone, userStatus: $user_status} | compact
+  let body = {"id": $id, "username": $username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,7 +577,7 @@ export def "user update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/user/($username)")
-  let body = {id: $id, username: $body_username, firstName: $first_name, lastName: $last_name, email: $email, password: $password, phone: $phone, userStatus: $user_status} | compact
+  let body = {"id": $id, "username": $body_username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

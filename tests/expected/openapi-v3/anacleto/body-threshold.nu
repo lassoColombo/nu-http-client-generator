@@ -122,7 +122,7 @@ export def "carpet-active-idrs create" [
 # GET /api/carpet/v1/asset_list/idrs/{IDRS}/
 # operationId: api_carpet_v1_asset_list_idrs_list
 export def "carpet-asset-list-idrs list" [
-  IDRS: string
+  idrs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "carpet-asset-list-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/carpet/v1/asset_list/idrs/($IDRS)/" $qp)
+  let full_url = (build-url $base $"/api/carpet/v1/asset_list/idrs/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +150,7 @@ export def "carpet-asset-list-idrs list" [
 # GET /api/carpet/v1/host/idrs/{IDRS}/
 # operationId: api_carpet_v1_host_idrs_retrieve
 export def "carpet-host-idrs get" [
-  IDRS: string
+  idrs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "carpet-host-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/carpet/v1/host/idrs/($IDRS)/")
+  let full_url = (build-url $base $"/api/carpet/v1/host/idrs/($idrs)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "carpet-host-idrs get" [
 # GET /api/delivery/v1/apikeys/idrs/{IDRS}/
 # operationId: api_delivery_v1_apikeys_idrs_retrieve
 export def "delivery-apikeys-idrs get" [
-  IDRS: string
+  idrs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "delivery-apikeys-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/delivery/v1/apikeys/idrs/($IDRS)/")
+  let full_url = (build-url $base $"/api/delivery/v1/apikeys/idrs/($idrs)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +247,7 @@ export def "delivery-asset-tag-create create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/delivery/v1/asset-tag/create/")
-  let body = {idrs: $idrs, name: $name} | compact
+  let body = {"idrs": $idrs, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "delivery-asset-tag-edit update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/delivery/v1/asset-tag/edit/($id)/")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -309,7 +309,7 @@ export def "delivery-asset-tag-edit update" [
 # GET /api/delivery/v1/asset-tag/idrs/{IDRS}/
 # operationId: api_delivery_v1_asset_tag_idrs_list
 export def "delivery-asset-tag-idrs list" [
-  IDRS: string
+  idrs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "delivery-asset-tag-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/delivery/v1/asset-tag/idrs/($IDRS)/" $qp)
+  let full_url = (build-url $base $"/api/delivery/v1/asset-tag/idrs/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -459,7 +459,7 @@ export def "delivery-asset-details update" [
 # GET /api/delivery/v1/asset/idrs/{IDRS}/
 # operationId: api_delivery_v1_asset_idrs_list
 export def "delivery-asset-idrs list" [
-  IDRS: string
+  idrs: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "delivery-asset-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/delivery/v1/asset/idrs/($IDRS)/" $qp)
+  let full_url = (build-url $base $"/api/delivery/v1/asset/idrs/($idrs)/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

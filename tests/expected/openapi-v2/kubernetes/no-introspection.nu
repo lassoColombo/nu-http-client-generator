@@ -411,7 +411,7 @@ export def "namespaces create-core-v1-namespace" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
-  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, spec: $spec, status: $status} | compact
+  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "spec": $spec, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,7 +449,7 @@ export def "namespaces-bindings create-core-v1-namespaced-binding" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/bindings" $qp)
-  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, target: $target} | compact
+  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +562,7 @@ export def "namespaces-configmaps create-core-v1-namespaced-config-map" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps" $qp)
-  let body = {apiVersion: $api_version, binaryData: $binary_data, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
+  let body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "namespaces-configmaps replaceCoreV1NamespacedConfigMap" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/configmaps/($name)" $qp)
-  let body = {apiVersion: $api_version, binaryData: $binary_data, data: $data, immutable: $immutable, kind: $kind, metadata: $metadata} | compact
+  let body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -801,7 +801,7 @@ export def "namespaces-endpoints create-core-v1-namespaced-endpoints" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints" $qp)
-  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
+  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -927,7 +927,7 @@ export def "namespaces-endpoints replaceCoreV1NamespacedEndpoints" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/v1/namespaces/($namespace)/endpoints/($name)" $qp)
-  let body = {apiVersion: $api_version, kind: $kind, metadata: $metadata, subsets: $subsets} | compact
+  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
