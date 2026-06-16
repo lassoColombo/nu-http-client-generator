@@ -127,7 +127,7 @@ export def "access-requests create" [
 #
 # POST /access_requests/{access_request_gid}/approve
 # operationId: approveAccessRequest
-export def "access-requests-approve approveAccessRequest" [
+export def "access-requests-approve approve" [
   access_request_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -150,7 +150,7 @@ export def "access-requests-approve approveAccessRequest" [
 #
 # POST /access_requests/{access_request_gid}/reject
 # operationId: rejectAccessRequest
-export def "access-requests-reject rejectAccessRequest" [
+export def "access-requests-reject reject" [
   access_request_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

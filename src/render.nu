@@ -97,17 +97,18 @@ def effective-flag-var [name: string, prefix: string] {
 const RESERVED_POSITIONALS = [
   in nu nothing null true false env
   if else match for while loop break continue return
-  let mut const def export use module source overlay
+  let mut const def export use module overlay
   base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
 ]
 
 # Effective positional path-param variable name. Sanitizes the path param's
-# variable form and, if it collides with a Nushell reserved name, prefixes
-# with `path_` so the generated `def` parameter is valid.
+# variable form and, if it collides with a Nushell reserved name, suffixes
+# with `_arg` so the placeholder name stays at the front — the user reading
+# `<source_arg>` can map it to URL `{source}` at a glance.
 export def effective-positional-var [name: string] {
   let sanitized = (to-var-name $name)
   let cleaned = if ($sanitized | is-empty) { "param" } else { $sanitized }
-  if ($cleaned in $RESERVED_POSITIONALS) { $"path_($cleaned)" } else { $cleaned }
+  if ($cleaned in $RESERVED_POSITIONALS) { $"($cleaned)_arg" } else { $cleaned }
 }
 
 # Render a list of params as a nushell record literal string (e.g. "key": $var, ...)

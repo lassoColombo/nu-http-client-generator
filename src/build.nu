@@ -253,14 +253,83 @@ def canonical-verb [prefix: string] {
     "copy" => "copy"
     "move" => "move"
     "add" => "create"
+    # Round-3 expansion: pub/sub, registration, archive/import/export,
+    # Docker (info/version/kill/pause/tag/push/pull/top/changes/stats/logs),
+    # OAuth-ish (revoke/approve/reject), upload/download, send/receive,
+    # sync/refresh/reload, upsert, validate/verify/check/test, lifecycle
+    # (close/open/lock/unlock/finalize/abort), search/submit/trigger/reset.
+    "publish" => "publish"
+    "unpublish" => "delete"
+    "subscribe" => "subscribe"
+    "unsubscribe" => "unsubscribe"
+    "register" => "create"
+    "unregister" => "delete"
+    "request" => "request"
+    "archive" => "archive"
+    "unarchive" => "unarchive"
+    "export" => "export"
+    "import" => "import"
+    "info" => "get"
+    "version" => "version"
+    "kill" => "kill"
+    "pause" => "pause"
+    "unpause" => "unpause"
+    "resize" => "resize"
+    "rename" => "rename"
+    "tag" => "tag"
+    "untag" => "untag"
+    "pull" => "pull"
+    "push" => "push"
+    "search" => "list"
+    "top" => "top"
+    "changes" => "changes"
+    "stats" => "stats"
+    "logs" => "logs"
+    "unwatch" => "unwatch"
+    "revoke" => "delete"
+    "approve" => "approve"
+    "reject" => "reject"
+    "upload" => "upload"
+    "download" => "download"
+    "send" => "send"
+    "receive" => "receive"
+    "sync" => "sync"
+    "refresh" => "refresh"
+    "reload" => "reload"
+    "upsert" => "update"
+    "reset" => "reset"
+    "validate" => "validate"
+    "verify" => "verify"
+    "check" => "check"
+    "test" => "test"
+    "submit" => "submit"
+    "trigger" => "trigger"
+    "close" => "close"
+    "open" => "open"
+    "lock" => "lock"
+    "unlock" => "unlock"
+    "finalize" => "finalize"
+    "abort" => "abort"
     _ => $prefix
   }
 }
 
 # Regex alternation listing every verb canonical-verb knows about. Used by
 # both the leading-verb and trailing-verb detectors.
+#
+# IMPORTANT — ordering: alternation in Rust's regex engine is leftmost-first,
+# not longest-match. When one verb is a prefix of another (e.g. `update` is a
+# prefix of `upsert`, `watch` of `unwatch`), the LONGER alternative MUST come
+# first or the shorter one will eat its prefix and leave the rest as the
+# "remainder" — producing nonsense like verb=`watch` + rest=`Unxxx`.
 def known-verbs-regex [] {
-  'get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy|read|replace|watch|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add'
+  # un-prefixed pairs first (longer alternative leads)
+  ('unsubscribe|subscribe|unregister|register|unarchive|archive|unpublish|publish|unpause|pause|unwatch|watch|unlock|lock|untag|tag|'
+    + 'upsert|update|'
+    + 'get|post|put|patch|delete|list|create|retrieve|fetch|insert|remove|destroy|'
+    + 'read|replace|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add|'
+    + 'request|export|import|info|version|kill|resize|rename|pull|push|search|top|changes|stats|logs|revoke|approve|reject|'
+    + 'upload|download|send|receive|sync|refresh|reload|reset|validate|verify|check|test|submit|trigger|close|open|finalize|abort')
 }
 
 # Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
@@ -555,7 +624,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '/') {
     let segs = ($operation_id | split row '/' | where {|s| $s | is-not-empty })
     let last = ($segs | last)
-    if ($last =~ '(?i)^(get|post|put|patch|delete|list|create|update|retrieve|fetch|insert|remove|destroy|read|replace|watch|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add)') {
+    if ($last =~ ('(?i)^(' + (known-verbs-regex) + ')')) {
       $last
     } else {
       $segs | str join '-'
@@ -706,12 +775,14 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     }
   }
 
-  # No-operationId fallback: if the picked action ended up empty or trivially
-  # equal to the resource (sendgrid: `alerts alerts`), fall back to the HTTP
-  # method as the verb.
+  # No-operationId fallback: if the picked action ended up empty, trivially
+  # equal to the resource (sendgrid: `alerts alerts`), or still looks like
+  # a PascalCase blob (Default / IsAlive / Batch / ContainerAttachWebsocket),
+  # fall back to the HTTP method as the verb.
   let action_picked = if (
     ($action_picked | is-empty) or
-    (($action_picked | str downcase) == $resource_lower)
+    (($action_picked | str downcase) == $resource_lower) or
+    ($action_picked =~ '^[A-Z]')
   ) {
     $method
   } else {

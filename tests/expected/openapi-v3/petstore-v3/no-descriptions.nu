@@ -289,7 +289,7 @@ export def "pet delete" [
 #
 # POST /pet/{petId}/uploadImage
 # operationId: uploadFile
-export def "pet-upload-image uploadFile" [
+export def "pet-upload-image upload-file" [
   pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
