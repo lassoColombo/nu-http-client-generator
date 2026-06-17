@@ -137,7 +137,7 @@ export def "things get" [
 # GET /envs/{env}
 #
 # operationId: getEnvByName
-export def "envs get" [
+export def "envs get-by-name" [
   env_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,9 +178,9 @@ export def "jobs create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jobs")
-  let body = {"dryRun": $body_dry_run, "raw": $body_raw, "baseUrl": $body_base_url, "token": $body_token, "accept": $body_accept} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"dryRun": $body_dry_run, "raw": $body_raw, "baseUrl": $body_base_url, "token": $body_token, "accept": $body_accept} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

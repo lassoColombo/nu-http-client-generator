@@ -97,7 +97,7 @@ export def "well-known-openid-configuration get-service-account-issuer-open" [
 #
 # GET /api/
 # operationId: getCoreAPIVersions
-export def "core get-core-api-versions" [
+export def "core get-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "core get-core-api-versions" [
 #
 # GET /api/v1/
 # operationId: getCoreV1APIResources
-export def "core-v1 get-core-v1api-resources" [
+export def "core-v1 get-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "core-v1 get-core-v1api-resources" [
 #
 # GET /api/v1/componentstatuses
 # operationId: listCoreV1ComponentStatus
-export def "componentstatuses list-core-v1-component-status" [
+export def "componentstatuses list-component-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "componentstatuses list-core-v1-component-status" [
 #
 # GET /api/v1/componentstatuses/{name}
 # operationId: readCoreV1ComponentStatus
-export def "componentstatuses get-core-v1-component-status" [
+export def "componentstatuses get-component-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +205,7 @@ export def "componentstatuses get-core-v1-component-status" [
 #
 # GET /api/v1/configmaps
 # operationId: listCoreV1ConfigMapForAllNamespaces
-export def "configmaps list-core-v1-config-map-for-all-namespaces" [
+export def "configmaps list-config-map-for-list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "configmaps list-core-v1-config-map-for-all-namespaces" [
 #
 # GET /api/v1/endpoints
 # operationId: listCoreV1EndpointsForAllNamespaces
-export def "endpoints list-core-v1-endpoints-for-all-namespaces" [
+export def "endpoints list-for-list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "endpoints list-core-v1-endpoints-for-all-namespaces" [
 #
 # GET /api/v1/events
 # operationId: listCoreV1EventForAllNamespaces
-export def "events list-core-v1-event-for-all-namespaces" [
+export def "events list-for-list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "events list-core-v1-event-for-all-namespaces" [
   --shard-selector: string
   --timeout-seconds: int
   --watch: oneof<nothing, bool>
-]: nothing -> record<apiVersion: string, items: table<action: string, apiVersion: string, count: int, eventTime: string, firstTimestamp: string, involvedObject: record, kind: string, lastTimestamp: string, message: string, metadata: record, reason: string, related: record, reportingComponent: string, reportingInstance: string, series: record, source: record, type: string>, kind: string, metadata: record<continue: string, remainingItemCount: int, resourceVersion: string, selfLink: string, shardInfo: record<selector: string>>> {
+]: nothing -> record<apiVersion: string, items: table<action: string, apiVersion: string, count: int, eventTime: string, firstTimestamp: string, involvedObject: record, kind: string, lastTimestamp: string, message: string, metadata: record, reason: string, related: record, reportingComponent: string, reportingInstance: string, series: record, source: record, type: string>, kind: string, ... (1 more fields)> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
@@ -313,7 +313,7 @@ export def "events list-core-v1-event-for-all-namespaces" [
 #
 # GET /api/v1/limitranges
 # operationId: listCoreV1LimitRangeForAllNamespaces
-export def "limitranges list-core-v1-limit-range-for-all-namespaces" [
+export def "limitranges list-limit-range-for-list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "limitranges list-core-v1-limit-range-for-all-namespaces" [
 #
 # GET /api/v1/namespaces
 # operationId: listCoreV1Namespace
-export def "namespaces list-core-v1" [
+export def "namespaces list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "namespaces list-core-v1" [
 #
 # POST /api/v1/namespaces
 # operationId: createCoreV1Namespace
-export def "namespaces create-core-v1" [
+export def "namespaces create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,18 +408,18 @@ export def "namespaces create-core-v1" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
-  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "spec": $spec, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "spec": $spec, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # create a Binding
 #
 # POST /api/v1/namespaces/{namespace}/bindings
 # operationId: createCoreV1NamespacedBinding
-export def "namespaces-bindings create-core-v1-namespaced" [
+export def "namespaces-bindings create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,24 +438,24 @@ export def "namespaces-bindings create-core-v1-namespaced" [
   --kind: string
   --metadata: record
   target: record
-]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, target: record<apiVersion: string, fieldPath: string, kind: string, name: string, namespace: string, resourceVersion: string, uid: string>> {
+]: any -> record<apiVersion: string, kind: string, metadata: record<annotations: record, creationTimestamp: string, deletionGracePeriodSeconds: int, deletionTimestamp: string, finalizers: list<string>, generateName: string, generation: int, labels: record, managedFields: list<record>, name: string, namespace: string, ownerReferences: list<record>, resourceVersion: string, selfLink: string, uid: string>, ... (1 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/bindings") $qp)
-  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "target": $target} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "target": $target} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete collection of ConfigMap
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps
 # operationId: deleteCoreV1CollectionNamespacedConfigMap
-export def "namespaces-configmaps delete-core-v1-collection-namespaced" [
+export def "namespaces-configmaps delete-collection-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -494,7 +494,7 @@ export def "namespaces-configmaps delete-core-v1-collection-namespaced" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps
 # operationId: listCoreV1NamespacedConfigMap
-export def "namespaces-configmaps list-core-v1-namespaced" [
+export def "namespaces-configmaps list-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "namespaces-configmaps list-core-v1-namespaced" [
 #
 # POST /api/v1/namespaces/{namespace}/configmaps
 # operationId: createCoreV1NamespacedConfigMap
-export def "namespaces-configmaps create-core-v1-namespaced" [
+export def "namespaces-configmaps create-config-map" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,18 +556,18 @@ export def "namespaces-configmaps create-core-v1-namespaced" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
-  let body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete a ConfigMap
 #
 # DELETE /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: deleteCoreV1NamespacedConfigMap
-export def "namespaces-configmaps delete-core-v1-namespaced" [
+export def "namespaces-configmaps delete-config-map" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -598,7 +598,7 @@ export def "namespaces-configmaps delete-core-v1-namespaced" [
 #
 # GET /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: readCoreV1NamespacedConfigMap
-export def "namespaces-configmaps get-core-v1-namespaced" [
+export def "namespaces-configmaps get-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -625,7 +625,7 @@ export def "namespaces-configmaps get-core-v1-namespaced" [
 #
 # PATCH /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: patchCoreV1NamespacedConfigMap
-export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name" [
+export def "namespaces-configmaps update-config-map-by-namespace-name" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -655,7 +655,7 @@ export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name" [
 #
 # PUT /api/v1/namespaces/{namespace}/configmaps/{name}
 # operationId: replaceCoreV1NamespacedConfigMap
-export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name-1" [
+export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,18 +682,18 @@ export def "namespaces-configmaps update-core-v1-namespaced-by-namespace-name-1"
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
-  let body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete collection of Endpoints
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints
 # operationId: deleteCoreV1CollectionNamespacedEndpoints
-export def "namespaces-endpoints delete-core-v1-collection-namespaced" [
+export def "namespaces-endpoints delete-collection" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "namespaces-endpoints delete-core-v1-collection-namespaced" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints
 # operationId: listCoreV1NamespacedEndpoints
-export def "namespaces-endpoints list-core-v1-namespaced" [
+export def "namespaces-endpoints list" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +768,7 @@ export def "namespaces-endpoints list-core-v1-namespaced" [
 #
 # POST /api/v1/namespaces/{namespace}/endpoints
 # operationId: createCoreV1NamespacedEndpoints
-export def "namespaces-endpoints create-core-v1-namespaced" [
+export def "namespaces-endpoints create" [
   namespace: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -792,18 +792,18 @@ export def "namespaces-endpoints create-core-v1-namespaced" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
-  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # delete Endpoints
 #
 # DELETE /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: deleteCoreV1NamespacedEndpoints
-export def "namespaces-endpoints delete-core-v1-namespaced" [
+export def "namespaces-endpoints delete" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -834,7 +834,7 @@ export def "namespaces-endpoints delete-core-v1-namespaced" [
 #
 # GET /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: readCoreV1NamespacedEndpoints
-export def "namespaces-endpoints get-core-v1-namespaced" [
+export def "namespaces-endpoints get" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -861,7 +861,7 @@ export def "namespaces-endpoints get-core-v1-namespaced" [
 #
 # PATCH /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: patchCoreV1NamespacedEndpoints
-export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name" [
+export def "namespaces-endpoints update-by-namespace-name" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -891,7 +891,7 @@ export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name" [
 #
 # PUT /api/v1/namespaces/{namespace}/endpoints/{name}
 # operationId: replaceCoreV1NamespacedEndpoints
-export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name-1" [
+export def "namespaces-endpoints update-by-namespace-name-1" [
   namespace: any
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -916,9 +916,9 @@ export def "namespaces-endpoints update-core-v1-namespaced-by-namespace-name-1" 
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
-  let body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

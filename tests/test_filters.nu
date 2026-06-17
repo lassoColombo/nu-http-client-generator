@@ -47,7 +47,7 @@ def "prefixes rest" [] {
 def "prefixes rest narrow" [] {
     let names = mod preview $PETSTORE --prefixes ["/store/order"] | get name
     assert equal ($names | length) 3 "expected 3 commands under /store/order"
-    let expected = ["store-order placeOrder", "store-order get", "store-order delete"]
+    let expected = ["store-order create-place", "store-order get", "store-order delete"]
     assert equal $names $expected
 }
 

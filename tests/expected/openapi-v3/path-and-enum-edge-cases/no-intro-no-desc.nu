@@ -118,7 +118,7 @@ export def "sites list" [
 # GET /sites/active
 #
 # operationId: sites_list_active
-export def "sites-active active" [
+export def "sites-active list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -5,9 +5,14 @@
 
 # Build a NUON-like shape description from a list of body-field-like records.
 # Example output: {name: string, tag?: string, status: "active"|"inactive"}
-export def build-shape-doc [fields: list] {
+#
+# Caps total output width to keep help text readable in a terminal. Wide
+# records (DocuSign's account-settings has 200+ fields, ~25k chars) get
+# truncated with a `... (N more fields)` tail so users still see the leading
+# fields and the count of what's hidden.
+export def build-shape-doc [fields: list, --max-width: int = 500] {
   let entries = ($fields | each {|f|
-    let nu_type = (openapi-to-nu-type $f.type)
+    let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
     let suffix = if ($f.required? | default false) { "" } else { "?" }
     let type_str = if ($f.enum | length) > 0 {
       $f.enum | each { $'"($in)"' } | str join "|"
@@ -15,8 +20,22 @@ export def build-shape-doc [fields: list] {
       $nu_type
     }
     $"($f.name)($suffix): ($type_str)"
-  } | str join ", ")
-  $"{($entries)}"
+  })
+  let total = ($entries | length)
+  mut kept = []
+  mut len = 0
+  for entry in $entries {
+    let entry_len = ($entry | str length)
+    let proj = $len + $entry_len + (if ($kept | is-empty) { 0 } else { 2 })
+    if ($proj > $max_width) and (($kept | length) > 0) {
+      let remaining = ($total - ($kept | length))
+      $kept = ($kept | append $"... \(($remaining) more fields\)")
+      break
+    }
+    $kept = ($kept | append $entry)
+    $len = $proj
+  }
+  $"{($kept | str join ', ')}"
 }
 
 # Map OpenAPI types to Nushell types
@@ -35,6 +54,21 @@ export def openapi-to-nu-type [t: string] {
   }
 }
 
+# Map an OpenAPI (type, items.type) pair to a Nushell type. Emits parameterized
+# `list<string>` / `list<int>` etc. when the items have a usable primitive
+# type; falls back to bare `list` for record/$ref/unknown item types — the
+# extra-doc `shape:` line covers those.
+export def nu-type-for [t: string, items_t?: string]: nothing -> string {
+  let base = (openapi-to-nu-type $t)
+  if $base != "list" { return $base }
+  if ($items_t | is-empty) { return "list" }
+  let inner = (openapi-to-nu-type $items_t)
+  match $inner {
+    "string" | "int" | "float" | "bool" | "path" => $"list<($inner)>"
+    _ => "list"
+  }
+}
+
 # Nushell reserved names that cannot be standalone command/flag names
 const RESERVED_NAMES = [in nu nothing]
 
@@ -48,8 +82,10 @@ const RESERVED_VARS = [
   where each error try catch not do
   # generated signature flags
   base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
-  # generated body-code internal variables
-  auth base url qp full_url body extra_headers cookie_str accept_val
+  # generated body-code internal variables. `body` was renamed to `req_body`
+  # to free up spec-side `body` fields (GitHub discussion post body, etc.) —
+  # the user-facing `--body` flag no longer collides with anything internal.
+  auth base qp full_url req_body extra_headers cookie_str accept_val
   # nushell builtins that cause issues as variable names
   sort from to get open save into split str
 ]
@@ -201,7 +237,7 @@ def render-param-group [params: list, mapping: record, config: record, shapes: l
   mut parts = []
   mut dep_flags = []
   for q in $params {
-    let nu_type = (openapi-to-nu-type $q.type)
+    let nu_type = (nu-type-for $q.type ($q.items_type? | default null))
     let flag_name = $q.flag_name
     let shape_hint = (lookup-shape $q.shape_key $shapes)
     let desc_text = if ($q.description | is-not-empty) { $q.description | lines | str join " " } else { "" }
@@ -287,7 +323,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     } else {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       for f in $cmd.body_fields {
-        let nu_type = (openapi-to-nu-type $f.type)
+        let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
         let shape_hint = (lookup-shape $f.name $shapes)
         let desc_text = if ($f.description | is-not-empty) { $f.description | lines | str join " " } else { "" }
         let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
@@ -475,12 +511,12 @@ export def build-body-code [cmd: record, config: record] {
         let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
         $'($key | to nuon): ($var_name)'
       } | str join ", "
-      $lines = ($lines | append ($"  let body = {($body_parts)} | compact"))
+      $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
     }
   }
 
   if $cmd.has_body {
-    $lines = ($lines | append '  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }')
+    $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
   }
 
   if ($cmd.header_params | length) > 0 {
@@ -516,11 +552,11 @@ export def build-body-code [cmd: record, config: record] {
         let flag = if $collides { $'body_($flag_var)' } else { $flag_var }
         $'$($flag)'
       }
-      $lines = ($lines | append ($"  let body = if \(($var) | is-not-empty\) { $body | upsert ($f.name) \(open -r ($var)\) } else { $body }"))
+      $lines = ($lines | append ($"  let req_body = if \(($var) | is-not-empty\) { $req_body | upsert ($f.name) \(open -r ($var)\) } else { $req_body }"))
     }
   }
 
-  let body_arg = if $cmd.has_body { " $body" } else { "" }
+  let body_arg = if $cmd.has_body { " $req_body" } else { "" }
   $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "($cmd.content_type)"($body_arg)')
 
   $lines | str join "\n"

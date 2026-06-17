@@ -90,11 +90,11 @@ export def "things create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/things")
-  let body = {"harry potter": $harry_potter, "Aux Price": $aux_price, "Location:": $location, "osdb:body_data": $osdb_body_data, "Upload Yaml/Yml File": $upload_yaml_yml_file, ":": $body_param, "address": $address} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"harry potter": $harry_potter, "Aux Price": $aux_price, "Location:": $location, "osdb:body_data": $osdb_body_data, "Upload Yaml/Yml File": $upload_yaml_yml_file, ":": $body_param, "address": $address} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /things/{insight_id:}

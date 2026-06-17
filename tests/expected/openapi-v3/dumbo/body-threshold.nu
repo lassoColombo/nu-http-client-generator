@@ -112,10 +112,10 @@ export def "cloud-init create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/cloud-init/")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /api/v1/dmilog/
@@ -172,7 +172,7 @@ export def "dmilog get" [
 # PUT /api/v1/dmilog/{name}/
 #
 # operationId: api_v1_dmilog_update
-# --body shape: {name: string, activate?: list, deactivate?: list, commit_message: string}
+# --body shape: {name: string, activate?: list<string>, deactivate?: list<string>, commit_message: string}
 export def "dmilog update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,16 +183,16 @@ export def "dmilog update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record # shape: {name: string, activate?: list, deactivate?: list, commit_message: string}
+  --body: record # shape: {name: string, activate?: list<string>, deactivate?: list<string>, commit_message: string}
 ]: any -> record<name: string, activate: list<string>, deactivate: list<string>, commit_message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilog/{name}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/hooks/chart
@@ -214,11 +214,11 @@ export def "hooks-chart create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/chart")
-  let body = {"version": $version, "project_id": $project_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"version": $version, "project_id": $project_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /api/v1/hooks/dmilog
@@ -241,11 +241,11 @@ export def "hooks-dmilog create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/hooks/dmilog")
-  let body = {"sha": $sha, "project_id": $project_id, "commit_message": $commit_message} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"sha": $sha, "project_id": $project_id, "commit_message": $commit_message} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Generic endpoint to retrieve status of any RQ job given queue name + job id.

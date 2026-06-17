@@ -85,7 +85,7 @@ def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_
 #
 # GET /api/v4/groups/{id}/access_requests
 # operationId: getApiV4GroupsIdAccessRequests
-export def "groups-access-requests get-api-v4" [
+export def "groups-access-requests get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,7 +111,7 @@ export def "groups-access-requests get-api-v4" [
 #
 # POST /api/v4/groups/{id}/access_requests
 # operationId: postApiV4GroupsIdAccessRequests
-export def "groups-access-requests create-api-v4" [
+export def "groups-access-requests create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "groups-access-requests create-api-v4" [
 #
 # PUT /api/v4/groups/{id}/access_requests/{user_id}/approve
 # operationId: putApiV4GroupsIdAccessRequestsUserIdApprove
-export def "groups-access-requests-approve update-api-v4-groups-access-requests-user" [
+export def "groups-access-requests-approve update" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -146,23 +146,23 @@ export def "groups-access-requests-approve update-api-v4-groups-access-requests-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-level: int
-]: any -> record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: table<key: string, value: string>, web_url: string, access_level: string, created_at: string, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, expires_at: string, group_saml_identity: record<provider: string, extern_uid: string, saml_provider_id: string>, group_scim_identity: record<extern_uid: string, group_id: string, active: string>, email: string, is_using_seat: string, override: string, membership_state: string, member_role: record<id: int, group_id: int, name: any, description: any, base_access_level: int, apply_security_scan_profiles: bool, admin_merge_request: bool, archive_project: bool, admin_ai_catalog_item_consumer: bool, remove_project: bool, remove_group: bool, manage_security_policy_link: bool, admin_ai_catalog_item: bool, admin_compliance_framework: bool, admin_cicd_variables: bool, manage_deploy_tokens: bool, manage_group_access_tokens: bool, admin_group_member: bool, admin_integrations: bool, manage_merge_request_settings: bool, manage_project_access_tokens: bool, admin_protected_branch: bool, admin_protected_environments: bool, admin_push_rules: bool, admin_runners: bool, admin_security_attributes: bool, admin_terraform_state: bool, admin_vulnerability: bool, admin_web_hook: bool, read_compliance_dashboard: bool, read_security_scan_profiles: bool, read_virtual_registry: bool, update_sast_vulnerability_resolution_setting: bool, read_admin_cicd: bool, read_crm_contact: bool, read_dependency: bool, read_admin_groups: bool, read_admin_projects: bool, read_code: bool, read_runners: bool, read_security_attribute: bool, read_admin_subscription: bool, read_admin_monitoring: bool, read_admin_users: bool, read_vulnerability: bool>> {
+]: any -> record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: table<key: string, value: string>, web_url: string, access_level: string, created_at: string, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, expires_at: string, ... (7 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}/approve"))
-  let body = {"access_level": $access_level} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"access_level": $access_level} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Denies an access request for the given user.
 #
 # DELETE /api/v4/groups/{id}/access_requests/{user_id}
 # operationId: deleteApiV4GroupsIdAccessRequestsUserId
-export def "groups-access-requests delete-api-v4-groups-access-requests-user" [
+export def "groups-access-requests delete" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -213,7 +213,7 @@ export def "groups-epics-award-emoji list" [
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidAwardEmoji
-export def "groups-epics-award-emoji create-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-award-emoji create" [
   id: int
   epic_iid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -230,18 +230,18 @@ export def "groups-epics-award-emoji create-api-v4-groups-epics-epic-iid" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a single emoji reaction
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji get-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-award-emoji get" [
   id: int
   epic_iid: int
   award_id: int
@@ -266,7 +266,7 @@ export def "groups-epics-award-emoji get-api-v4-groups-epics-epic-iid" [
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidAwardEmojiAwardId
-export def "groups-epics-award-emoji delete-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-award-emoji delete" [
   id: int
   epic_iid: int
   award_id: int
@@ -319,7 +319,7 @@ export def "groups-epics-notes-award-emoji list" [
 #
 # POST /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji
 # operationId: postApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmoji
-export def "groups-epics-notes-award-emoji create-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-notes-award-emoji create" [
   id: int
   epic_iid: int
   note_id: int
@@ -337,18 +337,18 @@ export def "groups-epics-notes-award-emoji create-api-v4-groups-epics-epic-iid" 
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a single emoji reaction
 #
 # GET /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji get-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-notes-award-emoji get" [
   id: int
   epic_iid: int
   note_id: int
@@ -374,7 +374,7 @@ export def "groups-epics-notes-award-emoji get-api-v4-groups-epics-epic-iid" [
 #
 # DELETE /api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteApiV4GroupsIdEpicsEpicIidNotesNoteIdAwardEmojiAwardId
-export def "groups-epics-notes-award-emoji delete-api-v4-groups-epics-epic-iid" [
+export def "groups-epics-notes-award-emoji delete" [
   id: int
   epic_iid: int
   note_id: int
@@ -427,7 +427,7 @@ export def "groups-badges list" [
 #
 # POST /api/v4/groups/{id}/badges
 # operationId: postApiV4GroupsIdBadges
-export def "groups-badges create-api-v4" [
+export def "groups-badges create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,18 +445,18 @@ export def "groups-badges create-api-v4" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/badges"))
-  let body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Preview a badge from a group.
 #
 # GET /api/v4/groups/{id}/badges/render
 # operationId: getApiV4GroupsIdBadgesRender
-export def "groups-badges-render get-api-v4" [
+export def "groups-badges-render get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "groups-badges-render get-api-v4" [
 #
 # GET /api/v4/groups/{id}/badges/{badge_id}
 # operationId: getApiV4GroupsIdBadgesBadgeId
-export def "groups-badges get-api-v4" [
+export def "groups-badges get" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -506,7 +506,7 @@ export def "groups-badges get-api-v4" [
 #
 # PUT /api/v4/groups/{id}/badges/{badge_id}
 # operationId: putApiV4GroupsIdBadgesBadgeId
-export def "groups-badges update-api-v4" [
+export def "groups-badges update" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,18 +525,18 @@ export def "groups-badges update-api-v4" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id, badge_id: $badge_id} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
-  let body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Removes a badge from the group.
 #
 # DELETE /api/v4/groups/{id}/badges/{badge_id}
 # operationId: deleteApiV4GroupsIdBadgesBadgeId
-export def "groups-badges delete-api-v4" [
+export def "groups-badges delete" [
   id: string
   badge_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -583,7 +583,7 @@ export def "groups-custom-attributes list" [
 #
 # GET /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: getApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes get-api-v4" [
+export def "groups-custom-attributes get" [
   id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -607,7 +607,7 @@ export def "groups-custom-attributes get-api-v4" [
 #
 # PUT /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: putApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes update-api-v4" [
+export def "groups-custom-attributes update" [
   id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -624,18 +624,18 @@ export def "groups-custom-attributes update-api-v4" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
-  let body = {"value": $value} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"value": $value} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a custom attribute on a group
 #
 # DELETE /api/v4/groups/{id}/custom_attributes/{key}
 # operationId: deleteApiV4GroupsIdCustomAttributesKey
-export def "groups-custom-attributes delete-api-v4" [
+export def "groups-custom-attributes delete" [
   id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -670,7 +670,7 @@ export def "groups list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --statistics: oneof<nothing, bool>
   --archived: oneof<nothing, bool>
-  --skip-groups: list
+  --skip-groups: list<int>
   --all-available: oneof<nothing, bool>
   --visibility: string@visibility-completer
   --search: string
@@ -685,7 +685,7 @@ export def "groups list" [
   --page: int
   --per-page: int
   --with-custom-attributes: oneof<nothing, bool>
-]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
+]: nothing -> table<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, ... (33 more fields)> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statistics" $statistics "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "skip_groups" $skip_groups "csv") (serialize-qp "all_available" $all_available "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "owned" $owned "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "min_access_level" $min_access_level "scalar") (serialize-qp "top_level_only" $top_level_only "scalar") (serialize-qp "marked_for_deletion_on" $marked_for_deletion_on "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "repository_storage" $repository_storage "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "with_custom_attributes" $with_custom_attributes "scalar")] | flatten | str join "&"
@@ -699,7 +699,7 @@ export def "groups list" [
 #
 # POST /api/v4/groups
 # operationId: postApiV4Groups
-export def "groups create-api-v4" [
+export def "groups create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,23 +749,23 @@ export def "groups create-api-v4" [
   --model-prompt-cache-enabled: oneof<nothing, bool>
   --foundational-agents-statuses: list
   --ai-settings-attributes: record
-]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
+]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, ... (33 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v4/groups")
-  let body = {"name": $name, "path": $path, "parent_id": $parent_id, "organization_id": $organization_id, "description": $description, "visibility": $visibility, "avatar": $avatar, "share_with_group_lock": $share_with_group_lock, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "project_creation_level": $project_creation_level, "auto_devops_enabled": $auto_devops_enabled, "subgroup_creation_level": $subgroup_creation_level, "emails_disabled": $emails_disabled, "emails_enabled": $emails_enabled, "show_diff_preview_in_email": $show_diff_preview_in_email, "mentions_disabled": $mentions_disabled, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled, "default_branch": $default_branch, "default_branch_protection": $default_branch_protection, "default_branch_protection_defaults": $default_branch_protection_defaults, "enabled_git_access_protocol": $enabled_git_access_protocol, "membership_lock": $membership_lock, "ldap_cn": $ldap_cn, "ldap_access": $ldap_access, "shared_runners_minutes_limit": $shared_runners_minutes_limit, "extra_shared_runners_minutes_limit": $extra_shared_runners_minutes_limit, "wiki_access_level": $wiki_access_level, "duo_availability": $duo_availability, "duo_remote_flows_availability": $duo_remote_flows_availability, "duo_foundational_flows_availability": $duo_foundational_flows_availability, "duo_custom_agents_availability": $duo_custom_agents_availability, "duo_custom_flows_availability": $duo_custom_flows_availability, "duo_external_agents_availability": $duo_external_agents_availability, "tool_approval_for_session_availability": $tool_approval_for_session_availability, "amazon_q_auto_review_enabled": $amazon_q_auto_review_enabled, "experiment_features_enabled": $experiment_features_enabled, "model_prompt_cache_enabled": $model_prompt_cache_enabled, "foundational_agents_statuses": $foundational_agents_statuses, "ai_settings_attributes": $ai_settings_attributes} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "path": $path, "parent_id": $parent_id, "organization_id": $organization_id, "description": $description, "visibility": $visibility, "avatar": $avatar, "share_with_group_lock": $share_with_group_lock, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "project_creation_level": $project_creation_level, "auto_devops_enabled": $auto_devops_enabled, "subgroup_creation_level": $subgroup_creation_level, "emails_disabled": $emails_disabled, "emails_enabled": $emails_enabled, "show_diff_preview_in_email": $show_diff_preview_in_email, "mentions_disabled": $mentions_disabled, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled, "default_branch": $default_branch, "default_branch_protection": $default_branch_protection, "default_branch_protection_defaults": $default_branch_protection_defaults, "enabled_git_access_protocol": $enabled_git_access_protocol, "membership_lock": $membership_lock, "ldap_cn": $ldap_cn, "ldap_access": $ldap_access, "shared_runners_minutes_limit": $shared_runners_minutes_limit, "extra_shared_runners_minutes_limit": $extra_shared_runners_minutes_limit, "wiki_access_level": $wiki_access_level, "duo_availability": $duo_availability, "duo_remote_flows_availability": $duo_remote_flows_availability, "duo_foundational_flows_availability": $duo_foundational_flows_availability, "duo_custom_agents_availability": $duo_custom_agents_availability, "duo_custom_flows_availability": $duo_custom_flows_availability, "duo_external_agents_availability": $duo_external_agents_availability, "tool_approval_for_session_availability": $tool_approval_for_session_availability, "amazon_q_auto_review_enabled": $amazon_q_auto_review_enabled, "experiment_features_enabled": $experiment_features_enabled, "model_prompt_cache_enabled": $model_prompt_cache_enabled, "foundational_agents_statuses": $foundational_agents_statuses, "ai_settings_attributes": $ai_settings_attributes} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update a group. Available only for users who can administrate groups.
 #
 # PUT /api/v4/groups/{id}
 # operationId: putApiV4GroupsId
-export def "groups update-api-v4" [
+export def "groups update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,8 +824,8 @@ export def "groups update-api-v4" [
   --prevent-forking-outside-group: oneof<nothing, bool>
   --unique-project-download-limit: int
   --unique-project-download-limit-interval-in-seconds: int
-  --unique-project-download-limit-allowlist: list
-  --unique-project-download-limit-alertlist: list
+  --unique-project-download-limit-allowlist: list<string>
+  --unique-project-download-limit-alertlist: list<int>
   --auto-ban-user-on-excessive-projects-download: oneof<nothing, bool>
   --ip-restriction-ranges: string
   --allowed-email-domains-list: string
@@ -838,29 +838,29 @@ export def "groups update-api-v4" [
   --only-allow-merge-if-pipeline-succeeds: oneof<nothing, bool>
   --allow-merge-on-skipped-pipeline: oneof<nothing, bool>
   --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool>
-  --enabled-foundational-flows: list
+  --enabled-foundational-flows: list<string>
   --duo-template-project-id: int
   --allow-personal-snippets: oneof<nothing, bool>
   --duo-namespace-access-rules: list
   --built-in-project-templates-enabled: oneof<nothing, bool>
   --lock-built-in-project-templates-enabled: oneof<nothing, bool>
-]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
+]: any -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, ... (33 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}"))
-  let body = {"name": $name, "path": $path, "shared_runners_setting": $shared_runners_setting, "description": $description, "visibility": $visibility, "avatar": $avatar, "share_with_group_lock": $share_with_group_lock, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "project_creation_level": $project_creation_level, "auto_devops_enabled": $auto_devops_enabled, "subgroup_creation_level": $subgroup_creation_level, "emails_disabled": $emails_disabled, "emails_enabled": $emails_enabled, "show_diff_preview_in_email": $show_diff_preview_in_email, "mentions_disabled": $mentions_disabled, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled, "default_branch": $default_branch, "default_branch_protection": $default_branch_protection, "default_branch_protection_defaults": $default_branch_protection_defaults, "enabled_git_access_protocol": $enabled_git_access_protocol, "membership_lock": $membership_lock, "ldap_cn": $ldap_cn, "ldap_access": $ldap_access, "shared_runners_minutes_limit": $shared_runners_minutes_limit, "extra_shared_runners_minutes_limit": $extra_shared_runners_minutes_limit, "wiki_access_level": $wiki_access_level, "duo_availability": $duo_availability, "duo_remote_flows_availability": $duo_remote_flows_availability, "duo_foundational_flows_availability": $duo_foundational_flows_availability, "duo_custom_agents_availability": $duo_custom_agents_availability, "duo_custom_flows_availability": $duo_custom_flows_availability, "duo_external_agents_availability": $duo_external_agents_availability, "tool_approval_for_session_availability": $tool_approval_for_session_availability, "amazon_q_auto_review_enabled": $amazon_q_auto_review_enabled, "experiment_features_enabled": $experiment_features_enabled, "model_prompt_cache_enabled": $model_prompt_cache_enabled, "foundational_agents_statuses": $foundational_agents_statuses, "ai_settings_attributes": $ai_settings_attributes, "prevent_sharing_groups_outside_hierarchy": $prevent_sharing_groups_outside_hierarchy, "step_up_auth_required_oauth_provider": $step_up_auth_required_oauth_provider, "lock_math_rendering_limits_enabled": $lock_math_rendering_limits_enabled, "math_rendering_limits_enabled": $math_rendering_limits_enabled, "max_artifacts_size": $max_artifacts_size, "file_template_project_id": $file_template_project_id, "prevent_forking_outside_group": $prevent_forking_outside_group, "unique_project_download_limit": $unique_project_download_limit, "unique_project_download_limit_interval_in_seconds": $unique_project_download_limit_interval_in_seconds, "unique_project_download_limit_allowlist": $unique_project_download_limit_allowlist, "unique_project_download_limit_alertlist": $unique_project_download_limit_alertlist, "auto_ban_user_on_excessive_projects_download": $auto_ban_user_on_excessive_projects_download, "ip_restriction_ranges": $ip_restriction_ranges, "allowed_email_domains_list": $allowed_email_domains_list, "service_access_tokens_expiration_enforced": $service_access_tokens_expiration_enforced, "duo_core_features_enabled": $duo_core_features_enabled, "duo_features_enabled": $duo_features_enabled, "lock_duo_features_enabled": $lock_duo_features_enabled, "auto_duo_code_review_enabled": $auto_duo_code_review_enabled, "web_based_commit_signing_enabled": $web_based_commit_signing_enabled, "only_allow_merge_if_pipeline_succeeds": $only_allow_merge_if_pipeline_succeeds, "allow_merge_on_skipped_pipeline": $allow_merge_on_skipped_pipeline, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved, "enabled_foundational_flows": $enabled_foundational_flows, "duo_template_project_id": $duo_template_project_id, "allow_personal_snippets": $allow_personal_snippets, "duo_namespace_access_rules": $duo_namespace_access_rules, "built_in_project_templates_enabled": $built_in_project_templates_enabled, "lock_built_in_project_templates_enabled": $lock_built_in_project_templates_enabled} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "path": $path, "shared_runners_setting": $shared_runners_setting, "description": $description, "visibility": $visibility, "avatar": $avatar, "share_with_group_lock": $share_with_group_lock, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "project_creation_level": $project_creation_level, "auto_devops_enabled": $auto_devops_enabled, "subgroup_creation_level": $subgroup_creation_level, "emails_disabled": $emails_disabled, "emails_enabled": $emails_enabled, "show_diff_preview_in_email": $show_diff_preview_in_email, "mentions_disabled": $mentions_disabled, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled, "default_branch": $default_branch, "default_branch_protection": $default_branch_protection, "default_branch_protection_defaults": $default_branch_protection_defaults, "enabled_git_access_protocol": $enabled_git_access_protocol, "membership_lock": $membership_lock, "ldap_cn": $ldap_cn, "ldap_access": $ldap_access, "shared_runners_minutes_limit": $shared_runners_minutes_limit, "extra_shared_runners_minutes_limit": $extra_shared_runners_minutes_limit, "wiki_access_level": $wiki_access_level, "duo_availability": $duo_availability, "duo_remote_flows_availability": $duo_remote_flows_availability, "duo_foundational_flows_availability": $duo_foundational_flows_availability, "duo_custom_agents_availability": $duo_custom_agents_availability, "duo_custom_flows_availability": $duo_custom_flows_availability, "duo_external_agents_availability": $duo_external_agents_availability, "tool_approval_for_session_availability": $tool_approval_for_session_availability, "amazon_q_auto_review_enabled": $amazon_q_auto_review_enabled, "experiment_features_enabled": $experiment_features_enabled, "model_prompt_cache_enabled": $model_prompt_cache_enabled, "foundational_agents_statuses": $foundational_agents_statuses, "ai_settings_attributes": $ai_settings_attributes, "prevent_sharing_groups_outside_hierarchy": $prevent_sharing_groups_outside_hierarchy, "step_up_auth_required_oauth_provider": $step_up_auth_required_oauth_provider, "lock_math_rendering_limits_enabled": $lock_math_rendering_limits_enabled, "math_rendering_limits_enabled": $math_rendering_limits_enabled, "max_artifacts_size": $max_artifacts_size, "file_template_project_id": $file_template_project_id, "prevent_forking_outside_group": $prevent_forking_outside_group, "unique_project_download_limit": $unique_project_download_limit, "unique_project_download_limit_interval_in_seconds": $unique_project_download_limit_interval_in_seconds, "unique_project_download_limit_allowlist": $unique_project_download_limit_allowlist, "unique_project_download_limit_alertlist": $unique_project_download_limit_alertlist, "auto_ban_user_on_excessive_projects_download": $auto_ban_user_on_excessive_projects_download, "ip_restriction_ranges": $ip_restriction_ranges, "allowed_email_domains_list": $allowed_email_domains_list, "service_access_tokens_expiration_enforced": $service_access_tokens_expiration_enforced, "duo_core_features_enabled": $duo_core_features_enabled, "duo_features_enabled": $duo_features_enabled, "lock_duo_features_enabled": $lock_duo_features_enabled, "auto_duo_code_review_enabled": $auto_duo_code_review_enabled, "web_based_commit_signing_enabled": $web_based_commit_signing_enabled, "only_allow_merge_if_pipeline_succeeds": $only_allow_merge_if_pipeline_succeeds, "allow_merge_on_skipped_pipeline": $allow_merge_on_skipped_pipeline, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved, "enabled_foundational_flows": $enabled_foundational_flows, "duo_template_project_id": $duo_template_project_id, "allow_personal_snippets": $allow_personal_snippets, "duo_namespace_access_rules": $duo_namespace_access_rules, "built_in_project_templates_enabled": $built_in_project_templates_enabled, "lock_built_in_project_templates_enabled": $lock_built_in_project_templates_enabled} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a single group, with containing projects.
 #
 # GET /api/v4/groups/{id}
 # operationId: getApiV4GroupsId
-export def "groups get-api-v4" [
+export def "groups get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -872,7 +872,7 @@ export def "groups get-api-v4" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-custom-attributes: oneof<nothing, bool>
   --with-projects: oneof<nothing, bool>
-]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool, shared_with_groups: list<record>, runners_token: string, enabled_git_access_protocol: string, prevent_sharing_groups_outside_hierarchy: bool, step_up_auth_required_oauth_provider: string, projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_projects: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list<string>, topics: list<string>, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record<key: string, name: string, nickname: string, html_url: string, source_url: string>, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record<id: int, name: string, path: string, kind: string, full_path: string, parent_id: int, avatar_url: string, web_url: string>, custom_attributes: record<key: string, value: string>, repository_storage: string, forked_from_project: record<id: int, description: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, created_at: string, default_branch: string, tag_list: list, topics: list, ssh_url_to_repo: string, http_url_to_repo: string, web_url: string, readme_url: string, forks_count: int, license_url: string, license: record, avatar_url: string, star_count: int, last_activity_at: string, visibility: string, namespace: record, custom_attributes: record, repository_storage: string>, container_registry_image_prefix: string, _links: record<self: string, issues: string, merge_requests: string, repo_branches: string, labels: string, events: string, members: string, cluster_agents: string>, marked_for_deletion_at: string, marked_for_deletion_on: string, packages_enabled: bool, empty_repo: bool, archived: bool, owner: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list, web_url: string>, resolve_outdated_diff_discussions: bool, container_expiration_policy: record<cadence: string, enabled: string, keep_n: string, older_than: string, name_regex: string, name_regex_keep: string, next_run_at: string>, repository_object_format: string, issues_enabled: bool, merge_requests_enabled: bool, wiki_enabled: bool, jobs_enabled: bool, snippets_enabled: bool, container_registry_enabled: bool, service_desk_enabled: bool, service_desk_address: string, can_create_merge_request_in: bool, issues_access_level: string, repository_access_level: string, merge_requests_access_level: string, forking_access_level: string, wiki_access_level: string, builds_access_level: string, snippets_access_level: string, pages_access_level: string, analytics_access_level: string, container_registry_access_level: string, security_and_compliance_access_level: string, releases_access_level: string, environments_access_level: string, feature_flags_access_level: string, infrastructure_access_level: string, monitor_access_level: string, model_experiments_access_level: string, model_registry_access_level: string, package_registry_access_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, shared_runners_enabled: bool, lfs_enabled: bool, creator_id: int, mr_default_target_self: bool, import_url: string, import_type: string, import_status: string, import_error: string, open_issues_count: int, description_html: string, updated_at: string, ci_default_git_depth: int, ci_delete_pipelines_in_seconds: int, ci_forward_deployment_enabled: bool, ci_forward_deployment_rollback_allowed: bool, ci_job_token_scope_enabled: bool, ci_separated_caches: bool, ci_allow_fork_pipelines_to_run_in_parent_project: bool, ci_id_token_sub_claim_components: list<string>, build_git_strategy: string, keep_latest_artifact: bool, restrict_user_defined_variables: bool, ci_pipeline_variables_minimum_override_role: string, runner_token_expiration_interval: int, group_runners_enabled: bool, resource_group_default_process_mode: string, auto_cancel_pending_pipelines: string, build_timeout: int, auto_devops_enabled: bool, auto_devops_deploy_strategy: string, ci_push_repository_for_job_token_allowed: bool, protect_merge_request_pipelines: bool, ci_display_pipeline_variables: bool, runners_token: string, ci_config_path: string, public_jobs: bool, shared_with_groups: list<record>, only_allow_merge_if_pipeline_succeeds: bool, allow_merge_on_skipped_pipeline: bool, request_access_enabled: bool, only_allow_merge_if_all_discussions_are_resolved: bool, remove_source_branch_after_merge: bool, printing_merge_request_link_enabled: bool, merge_method: string, squash_option: string, enforce_auth_checks_on_uploads: bool, suggestion_commit_message: string, merge_commit_template: string, squash_commit_template: string, mr_default_title_template: string, issue_branch_template: string, statistics: record<commit_count: int, storage_size: int, repository_size: int, wiki_size: int, lfs_objects_size: int, job_artifacts_size: int, pipeline_artifacts_size: int, packages_size: int, snippets_size: int, uploads_size: int, container_registry_size: int>, warn_about_potentially_unwanted_characters: bool, autoclose_referenced_issues: bool, max_artifacts_size: int, approvals_before_merge: string, mirror: string, mirror_user_id: string, mirror_trigger_builds: string, only_mirror_protected_branches: string, mirror_overwrites_diverged_branches: string, external_authorization_classification_label: string, requirements_enabled: string, requirements_access_level: string, security_and_compliance_enabled: string, secret_push_protection_enabled: bool, pre_receive_secret_detection_enabled: bool, compliance_frameworks: string, issues_template: string, merge_requests_template: string, ci_restrict_pipeline_cancellation_role: string, merge_pipelines_enabled: string, merge_trains_enabled: string, merge_trains_skip_train_allowed: string, max_pipelines_per_merge_train: string, only_allow_merge_if_all_status_checks_passed: string, allow_pipeline_trigger_approve_deployment: bool, prevent_merge_without_jira_issue: string, auto_duo_code_review_enabled: string, duo_remote_flows_enabled: string, duo_foundational_flows_enabled: string, duo_sast_fp_detection_enabled: string, duo_secret_detection_fp_enabled: string, duo_sast_vr_workflow_enabled: string, web_based_commit_signing_enabled: string, spp_repository_pipeline_access: bool, security_policy_pipeline_must_succeed: bool, merge_request_title_regex: string, merge_request_title_regex_description: string>, shared_runners_minutes_limit: string, extra_shared_runners_minutes_limit: string, prevent_forking_outside_group: string, service_access_tokens_expiration_enforced: string, experiment_features_enabled: string, membership_lock: string, ip_restriction_ranges: string, allowed_email_domains_list: string, only_allow_merge_if_pipeline_succeeds: string, allow_merge_on_skipped_pipeline: string, only_allow_merge_if_all_discussions_are_resolved: string, unique_project_download_limit: string, unique_project_download_limit_interval_in_seconds: string, unique_project_download_limit_allowlist: string, unique_project_download_limit_alertlist: string, auto_ban_user_on_excessive_projects_download: string> {
+]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, ... (56 more fields)> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_custom_attributes" $with_custom_attributes "scalar") (serialize-qp "with_projects" $with_projects "scalar")] | flatten | str join "&"
@@ -886,7 +886,7 @@ export def "groups get-api-v4" [
 #
 # DELETE /api/v4/groups/{id}
 # operationId: deleteApiV4GroupsId
-export def "groups delete-api-v4" [
+export def "groups delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +909,7 @@ export def "groups delete-api-v4" [
 #
 # POST /api/v4/groups/{id}/archive
 # operationId: postApiV4GroupsIdArchive
-export def "groups-archive create-api-v4" [
+export def "groups-archive create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "groups-archive create-api-v4" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
+]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, ... (33 more fields)> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/archive"))

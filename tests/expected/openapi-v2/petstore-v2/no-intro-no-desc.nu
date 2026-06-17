@@ -93,12 +93,12 @@ export def "pet-upload-image upload-file" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}/uploadImage"))
-  let body = {"additionalMetadata": $additional_metadata, "file": $file} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"additionalMetadata": $additional_metadata, "file": $file} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let body = if ($file | is-not-empty) { $body | upsert file (open -r $file) } else { $body }
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  let req_body = if ($file | is-not-empty) { $req_body | upsert file (open -r $file) } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $req_body
 }
 
 # Add a new pet to the store
@@ -118,7 +118,7 @@ export def "pet create" [
   --id: int
   --category: record
   name: string
-  photo_urls: list
+  photo_urls: list<string>
   --tags: list
   --status: string@status-completer
 ]: any -> any {
@@ -126,11 +126,11 @@ export def "pet create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pet")
-  let body = {"id": $id, "category": $category, "name": $name, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "category": $category, "name": $name, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Update an existing pet
@@ -150,7 +150,7 @@ export def "pet update" [
   --id: int
   --category: record
   name: string
-  photo_urls: list
+  photo_urls: list<string>
   --tags: list
   --status: string@status-completer
 ]: any -> any {
@@ -158,11 +158,11 @@ export def "pet update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pet")
-  let body = {"id": $id, "category": $category, "name": $name, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "category": $category, "name": $name, "photoUrls": $photo_urls, "tags": $tags, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Finds Pets by status
@@ -179,7 +179,7 @@ export def "pet-find-by-status find" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --status: list
+  --status: list<string>
 ]: nothing -> table<id: int, category: record<id: int, name: string>, name: string, photoUrls: list<string>, tags: list<record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -206,7 +206,7 @@ export def "pet-find-by-tags find" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --tags: list
+  --tags: list<string>
 ]: nothing -> table<id: int, category: record<id: int, name: string>, name: string, photoUrls: list<string>, tags: list<record>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -245,7 +245,7 @@ export def "pet get" [
 #
 # POST /pet/{petId}
 # operationId: updatePetWithForm
-export def "pet update-pet-with-form" [
+export def "pet update-with-form" [
   pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,11 +263,11 @@ export def "pet update-pet-with-form" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}"))
-  let body = {"name": $name, "status": $status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "status": $status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # Deletes a pet
@@ -323,7 +323,7 @@ export def "store-inventory get" [
 #
 # POST /store/order
 # operationId: placeOrder
-export def "store-order placeOrder" [
+export def "store-order create-place" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,11 +344,11 @@ export def "store-order placeOrder" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/store/order")
-  let body = {"id": $id, "petId": $pet_id, "quantity": $quantity, "shipDate": $ship_date, "status": $status, "complete": $complete} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "petId": $pet_id, "quantity": $quantity, "shipDate": $ship_date, "status": $status, "complete": $complete} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Find purchase order by ID
@@ -403,7 +403,7 @@ export def "store-order delete" [
 #
 # POST /user/createWithList
 # operationId: createUsersWithListInput
-export def "user-create-with-list create-users-with-list-input" [
+export def "user-create-with-list create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,17 +419,17 @@ export def "user-create-with-list create-users-with-list-input" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/createWithList")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get user by user name
 #
 # GET /user/{username}
 # operationId: getUserByName
-export def "user get" [
+export def "user get-by-name" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,11 +477,11 @@ export def "user update" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({username: $username} | format pattern "/user/{username}"))
-  let body = {"id": $id, "username": $body_username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "username": $body_username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete user
@@ -512,7 +512,7 @@ export def "user delete" [
 #
 # GET /user/login
 # operationId: loginUser
-export def "user-login loginUser" [
+export def "user-login get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "user-login loginUser" [
 #
 # GET /user/logout
 # operationId: logoutUser
-export def "user-logout logoutUser" [
+export def "user-logout get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "user-logout logoutUser" [
 #
 # POST /user/createWithArray
 # operationId: createUsersWithArrayInput
-export def "user-create-with-array create-users-with-array-input" [
+export def "user-create-with-array create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,10 +577,10 @@ export def "user-create-with-array create-users-with-array-input" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/createWithArray")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Create user
@@ -610,9 +610,9 @@ export def "user create" [
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
-  let body = {"id": $id, "username": $username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"id": $id, "username": $username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

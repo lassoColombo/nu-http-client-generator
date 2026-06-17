@@ -135,7 +135,7 @@ export def "anything list" [
 # Returns anything passed in request data.
 #
 # PATCH /anything
-export def "anything patch" [
+export def "anything update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "anything patch" [
 # Returns anything passed in request data.
 #
 # POST /anything
-export def "anything post" [
+export def "anything create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "anything post" [
 # Returns anything passed in request data.
 #
 # PUT /anything
-export def "anything put" [
+export def "anything update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "anything get" [
 # Returns anything passed in request data.
 #
 # PATCH /anything/{anything}
-export def "anything patch-by-anything" [
+export def "anything update-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "anything patch-by-anything" [
 # Returns anything passed in request data.
 #
 # POST /anything/{anything}
-export def "anything post-by-anything" [
+export def "anything create-by-anything" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "anything post-by-anything" [
 # Returns anything passed in request data.
 #
 # PUT /anything/{anything}
-export def "anything put-by-anything" [
+export def "anything update-by-anything-1" [
   anything: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "delay get" [
 # Returns a delayed response (max of 10 seconds).
 #
 # PATCH /delay/{delay}
-export def "delay patch" [
+export def "delay update-by-delay" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "delay patch" [
 # Returns a delayed response (max of 10 seconds).
 #
 # POST /delay/{delay}
-export def "delay post" [
+export def "delay create" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "delay post" [
 # Returns a delayed response (max of 10 seconds).
 #
 # PUT /delay/{delay}
-export def "delay put" [
+export def "delay update-by-delay-1" [
   delay: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1156,7 @@ export def "links get" [
 # The request's PATCH parameters.
 #
 # PATCH /patch
-export def "patch patch" [
+export def "patch update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "patch patch" [
 # The request's POST parameters.
 #
 # POST /post
-export def "post post" [
+export def "post create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "post post" [
 # The request's PUT parameters.
 #
 # PUT /put
-export def "put put" [
+export def "put update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,12 +1271,12 @@ export def "redirect-to get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-url: string
+  --url: string
   --status-code: any
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "url" $qp_url "scalar") (serialize-qp "status_code" $status_code "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "status_code" $status_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/redirect-to" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,7 +1286,7 @@ export def "redirect-to get" [
 # 302/3XX Redirects to the given URL.
 #
 # PATCH /redirect-to
-export def "redirect-to patch" [
+export def "redirect-to update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,7 +1307,7 @@ export def "redirect-to patch" [
 # 302/3XX Redirects to the given URL.
 #
 # POST /redirect-to
-export def "redirect-to post" [
+export def "redirect-to create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,24 +1316,24 @@ export def "redirect-to post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-url: string
+  url: string
   --status-code: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/redirect-to")
-  let body = {"url": $body_url, "status_code": $status_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"url": $url, "status_code": $status_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # 302/3XX Redirects to the given URL.
 #
 # PUT /redirect-to
-export def "redirect-to put" [
+export def "redirect-to update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,18 +1342,18 @@ export def "redirect-to put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-url: string
+  url: string
   --status-code: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/redirect-to")
-  let body = {"url": $body_url, "status_code": $status_code} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"url": $url, "status_code": $status_code} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
 # 302 Redirects n times.
@@ -1426,7 +1426,7 @@ export def "response-headers get" [
 # Returns a set of response headers from the query string.
 #
 # POST /response-headers
-export def "response-headers post" [
+export def "response-headers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,7 +1449,7 @@ export def "response-headers post" [
 # Returns some robots.txt rules.
 #
 # GET /robots.txt
-export def "robotstxt get" [
+export def "robots-txt get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1514,7 +1514,7 @@ export def "status get" [
 # Return status code or random status code if more than one are given
 #
 # PATCH /status/{codes}
-export def "status patch" [
+export def "status update-by-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1536,7 +1536,7 @@ export def "status patch" [
 # Return status code or random status code if more than one are given
 #
 # POST /status/{codes}
-export def "status post" [
+export def "status create" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1558,7 @@ export def "status post" [
 # Return status code or random status code if more than one are given
 #
 # PUT /status/{codes}
-export def "status put" [
+export def "status update-by-codes-1" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

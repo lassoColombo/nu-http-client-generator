@@ -107,6 +107,13 @@ export def helpers [] {
     get-param-type: {|param|
       $param.type? | default "string"
     }
+    get-param-items-type: {|param|
+      # Swagger 2 puts the items schema directly on the param, not under
+      # `.schema`. Returns null for non-array params.
+      let t = ($param.type? | default null)
+      if $t != "array" { return null }
+      $param.items?.type? | default null
+    }
     get-param-enum: {|param|
       $param.enum? | default []
     }

@@ -86,7 +86,7 @@ export def "access-requests get" [
   --target: string
   --user: string
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, message: string, approval_status: string, requester: record, target: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -116,11 +116,11 @@ export def "access-requests create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/access_requests")
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Approve an access request
@@ -173,7 +173,7 @@ export def "access-requests-reject reject" [
 #
 # GET /workspaces/{workspace_gid}/agents
 # operationId: getAgentsForWorkspace
-export def "workspaces-agents get-agents-for" [
+export def "workspaces-agents get" [
   workspace_gid: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "workspaces-agents get-agents-for" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
   --offset: string
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, resource_subtype: string, name: string>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,7 +211,7 @@ export def "agents get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, name: string, description: string, behavior_guidance: string, workspace: record<gid: string, resource_type: string, name: string>, photo: record<image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string, image_128x128: string, image_1024x1024: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +237,7 @@ export def "allocations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +263,7 @@ export def "allocations update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
   let input = $in
@@ -271,11 +271,11 @@ export def "allocations update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({allocation_gid: $allocation_gid} | format pattern "/allocations/{allocation_gid}") $qp)
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete an allocation
@@ -321,7 +321,7 @@ export def "allocations list" [
   --workspace: string
   --limit: int
   --offset: string
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, start_date: string, end_date: string, effort: record, assignee: record, created_by: record, parent: record, resource_subtype: string>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -346,7 +346,7 @@ export def "allocations create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
   let input = $in
@@ -354,11 +354,11 @@ export def "allocations create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/allocations" $qp)
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get an attachment
@@ -376,7 +376,7 @@ export def "attachments get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -416,7 +416,7 @@ export def "attachments delete" [
 #
 # GET /attachments
 # operationId: getAttachmentsForObject
-export def "attachments get-attachments-for-object" [
+export def "attachments get-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +428,7 @@ export def "attachments get-attachments-for-object" [
   --limit: int
   --offset: string
   --parent: string
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, name: string, resource_subtype: string>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -443,7 +443,7 @@ export def "attachments get-attachments-for-object" [
 #
 # POST /attachments
 # operationId: createAttachmentForObject
-export def "attachments create-attachment-for-object" [
+export def "attachments create-for-object" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,11 +453,11 @@ export def "attachments create-attachment-for-object" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
   --resource-subtype: string@resource-subtype-completer
   --file: string
   parent: string
-  --body-url: string
+  --url: string
   --name: string
   --connect-to-app: oneof<nothing, bool>
 ]: any -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
@@ -466,11 +466,11 @@ export def "attachments create-attachment-for-object" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/attachments" $qp)
-  let body = {"resource_subtype": $resource_subtype, "file": $file, "parent": $parent, "url": $body_url, "name": $name, "connect_to_app": $connect_to_app} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"resource_subtype": $resource_subtype, "file": $file, "parent": $parent, "url": $url, "name": $name, "connect_to_app": $connect_to_app} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "multipart/form-data" $req_body
 }
 
 # Get audit log events
@@ -509,7 +509,7 @@ export def "workspaces-audit-log-events get" [
 #
 # POST /batch
 # operationId: createBatchRequest
-export def "batch create-batch-request" [
+export def "batch create-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "batch create-batch-request" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
   --data: record
 ]: any -> record<data: table<status_code: int, headers: record, body: record>> {
   let input = $in
@@ -527,11 +527,11 @@ export def "batch create-batch-request" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/batch" $qp)
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get all budgets
@@ -580,11 +580,11 @@ export def "budgets create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/budgets" $qp)
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get a budget
@@ -602,7 +602,7 @@ export def "budgets get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -628,7 +628,7 @@ export def "budgets update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --opt-pretty: oneof<nothing, bool>
-  --opt-fields: list
+  --opt-fields: list<string>
   --data: any
 ]: any -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
   let input = $in
@@ -636,11 +636,11 @@ export def "budgets update" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({budget_gid: $budget_gid} | format pattern "/budgets/{budget_gid}") $qp)
-  let body = {"data": $data} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"data": $data} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete a budget
@@ -672,7 +672,7 @@ export def "budgets delete" [
 #
 # GET /projects/{project_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForProject
-export def "projects-custom-field-settings get-custom-field-settings-for" [
+export def "projects-custom-field-settings get" [
   project_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -685,7 +685,7 @@ export def "projects-custom-field-settings get-custom-field-settings-for" [
   --opt-pretty: oneof<nothing, bool>
   --limit: int
   --offset: string
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, project: record, is_important: bool, parent: record, custom_field: record>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -700,7 +700,7 @@ export def "projects-custom-field-settings get-custom-field-settings-for" [
 #
 # GET /portfolios/{portfolio_gid}/custom_field_settings
 # operationId: getCustomFieldSettingsForPortfolio
-export def "portfolios-custom-field-settings get-custom-field-settings-for" [
+export def "portfolios-custom-field-settings get" [
   portfolio_gid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "portfolios-custom-field-settings get-custom-field-settings-for" [
   --opt-pretty: oneof<nothing, bool>
   --limit: int
   --offset: string
-  --opt-fields: list
+  --opt-fields: list<string>
 ]: nothing -> record<data: table<gid: string, resource_type: string, project: record, is_important: bool, parent: record, custom_field: record>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -100,6 +100,26 @@ def deduplicate-commands [commands: list] {
   $result
 }
 
+# Validate that a loaded spec has callable endpoints. Returns "ok" to proceed,
+# or "skip" after logging a warning. Hard-errors only for malformed specs
+# (no `paths` AND no `webhooks` — neither is a valid OpenAPI shape).
+def check-spec-generatable [loaded: record] {
+  let has_paths = ($loaded.data.paths? | is-not-empty)
+  let has_webhooks = ($loaded.data.webhooks? | is-not-empty)
+  if $has_paths { return "ok" }
+  # OpenAPI 3.1 promoted `webhooks` to a top-level Paths-sibling for specs
+  # that describe only inbound server-to-client events.
+  if $has_webhooks {
+    log warn $"spec at ($loaded.source) defines only webhooks \(server-to-client events\), no callable endpoints — nothing to generate"
+    return "skip"
+  }
+  if ($loaded.data.paths? | describe -d | get type) == "record" {
+    log warn $"spec at ($loaded.source) defines no operations \(empty 'paths' object\) — nothing to generate"
+    return "skip"
+  }
+  error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
+}
+
 # Shared pipeline: parse spec, resolve refs, extract metadata, build & dedupe commands.
 # Returns {commands, auth_schemes, default_auth, base_url, all_urls}.
 def process-spec [spec_data: record, config: record] {
@@ -143,17 +163,7 @@ export def main [
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
   let loaded = (build load-spec $source ($spec_headers | default {}))
-  if ($loaded.data.paths? | is-empty) {
-    # OpenAPI 3.1 promoted `webhooks` to a top-level Paths-sibling for specs
-    # that describe only inbound server-to-client events. There are no callable
-    # endpoints to generate — skip cleanly with a clear message rather than
-    # failing as "malformed".
-    if ($loaded.data.webhooks? | is-not-empty) {
-      log warn $"spec at ($loaded.source) defines only webhooks \(server-to-client events\), no callable endpoints — nothing to generate"
-      return null
-    }
-    error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
-  }
+  if (check-spec-generatable $loaded) == "skip" { return null }
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])
@@ -174,7 +184,8 @@ export def main [
   }
   let result = (process-spec $loaded.data $config)
   if ($result.commands | is-empty) {
-    log error "no commands were generated — check your spec content or filter flags"
+    log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to generate"
+    return null
   }
   let extra_urls = (($urls | default []) | append $result.all_urls)
   let output_content = (render render-module $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config)
@@ -193,6 +204,7 @@ export def preview [
   --spec-headers: record        # Headers for fetching remote specs
 ] {
   let loaded = (build load-spec $source ($spec_headers | default {}))
+  if (check-spec-generatable $loaded) == "skip" { return [] }
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])
@@ -204,7 +216,8 @@ export def preview [
 
   let result = (process-spec $loaded.data $config)
   if ($result.commands | is-empty) {
-    log error "no commands were generated — check your spec content or filter flags"
+    log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to preview"
+    return []
   }
   $result.commands | each {|c|
     {name: $c.name, method: $c.method, path_template: $c.path_template}

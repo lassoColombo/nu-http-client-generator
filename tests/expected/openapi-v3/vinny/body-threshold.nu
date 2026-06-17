@@ -120,7 +120,7 @@ export def "avcfg-asset get" [
 #
 # operationId: avcfg_asset_enable_partial_update
 # --body shape: {type?: "SRV"|"PC"|"MOB", hostname?: string, last_seen?: string, health_status?: "GOOD"|"WARN"|"BAD"|"", active_av?: string, person_name?: string, via_login?: string, atlantis_id?: string}
-export def "avcfg-asset-enable patch" [
+export def "avcfg-asset-enable update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -136,10 +136,10 @@ export def "avcfg-asset-enable patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/asset/enable/{id}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /avcfg/chart/endpoints/{idrs}/
@@ -196,7 +196,7 @@ export def "avcfg-customers list" [
 #
 # operationId: avcfg_cynet_alerts_acknowledge_update
 # --body shape: {uniqueness?: string, incident_name?: string, eps_prevention?: bool, eps_prevention_success?: string, path?: string, command_line?: string, alert_ip?: string, alert_domain?: string, alert_url?: string, username?: string, severity?: string, status?: string, alert_type?: string, date_in?: string, last_seen?: string, date_changed?: string, remediation_status?: string, scan_group_name?: string, file?: string, acknowledged?: bool, notified_llama?: bool, notified_cardinalis?: bool, customer?: int}
-export def "avcfg-cynet-alerts-acknowledge update" [
+export def "avcfg-cynet-alerts-acknowledge update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,22 +207,22 @@ export def "avcfg-cynet-alerts-acknowledge update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record # shape: {uniqueness?: string, incident_name?: string, eps_prevention?: bool, eps_prevention_success?: string, path?: string, command_line?: string, alert_ip?: string, alert_domain?: string, alert_url?: string, username?: string, severity?: string, status?: string, alert_type?: string, date_in?: string, last_seen?: string, date_changed?: string, remediation_status?: string, scan_group_name?: string, file?: string, acknowledged?: bool, notified_llama?: bool, notified_cardinalis?: bool, customer?: int}
-]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
+]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, ... (9 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PATCH /avcfg/cynet/alerts/acknowledge/{id}/
 #
 # operationId: avcfg_cynet_alerts_acknowledge_partial_update
 # --body shape: {uniqueness?: string, incident_name?: string, eps_prevention?: bool, eps_prevention_success?: string, path?: string, command_line?: string, alert_ip?: string, alert_domain?: string, alert_url?: string, username?: string, severity?: string, status?: string, alert_type?: string, date_in?: string, last_seen?: string, date_changed?: string, remediation_status?: string, scan_group_name?: string, file?: string, acknowledged?: bool, notified_llama?: bool, notified_cardinalis?: bool, customer?: int}
-export def "avcfg-cynet-alerts-acknowledge patch" [
+export def "avcfg-cynet-alerts-acknowledge update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,15 +233,15 @@ export def "avcfg-cynet-alerts-acknowledge patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record # shape: {uniqueness?: string, incident_name?: string, eps_prevention?: bool, eps_prevention_success?: string, path?: string, command_line?: string, alert_ip?: string, alert_domain?: string, alert_url?: string, username?: string, severity?: string, status?: string, alert_type?: string, date_in?: string, last_seen?: string, date_changed?: string, remediation_status?: string, scan_group_name?: string, file?: string, acknowledged?: bool, notified_llama?: bool, notified_cardinalis?: bool, customer?: int}
-]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
+]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, ... (9 more fields)> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /avcfg/cynet/alerts/list/{idrs}/
@@ -627,7 +627,7 @@ export def "avcfg-cynet-tenant get" [
 #
 # operationId: avcfg_cynet_tenant_update
 # --body shape: {name?: string, enable?: bool, note?: string, alert?: bool, discovery?: bool, cynet_info: record}
-export def "avcfg-cynet-tenant update" [
+export def "avcfg-cynet-tenant update-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -643,17 +643,17 @@ export def "avcfg-cynet-tenant update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/tenant/{id}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # PATCH /avcfg/cynet/tenant/{id}/
 #
 # operationId: avcfg_cynet_tenant_partial_update
 # --body shape: {name?: string, enable?: bool, note?: string, alert?: bool, discovery?: bool, cynet_info?: record}
-export def "avcfg-cynet-tenant patch" [
+export def "avcfg-cynet-tenant update-by-id-1" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,10 +669,10 @@ export def "avcfg-cynet-tenant patch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/avcfg/cynet/tenant/{id}/"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /avcfg/cynet/tenant/create/
@@ -694,8 +694,8 @@ export def "avcfg-cynet-tenant-create create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/avcfg/cynet/tenant/create/")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

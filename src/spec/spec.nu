@@ -301,14 +301,32 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
   }
 }
 
-# Build "field1: type1, field2: type2" string from a properties map
-def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
-  $properties | transpose name prop_schema | each {|entry|
+# Build "field1: type1, field2: type2" string from a properties map.
+# Caps total width so wide records (200+ fields) don't produce multi-thousand-
+# character return-type signatures that Nushell's help renderer dumps as one
+# ultra-wide line. Truncated entries are summarized as `... (N more fields)`.
+def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>, --max-width: int = 500] {
+  let entries = $properties | transpose name prop_schema | each {|entry|
     let field_type = (schema-to-nu-type $entry.prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
     # sanitize field names: nushell doesn't allow special chars in record type keys
     let safe_name = ($entry.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
     $"($safe_name): ($field_type)"
-  } | str join ", "
+  }
+  let total = ($entries | length)
+  mut kept = []
+  mut len = 0
+  for entry in $entries {
+    let entry_len = ($entry | str length)
+    let proj = $len + $entry_len + (if ($kept | is-empty) { 0 } else { 2 })
+    if ($proj > $max_width) and (($kept | length) > 0) {
+      let remaining = ($total - ($kept | length))
+      $kept = ($kept | append $"... \(($remaining) more fields\)")
+      break
+    }
+    $kept = ($kept | append $entry)
+    $len = $proj
+  }
+  $kept | str join ", "
 }
 
 # Build an auth scheme record from a security definition entry.
@@ -342,15 +360,49 @@ export def build-auth-scheme [entry: record] {
 
 # ── Shared helpers ─────────────────────────────────────────────────
 
+# Normalize spec-supplied description text for the terminal `help` medium.
+# Strips HTML tags, decodes common entities, and collapses whitespace runs
+# (newlines/tabs/multi-space) into single spaces. Markdown is left alone —
+# users who pipe `help` into a markdown-aware tool keep the formatting.
+#
+# Without this, raw spec descriptions leak HTML (`<p>`, `<code>`, `<a href>`)
+# and multi-paragraph prose into single-line flag-comment slots, producing
+# unreadable help. Applied centrally by `build-description` so every call
+# site benefits without per-site changes.
+export def normalize-description [text: string]: nothing -> string {
+  if ($text | is-empty) { return "" }
+  $text
+  # Anchor-tag handling: keep both the visible text and the URL.
+  | str replace --all --regex '(?s)<a [^>]*href="([^"]+)"[^>]*>(.*?)</a>' '${2} (${1})'
+  # Strip remaining HTML tags (block, inline, void, comments) but keep contents.
+  | str replace --all --regex '(?s)<!--.*?-->' ''
+  | str replace --all --regex '<[/!?][a-zA-Z][^>]*>' ''
+  | str replace --all --regex '<[a-zA-Z][a-zA-Z0-9]*(\s[^>]*)?/?>' ''
+  # Common HTML entities.
+  | str replace --all '&lt;' '<'
+  | str replace --all '&gt;' '>'
+  | str replace --all '&quot;' '"'
+  | str replace --all '&#39;' "'"
+  | str replace --all '&apos;' "'"
+  | str replace --all '&nbsp;' ' '
+  | str replace --all '&amp;' '&'
+  # Collapse whitespace runs (newlines, tabs, repeated spaces).
+  | str replace --all --regex '\s+' ' '
+  | str trim
+}
+
 # Merge a base description with a list of nullable metadata annotations.
-# Filters nulls, joins with ", ", and conditionally appends to base description.
+# `desc_base` is normalized for terminal display via `normalize-description`;
+# extras come from the generator itself (DEPRECATED, format: X, ...) and pass
+# through unchanged.
 export def build-description [desc_base: string, extras: list] {
+  let normalized = (normalize-description $desc_base)
   let extra = $extras | where { $in != null } | str join ", "
-  if ($extra | is-not-empty) and ($desc_base | is-not-empty) {
-    $"($desc_base) \(($extra)\)"
+  if ($extra | is-not-empty) and ($normalized | is-not-empty) {
+    $"($normalized) \(($extra)\)"
   } else if ($extra | is-not-empty) {
     $extra
   } else {
-    $desc_base
+    $normalized
   }
 }

@@ -63,6 +63,7 @@ def process-simple-params [params: list, location: string, h: record] {
     {
       name: $p.name
       type: (do $h.get-param-type $p)
+      items_type: (do $h.get-param-items-type $p)
       required: ($p.required? | default false)
       description: (spec build-description $desc_base [
         (if $deprecated { "DEPRECATED" } else { null })
@@ -150,6 +151,10 @@ def extract-body-fields [schema: record, schemas: record] {
     not ($field.field_spec.readOnly? | default false)
   } | each {|field|
     let field_type = (spec normalize-type ($field.field_spec.type? | default "any"))
+    let items_type = if $field_type == "array" {
+      let items = (spec resolve-ref ($field.field_spec.items? | default {}) $schemas)
+      spec normalize-type ($items.type? | default null)
+    } else { null }
     let enum_vals = (spec clean-enum-values ($field.field_spec.enum? | default []))
     let nullable = (spec is-nullable $field.field_spec)
     let desc_base = ($field.field_spec.description? | default "")
@@ -167,6 +172,7 @@ def extract-body-fields [schema: record, schemas: record] {
     {
       name: $field.name
       type: $field_type
+      items_type: $items_type
       required: ($field.name in $required)
       nullable: $nullable
       enum: $enum_vals
@@ -203,16 +209,6 @@ def build-field-shapes [schema: record, schemas: record] {
   } | compact
 }
 
-# Map OpenAPI method actions to command verbs
-def action-verb [action: string] {
-  match $action {
-    "retrieve" => "get"
-    "destroy" => "delete"
-    "partial_update" => "patch"
-    _ => $action
-  }
-}
-
 # Canonical verb mapping for HTTP-verb-prefixed operationIds.
 def canonical-verb [prefix: string] {
   match ($prefix | str downcase) {
@@ -224,7 +220,7 @@ def canonical-verb [prefix: string] {
     "list" => "list"
     "create" => "create"
     "update" => "update"
-    "retrieve" => "retrieve"
+    "retrieve" => "get"
     "fetch" => "get"
     "insert" => "create"
     "remove" => "delete"
@@ -316,27 +312,16 @@ def canonical-verb [prefix: string] {
     "set" => "update"
     "all" => "list"
     "current" => "get"
+    # Round-5 additions (data-driven: see CLASSIFIER-DESIGN.md analysis)
+    "describe" => "get"
+    "del" => "delete"
+    "notify" => "notify"
+    "generate" => "generate"
+    "assign" => "assign"
+    "complete" => "complete"
+    "resend" => "resend"
     _ => $prefix
   }
-}
-
-# Regex alternation listing every verb canonical-verb knows about. Used by
-# both the leading-verb and trailing-verb detectors.
-#
-# IMPORTANT — ordering: alternation in Rust's regex engine is leftmost-first,
-# not longest-match. When one verb is a prefix of another (e.g. `update` is a
-# prefix of `upsert`, `watch` of `unwatch`), the LONGER alternative MUST come
-# first or the shorter one will eat its prefix and leave the rest as the
-# "remainder" — producing nonsense like verb=`watch` + rest=`Unxxx`.
-def known-verbs-regex [] {
-  # un-prefixed pairs first (longer alternative leads)
-  ('unsubscribe|subscribe|unregister|register|unarchive|archive|unpublish|publish|unpause|pause|unwatch|watch|unlock|lock|untag|tag|'
-    + 'upsert|update|'
-    + 'get|post|put|patch|delete|list|create|retrieve|fetch|insert|remove|destroy|'
-    + 'read|replace|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add|'
-    + 'request|export|import|info|version|kill|resize|rename|pull|push|search|top|changes|stats|logs|revoke|approve|reject|'
-    + 'upload|download|send|receive|sync|refresh|reload|reset|validate|verify|check|test|submit|trigger|close|open|finalize|abort|'
-    + 'find|confirm|current|all|set')
 }
 
 # Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
@@ -355,79 +340,183 @@ def to-kebab [s: string] {
   $s | str kebab-case
 }
 
-# Try to interpret an operationId as a HTTP-verb-prefixed name.
-# Returns {matched: bool, verb: string, remainder: string} where remainder is
-# the chunk after the verb (kebab-cased, with leading article stripped).
-def parse-verb-prefix [action_raw: string] {
-  let verbs = (known-verbs-regex)
-  let pattern = ('(?i)^(?<verb>(' + $verbs + '))(?<rest>([A-Z_].*)?)$')
-  let m = ($action_raw | parse --regex $pattern)
-  if ($m | is-not-empty) {
-    let row = ($m | first)
-    let rest_raw = ($row.rest | default "" | str trim --char '_')
-    # Strip leading article (A / An / The) when followed by uppercase or end.
-    let rest_no_article = ($rest_raw | str replace --regex '^(A|An|The)([A-Z_].*)?$' '$2')
-    let remainder = (to-kebab $rest_no_article)
-    return {matched: true, verb: (canonical-verb $row.verb), remainder: $remainder}
-  }
-  # Recursive prefix handling: `Un<Verb>` / `un<Verb>` and `bulk<Verb>`
-  # follow a strip-and-recurse pattern. Trigger only on uppercase boundary
-  # to avoid false-firing on `unknown*` / `until*` / `union*` / `bulk*`
-  # (the noun form). Inner parse must match a known verb — otherwise fall
-  # through, so e.g. `UnDoSomething` (where `do` isn't a verb) stays raw.
-  let recursive = if ($action_raw =~ '^[Uu]n[A-Z]') {
-    {prefix: "un", strip: 2}
-  } else if ($action_raw =~ '^bulk[A-Z]') {
-    {prefix: "bulk", strip: 4}
-  } else if ($action_raw =~ '^Bulk[A-Z]') {
-    {prefix: "bulk", strip: 4}
-  } else {
-    null
-  }
-  if $recursive != null {
-    let inner_input = ($action_raw | str substring $recursive.strip..)
-    let inner = (parse-verb-prefix $inner_input)
-    if $inner.matched {
-      return {matched: true, verb: $"($recursive.prefix)-($inner.verb)", remainder: $inner.remainder}
+# ── Tokenize-and-classify pipeline ─────────────────────────────────
+#
+# Verb extraction reformulated as: split the operationId into tokens once,
+# label each token by its role, then pick the verb wherever it lands.
+# Replaces the multi-matcher chain (parse-verb-prefix / parse-trailing-verb /
+# parse-single-verb / normalized_opid splitter / leading-non-alpha strip /
+# recursive un-/bulk- handlers / trailing-token dedup).
+#
+# See CLASSIFIER-DESIGN.md for the data analysis backing this design.
+
+# Membership list of canonical verbs. Mirrors `canonical-verb`'s match arms.
+# Used by the classifier for O(1) verb-token detection.
+const KNOWN_VERBS = [
+  get post put patch delete list create update retrieve fetch insert remove destroy
+  read replace watch append query inspect attach prune exec commit build ping cancel
+  enable disable wait restart start stop clone copy move add
+  unsubscribe subscribe unregister register unarchive archive unpublish publish
+  unpause pause unwatch unlock lock untag tag upsert
+  request export import info version kill resize rename pull push search top
+  changes stats logs revoke approve reject upload download send receive sync
+  refresh reload reset validate verify check test submit trigger close open
+  finalize abort find confirm current all set
+  describe del notify generate assign complete resend
+]
+
+# Tokens treated as namespace/version noise inside operationIds.
+# `collection` is intentionally NOT here — it carries real meaning for k8s
+# (`delete-collection` ≠ `delete`) so it falls through as OTHER and naturally
+# becomes part of the discriminator suffix.
+const STRUCTURAL_TOKENS = [api apis namespaced cluster scoped core]
+
+# Prepositions kept in the discriminator only when followed by a kept token.
+const PREPOSITIONS = [by for as using from with in on of to]
+
+# Articles dropped wherever they appear.
+const ARTICLES = [a an the]
+
+# Tokenize an operationId. Splits on common separators AND camelCase
+# boundaries, lowercases, and discards empties.
+#   "compute.firewallPolicies.list" → [compute, firewall, policies, list]
+#   "readCoreV1NamespacedConfigMap" → [read, core, v1, namespaced, config, map]
+#   ".GetAvailableLocales"          → [get, available, locales]
+def tokenize-opid [s: string] {
+  let raw = (
+    $s
+    | split row --regex '[._/\-\s:]+'
+    | where {|p| $p | is-not-empty }
+    | each {|p|
+        $p
+        | str replace --all --regex '([a-z0-9])([A-Z])' '$1 $2'
+        | str replace --all --regex '([A-Z]+)([A-Z][a-z])' '$1 $2'
+        | split row ' '
+      }
+    | flatten
+    | where {|t| $t | is-not-empty }
+    | each {|t| $t | str downcase }
+  )
+  # Collapse Django REST framework's `partial_update` compound verb to `patch`.
+  # Tokens are scanned pairwise; the rest of the list passes through.
+  mut out = []
+  let n = ($raw | length)
+  mut i = 0
+  while $i < $n {
+    let t = ($raw | get $i)
+    let next = if ($i + 1) < $n { ($raw | get ($i + 1)) } else { "" }
+    if ($t == "partial") and ($next == "update") {
+      $out = ($out | append "patch")
+      $i = ($i + 2)
+    } else {
+      $out = ($out | append $t)
+      $i = ($i + 1)
     }
   }
-  {matched: false, verb: "", remainder: ""}
+  $out
 }
 
-# Try to interpret an operationId as a PascalCase resource followed by a
-# trailing verb token (Docker style: ContainerDelete, ConfigList, ImageBuild).
-# Returns {matched: bool, verb: string, remainder: string} where remainder is
-# the kebab-cased resource part (which is usually discarded since the path
-# already carries the resource).
-def parse-trailing-verb [action_raw: string] {
-  let verbs = (known-verbs-regex)
-  # Allow the resource prefix to start with either upper- or lowercase (gitea
-  # uses `repoDelete` / `repoGet`; Docker uses `ContainerDelete`); the
-  # trailing verb still has to start uppercase to anchor the split.
-  # The overlap-with-path-resource check downstream prevents over-eager
-  # matches on arbitrary camelCase names like `findPetsByStatus`.
-  let pattern = ('^(?<rest>[a-zA-Z][a-z][A-Za-z0-9]*?)(?<verb>(?:' + (
-    $verbs | split row '|' | each {|v| ($v | str substring 0..0 | str upcase) + ($v | str substring 1..) } | str join '|'
-  ) + '))$')
-  let m = ($action_raw | parse --regex $pattern)
-  if ($m | is-empty) {
-    {matched: false, verb: "", remainder: ""}
-  } else {
-    let row = ($m | first)
-    {matched: true, verb: (canonical-verb $row.verb), remainder: (to-kebab $row.rest)}
+# Tokenize a path-derived resource (or any string) into atomic tokens for
+# cross-checking with opId tokens. Uses the SAME alphabet as `tokenize-opid`
+# so `storage.k8s.io` in a path symmetrically matches `storage` in an opId —
+# without this, the path-side tokens are glued together and opId tokens that
+# visually appear in the path stay misclassified as OTHER (issue #6.1).
+def tokenize-resource [resource: string] {
+  tokenize-opid $resource
+  | each {|t| naive-singular $t }
+  | where {|t| $t | is-not-empty }
+}
+
+# Classify each tokenized opId token. Returns a list of
+# {token: string, label: string} records preserving order.
+def classify-tokens [
+  tokens: list,
+  resource_tokens: list,   # singularized path resource tokens
+  param_tokens: list,      # singularized path-param name tokens (incl. "id")
+] {
+  $tokens | each {|t|
+    let sing = (naive-singular $t)
+    # Priority: RESOURCE / PARAM / STRUCTURAL beat VERB. Tokens that appear
+    # in the path resource take precedence so `createAccessRequest` on
+    # `/access_requests` classifies `request` as RESOURCE (load-bearing for
+    # the resource name) rather than as a secondary VERB.
+    let label = if ($t in $STRUCTURAL_TOKENS) or ($t =~ '^v\d+$') {
+      "STRUCTURAL"
+    } else if ($sing in $param_tokens) or ($t in $param_tokens) {
+      "PARAM"
+    } else if ($sing in $resource_tokens) or ($t in $resource_tokens) {
+      "RESOURCE"
+    } else if ($t in $KNOWN_VERBS) {
+      "VERB"
+    } else if ($t in $ARTICLES) {
+      "ARTICLE"
+    } else if ($t in $PREPOSITIONS) {
+      "PREPOSITION"
+    } else {
+      "OTHER"
+    }
+    {token: $t, label: $label}
   }
 }
 
-# Detect a single-word PascalCase verb (Azure batch: Add, Get, List, Delete).
-# Returns {matched: bool, verb: string}.
-def parse-single-verb [action_raw: string] {
-  let verbs = (known-verbs-regex)
-  let pattern = ('(?i)^(?<verb>(' + $verbs + '))$')
-  let m = ($action_raw | parse --regex $pattern)
-  if ($m | is-empty) {
-    {matched: false, verb: ""}
+# Given classified tokens + the HTTP method, pick the primary verb and build
+# the discriminator suffix. Returns the joined action string (e.g. "get",
+# "get-by-status", "delete-collection", "create-or-update").
+def pick-action [classified: list, method: string] {
+  let verb_idxs = ($classified | enumerate | where {|e| $e.item.label == "VERB" } | each {|e| $e.index })
+  # Leftmost wins: data shows it matches the HTTP method 2.4× more often than
+  # rightmost (38.9% vs 16.3%) when there are multiple verb tokens.
+  # When no token classifies as VERB, fall back to any token whose word is
+  # in the verb vocabulary even if it classified as RESOURCE — this rescues
+  # cases like `findPetsByStatus` on path `/pet/findByStatus` where the
+  # verb-word is itself embedded in a path segment.
+  let chosen_idx = if ($verb_idxs | is-not-empty) {
+    $verb_idxs | first
   } else {
-    {matched: true, verb: (canonical-verb ($m | first | get verb))}
+    # Fallback: no token classified as VERB, but the opId may still contain
+    # a vocab verb that classified as RESOURCE (e.g. `approveAccessRequest`
+    # on `/.../approve`, where every token also appears in the path).
+    # Leftmost wins — matches the dominant verb-at-0 position in the data.
+    let fallback_idxs = ($classified | enumerate | where {|e| $e.item.token in $KNOWN_VERBS } | each {|e| $e.index })
+    if ($fallback_idxs | is-empty) { -1 } else { $fallback_idxs | first }
+  }
+  let primary_verb = if $chosen_idx >= 0 {
+    canonical-verb ($classified | get $chosen_idx | get token)
+  } else {
+    # No verb token anywhere → fall back to HTTP method (71.5% agree with
+    # opId-verb when one exists, so method is a defensible default).
+    canonical-verb $method
+  }
+
+  # Build discriminator: walk tokens, keeping OTHER and secondary VERBs and
+  # PREPOSITIONS (when followed by a kept token).
+  mut parts = []
+  let n = ($classified | length)
+  for i in 0..<$n {
+    let entry = ($classified | get $i)
+    let label = $entry.label
+    let tok = $entry.token
+    let keep = if $i == $chosen_idx {
+      false
+    } else if $label in ["STRUCTURAL" "PARAM" "RESOURCE" "ARTICLE"] {
+      false
+    } else if $label == "PREPOSITION" {
+      # Keep if the NEXT non-dropped token is OTHER or VERB.
+      let upcoming = ($classified | skip ($i + 1) | where {|p| $p.label not-in ["STRUCTURAL" "PARAM" "RESOURCE" "ARTICLE"] })
+      ($upcoming | is-not-empty) and (($upcoming | first | get label) in ["OTHER" "VERB" "PREPOSITION"])
+    } else {
+      true   # OTHER or secondary VERB
+    }
+    if $keep {
+      let emit = if $label == "VERB" { canonical-verb $tok } else { $tok }
+      $parts = ($parts | append $emit)
+    }
+  }
+
+  if ($parts | is-empty) {
+    $primary_verb
+  } else {
+    $"($primary_verb)-($parts | str join '-')"
   }
 }
 
@@ -451,7 +540,7 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   let operation_id = ($op.operationId? | default "")
   let summary = ($op.summary? | default "")
   let description_text = ($op.description? | default "")
-  let description = if ($summary | is-not-empty) { $summary } else { $description_text }
+  let description = (spec normalize-description (if ($summary | is-not-empty) { $summary } else { $description_text }))
   let deprecated = ($op.deprecated? | default false)
   let external_docs = ($op.externalDocs? | default null)
 
@@ -543,6 +632,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
     {
       name: $p.name
       type: $param_type
+      items_type: (do $h.get-param-items-type $p)
       required: ($p.required? | default false)
       description: $description
       enum: (spec clean-enum-values (do $h.get-param-enum $p))
@@ -638,7 +728,15 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     # The {placeholders} inside add no useful naming signal and turn the
     # resource into a mangled string when joined back together.
     | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
-    | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",.$#!@%^&+~`]' '' }
+    # Strip garbage chars but PRESERVE separators (`.`, `_`, `:`, space) so
+    # the tokenizer can split on them. Without this, `account.cart.add.json`
+    # would have `.` stripped first and collapse to `accountcartaddjson`.
+    # See issue #7 — the resource-name string must share the alphabet with
+    # the matching token set so users see readable names like
+    # `account-cart-add-json` instead of glued strings.
+    | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",$#!@%^&+~`]' '' }
+    | each {|s| tokenize-opid $s }
+    | flatten
     | where {|s| $s | is-not-empty }
     | str join '-' | str kebab-case
   } else if ($tags | length) > 0 {
@@ -647,181 +745,84 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     "api"
   }
 
-  # Normalize slash-bearing operationIds (e.g. "repos/list-for-user").
-  # If the trailing segment is verb-like, drop the leading namespace; otherwise
-  # join with hyphens so the rest of the pipeline can deal with it.
-  # Handle both slash-separated (GitHub: "repos/list-for-user") and
-  # dot-separated (Google: "compute.firewallPolicies.list") namespaced
-  # operationIds. If the trailing segment looks verb-like, drop the leading
-  # namespace; otherwise join with hyphens so the rest of the pipeline can
-  # extract a verb from the joined form.
+  # `normalized_opid` retained ONLY for the `_2` numeric-suffix dedup below.
+  # The verb-extraction itself no longer uses it — see the tokenize-classify
+  # pipeline below.
   let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '[/.]') {
     let segs = ($operation_id | split row --regex '[/.]' | where {|s| $s | is-not-empty })
-    let last = ($segs | last)
-    if ($last =~ ('(?i)^(' + (known-verbs-regex) + ')')) {
-      $last
-    } else {
-      $segs | str join '-'
-    }
+    $segs | str join '-'
   } else {
     $operation_id
   }
 
-  let action_raw_unstripped = if ($normalized_opid | is-not-empty) {
-    let parts = ($normalized_opid | split row '_')
-    let last_part = ($parts | last)
-    if ($last_part =~ '^\d+$') and ($parts | length) >= 2 {
-      let action_part = ($parts | get (($parts | length) - 2))
-      $action_part
-    } else if ($parts | length) >= 2 and ($parts | last 2 | str join '_') == "partial_update" {
-      "partial_update"
-    } else {
-      $last_part
-    }
-  } else {
-    $method
-  }
-  # Strip leading non-alphanumeric chars so opIds like ".GetAvailableLocales"
-  # (bungie-net) still anchor the verb-prefix regex.
-  let action_raw = ($action_raw_unstripped | str replace --regex '^[^A-Za-z0-9]+' '')
-
-  # Resource-token containment check used by both leading- and trailing-verb
-  # detectors. Lowercases + singularizes, ignores trivial id/path-param tokens.
-  # Returns the cleaned remainder string (with resource-overlapping tokens
-  # removed). If the remainder reduces to nothing, the verb alone suffices.
+  # ── Tokenize → classify → pick ─────────────────────────────────
+  # Splits the operationId on every common separator + camelCase boundary,
+  # labels each token by its role (VERB / STRUCTURAL / PARAM / RESOURCE /
+  # PREPOSITION / ARTICLE / OTHER), then picks the leftmost VERB as the
+  # action and joins remaining tokens into the discriminator. Replaces the
+  # old chain of parse-verb-prefix / parse-trailing-verb / parse-single-verb
+  # / normalized_opid splitter / leading-non-alpha strip / recursive un-/bulk-
+  # handlers / trailing-token dedup. See CLASSIFIER-DESIGN.md.
   let resource_lower = ($resource | str downcase)
-  let resource_tokens = ($resource_lower | split row '-' | each {|t| naive-singular $t })
-  let path_param_names = ($path_params | each {|p| $p.name | str downcase })
-  let ignorable_tokens = ($path_param_names | append ["id"] | uniq)
-
-  # Apply custom verb map override, then verb-prefix / trailing-verb / single-word
-  # detectors, then default mapping.
-  let action_mapped = ($verb_map | get -o $action_raw | default null)
-  let action_picked = if ($action_mapped != null) {
-    $action_mapped
+  # Build resource_token_set from RAW path segments (pre-cleaning, pre-join),
+  # tokenized through the same alphabet as opIds. Without this, segments like
+  # `storage.k8s.io` or `account.cart.add.json` get glued into one token and
+  # opId tokens that visually appear in the path stay as discriminator noise.
+  # See issue #6.1.
+  let resource_token_set = if ($path_segments | length) > 0 {
+    $path_segments
+    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
+    | each {|s| tokenize-resource $s }
+    | flatten
+    | uniq
   } else {
-    # Detect single-word PascalCase verb FIRST (Azure batch: Add, Get, List).
-    # The check is intentionally restricted to PascalCase to avoid clobbering
-    # lowercase `_`-style suffixes like `op_retrieve` which need the legacy
-    # `action-verb` mapping (retrieve→get) inside parse-verb-prefix's empty-
-    # remainder branch.
-    let is_pascal_single = ($action_raw =~ '^[A-Z][a-z]+$')
-    let parsed_single_first = if $is_pascal_single { (parse-single-verb $action_raw) } else { {matched: false, verb: ""} }
-    let parsed = if $parsed_single_first.matched { {matched: false, verb: "", remainder: ""} } else { (parse-verb-prefix $action_raw) }
-    let parsed_trail = if $parsed_single_first.matched or $parsed.matched { {matched: false, verb: "", remainder: ""} } else { (parse-trailing-verb $action_raw) }
-    if $parsed_single_first.matched {
-      $parsed_single_first.verb
-    } else if $parsed.matched {
-      if ($parsed.remainder | is-empty) {
-        # No suffix → preserve legacy single-word verb mapping (retrieve→get etc).
-        action-verb $action_raw
-      } else {
-        # If the remainder (lowercased + naively singularized) is contained in the
-        # resource segments, the verb alone is enough — avoids stutters like
-        # `accounts get-accounts`. The "-by-X" tail (e.g. `getUserByName`) is
-        # treated as discriminator metadata, not signal — strip it for the
-        # containment check.
-        let remainder_lower = ($parsed.remainder | str downcase)
-        # Split off any "-by-..." suffix.
-        let by_split = ($remainder_lower | split row --regex '-by-')
-        let prefix_part = ($by_split | first)
-        # Two parallel lists: the original token strings (preserved verbatim
-        # for output) and their singularized form (used only for the dedup
-        # comparison against the resource tokens).
-        let remainder_raw = (
-          $prefix_part
-          | split row '-'
-          | where {|t| not ((naive-singular $t) in $ignorable_tokens) }
-        )
-        let remainder_tokens = ($remainder_raw | each {|t| naive-singular $t })
-        # Drop any tokens that overlap the path-derived resource. This is the
-        # "Resource+Method+Resource+Suffix" dedup case — k8s
-        # `readCoreV1NamespacedConfigMap` on `/configmaps/...` →
-        # remainder tokens `core`, `v1`, `namespaced`, `config`, `map`;
-        # `config-map` (joined) matches resource token `configmap` (singular
-        # of `configmaps`) so drop both `config` and `map`, keep
-        # `core-v1-namespaced`.
-        # Preserve the old behavior when ALL remainder tokens are in the
-        # resource — drop everything, return bare verb (this is the
-        # `accounts get-accounts` stutter case).
-        let all_contained = ($remainder_tokens | is-empty) or ($remainder_tokens | all {|t| $t in $resource_tokens })
-        let kept_tokens = if $all_contained {
-          []
-        } else {
-          # Trailing-token dedup: walk from the END, dropping tokens that
-          # match the resource (singular or joined with predecessor).
-          # Stop at the first non-match. This handles the k8s
-          # `CoreV1NamespacedConfigMap` case (trailing `ConfigMap` matches
-          # `configmaps`) without nuking head tokens that overlap.
-          let n = ($remainder_tokens | length)
-          mut drop_from = $n
-          mut i = ($n - 1)
-          while $i >= 0 {
-            let t = ($remainder_tokens | get $i)
-            let prev = if $i > 0 { ($remainder_tokens | get ($i - 1)) } else { "" }
-            let joined = ($prev + $t)
-            let joined_sing = (naive-singular $joined)
-            let single_match = ($t in $resource_tokens)
-            let joined_match = ($i > 0) and (($joined in $resource_tokens) or ($joined_sing in $resource_tokens))
-            if $joined_match {
-              $drop_from = ($i - 1)
-              $i = ($i - 2)
-            } else if $single_match {
-              $drop_from = $i
-              $i = ($i - 1)
-            } else {
-              break
-            }
-          }
-          if $drop_from >= $n {
-            $remainder_raw
-          } else if $drop_from <= 0 {
-            []
-          } else {
-            $remainder_raw | take $drop_from
-          }
-        }
-        if ($kept_tokens | is-empty) {
-          $parsed.verb
-        } else {
-          $"($parsed.verb)-($kept_tokens | str join '-')"
-        }
-      }
-    } else if $parsed_trail.matched {
-      # Trailing-verb (Docker: ContainerDelete). The resource part is already
-      # carried by the URL path; verify it actually overlaps the path-derived
-      # resource so we don't strip a legitimate camelCase name like
-      # `findPetsByStatus` (which doesn't match anyway since `status` is the
-      # verb and `findPetsBy` is the prefix — rejected below). If the prefix
-      # doesn't overlap, keep the original action_raw to be safe.
-      let trail_tokens = (
-        $parsed_trail.remainder
-        | split row '-'
-        | each {|t| naive-singular $t }
-        | where {|t| not ($t in $ignorable_tokens) }
-      )
-      let overlaps = ($trail_tokens | any {|t| $t in $resource_tokens })
-      if $overlaps or ($trail_tokens | is-empty) {
-        $parsed_trail.verb
-      } else {
-        # Prefix didn't overlap the resource — fall through to default.
-        action-verb $action_raw
-      }
-    } else {
-      action-verb $action_raw
-    }
+    # Path had no usable segments (e.g. `/` or only `{name}`): the final
+    # resource comes from tags or the "api" fallback. Tokenize it so opId
+    # tokens that overlap with the tag still classify as RESOURCE.
+    tokenize-resource $resource
   }
+  let path_param_token_set = (
+    $path_params | each {|p|
+      let n = ($p.name | str downcase)
+      [(naive-singular $n)] | append (tokenize-resource $n)
+    } | flatten | append ["id"] | uniq
+  )
 
-  # No-operationId fallback: if the picked action ended up empty, trivially
-  # equal to the resource (sendgrid: `alerts alerts`), or still looks like
-  # a PascalCase blob (Default / IsAlive / Batch / ContainerAttachWebsocket),
-  # fall back to the HTTP method as the verb.
-  let action_picked = if (
-    ($action_picked | is-empty) or
-    (($action_picked | str downcase) == $resource_lower) or
-    ($action_picked =~ '^[A-Z]')
-  ) {
+  # For dotted operationIds (Google `cloudkms.projects...macSign`, Flickr
+  # `flickr.favorites.getList`, Yandex, etc.), only the LAST dot-segment
+  # carries verb info — earlier segments are namespace. Without this, every
+  # namespace token survives as discriminator and produces 12-token verbs.
+  # See issue #6.2.
+  let opid_for_verb = if ($operation_id | is-not-empty) and ($operation_id | str contains ".") {
+    $operation_id | split row "." | last
+  } else if ($operation_id | is-not-empty) {
+    $operation_id
+  } else {
     $method
+  }
+  # Strip trailing `_<digit>+` before tokenizing — auto-generated dedup
+  # markers, not part of the action name. The numeric-suffix dedup branch
+  # downstream still uses `normalized_opid` to detect and re-attach the marker.
+  let opid_for_tokens = ($opid_for_verb | str replace --regex '_\d+$' '')
+  let tokens = (tokenize-opid $opid_for_tokens)
+  let classified = (classify-tokens $tokens $resource_token_set $path_param_token_set)
+  let picked = (pick-action $classified $method)
+
+  # Apply --verb-map. The override key is matched against (a) the full
+  # operationId, then (b) the last `_`-segment of the opId (legacy contract),
+  # then (c) the picked verb head. A match REPLACES the entire action.
+  let verb_map_keys = [
+    $operation_id
+    ($operation_id | split row '_' | last)
+    ($picked | split row '-' | first)
+  ]
+  let matches = ($verb_map_keys | each {|k| $verb_map | get -o $k } | where {|v| $v != null })
+  let action_picked = if ($matches | is-not-empty) { $matches | first } else { $picked }
+
+  # Stutter case: if the picked verb is literally the resource word
+  # (sendgrid: `alerts alerts`), fall back to canonical method.
+  let action_picked = if (($action_picked | str downcase) == $resource_lower) {
+    canonical-verb $method
   } else {
     $action_picked
   }

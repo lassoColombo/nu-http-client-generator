@@ -127,10 +127,10 @@ export def "images-build build" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/build")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /system/ping
@@ -157,7 +157,7 @@ export def "system-ping ping" [
 # GET /configmaps/{name}
 #
 # operationId: readNamespacedConfigMap
-export def "configmaps get-namespaced" [
+export def "configmaps get-config-map" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "configmaps get-namespaced" [
 # PUT /configmaps/{name}
 #
 # operationId: replaceNamespacedConfigMap
-export def "configmaps update-namespaced" [
+export def "configmaps update-config-map" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,16 +195,16 @@ export def "configmaps update-namespaced" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({name: $name} | format pattern "/configmaps/{name}"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /configmaps
 #
 # operationId: watchNamespacedConfigMap
-export def "configmaps watch-namespaced" [
+export def "configmaps watch-config-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,10 +241,10 @@ export def "blocks-children create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/blocks/{id}/children"))
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # POST /certificates
@@ -265,10 +265,10 @@ export def "certificates create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/certificates")
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
@@ -297,7 +297,7 @@ export def "certificates get" [
 # GET /namespaces/{namespace}/configmaps/{name}/status
 #
 # operationId: readCoreV1NamespacedConfigMapStatus
-export def "namespaces-configmaps-status get-core-v1-namespaced" [
+export def "namespaces-configmaps-status get-config-map" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

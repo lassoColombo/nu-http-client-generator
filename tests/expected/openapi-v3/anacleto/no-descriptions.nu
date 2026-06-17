@@ -216,7 +216,7 @@ export def "delivery-asset list" [
   --scanner-name: string
   --search: string
   --tag: string
-  --type: list
+  --type: list<string>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -231,7 +231,7 @@ export def "delivery-asset list" [
 #
 # POST /api/delivery/v1/asset-tag/create/
 # operationId: api_delivery_v1_asset_tag_create_create
-export def "delivery-asset-tag-create create" [
+export def "delivery-asset-tag-create tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,11 +247,11 @@ export def "delivery-asset-tag-create create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/delivery/v1/asset-tag/create/")
-  let body = {"idrs": $idrs, "name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idrs": $idrs, "name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Delete asset tag
@@ -297,11 +297,11 @@ export def "delivery-asset-tag-edit update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset-tag/edit/{id}/"))
-  let body = {"name": $name} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get asset Tag for Customer
@@ -357,11 +357,11 @@ export def "delivery-asset-create create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/delivery/v1/asset/create/")
-  let body = {"idrs": $idrs, "name": $name, "is_scannable": $is_scannable, "scanner_id": $scanner_id, "type": $type, "address": $address, "tag_id": $tag_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"idrs": $idrs, "name": $name, "is_scannable": $is_scannable, "scanner_id": $scanner_id, "type": $type, "address": $address, "tag_id": $tag_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Deactivate asset
@@ -461,11 +461,11 @@ export def "delivery-asset-details update" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/details/{id}/"))
-  let body = {"name": $name, "is_scannable": $is_scannable, "atlantis_id": $atlantis_id, "is_active": $is_active, "type": $type, "address": $address, "scanner_id": $scanner_id, "error": $body_error, "tag_id": $tag_id} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"name": $name, "is_scannable": $is_scannable, "atlantis_id": $atlantis_id, "is_active": $is_active, "type": $type, "address": $address, "scanner_id": $scanner_id, "error": $body_error, "tag_id": $tag_id} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }
 
 # Get asset for Customer
@@ -519,9 +519,9 @@ export def "delivery-asset-whitelist create" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/whitelist/{id}/"))
-  let body = {"ips": $ips, "creation_comment": $creation_comment, "expiration_date": $expiration_date, "description": $description} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let req_body = {"ips": $ips, "creation_comment": $creation_comment, "expiration_date": $expiration_date, "description": $description} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
 }

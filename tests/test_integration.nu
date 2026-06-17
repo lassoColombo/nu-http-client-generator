@@ -78,7 +78,7 @@ def "httpbin uuid returns valid uuid" [] {
 
 @test
 def "httpbin anything post echoes method" [] {
-    let resp = run-cmd $in.httpbin "httpbin anything post --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin anything create --max-time 15sec"
     assert equal $resp.method "POST"
 }
 
@@ -86,14 +86,14 @@ def "httpbin anything post echoes method" [] {
 
 @test
 def "petstore find pets by status" [] {
-    let resp = run-cmd $in.petstore "petstore pet-find-by-status findPetsByStatus --status available --max-time 15sec"
+    let resp = run-cmd $in.petstore "petstore pet-find-by-status find --status available --max-time 15sec"
     assert (($resp | length) > 0) "should return at least one pet"
 }
 
 @test
 def "petstore get pet by id" [] {
     # First find an existing pet, then fetch it by ID
-    let pets = run-cmd $in.petstore "petstore pet-find-by-status findPetsByStatus --status available --max-time 15sec"
+    let pets = run-cmd $in.petstore "petstore pet-find-by-status find --status available --max-time 15sec"
     assert (($pets | length) > 0) "should find at least one pet to test with"
     let pet_id = ($pets | first | get id)
     let resp = run-cmd $in.petstore $"petstore pet get ($pet_id) --max-time 15sec"

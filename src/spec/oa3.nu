@@ -183,6 +183,15 @@ export def helpers [] {
         spec normalize-type ($param.schema?.type? | default "string")
       }
     }
+    get-param-items-type: {|param|
+      # For array-typed params, return items.type so the signature can render
+      # `list<string>` / `list<int>` instead of bare `list`. Returns null when
+      # the param isn't an array or the item type isn't a usable primitive.
+      if ($param.content? | is-not-empty) { return null }
+      let t = (spec normalize-type ($param.schema?.type? | default null))
+      if $t != "array" { return null }
+      spec normalize-type ($param.schema?.items?.type? | default null)
+    }
     get-param-enum: {|param|
       if ($param.content? | is-not-empty) {
         []
