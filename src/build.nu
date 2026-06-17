@@ -178,6 +178,7 @@ def extract-body-fields [schema: record, schemas: record] {
       enum: $enum_vals
       description: $desc
       deprecated: $deprecated
+      format: $format
     }
   }
 }

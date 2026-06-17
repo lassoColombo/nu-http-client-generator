@@ -1,13 +1,13 @@
-# Auto-generated client for flag-name-edge-cases v1.0.0
+# Auto-generated client for header-override-edge-cases v1.0.0
 # Source: <spec>
-# Auth: --token flag or $env.FLAG_NAME_EDGE_CASES_TOKEN
+# Auth: --token flag or $env.HEADER_OVERRIDE_EDGE_CASES_TOKEN
 
-const BASE_URL = "https://example.com"
+const BASE_URL = "https://custom.example.com"
 const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FLAG_NAME_EDGE_CASES_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o HEADER_OVERRIDE_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
@@ -56,7 +56,6 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  let auth = {headers: ({"X-Test": "value"} | merge $auth.headers), query: $auth.query}
   if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
@@ -71,14 +70,16 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://example.com"] }
+def base-url-completer [] { ["https://custom.example.com" "https://api.example.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def accept-completer [] { ["application/json" "application/yaml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "widgets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-token create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,8 +99,43 @@ export def commands []: nothing -> table {
   }
 }
 
-# GET /widgets
+# OAuth token (Content-type as header param, no consumes)
 #
+# POST /oauth/token
+# operationId: token_create
+export def "oauth-token create" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --content-type: string # Equal to application/x-www-form-urlencoded
+  --hdr-accept: string # Response media type override
+  --grant-type: string
+  --username: string
+  --password: string
+]: any -> record<access_token: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/oauth/token")
+  let req_body = {"grant_type": $grant_type, "username": $username, "password": $password} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Content-type": $content_type, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let effective_ct = ($content_type | default "application/json")
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $effective_ct $req_body
+}
+
+# Accept-overridable list
+#
+# GET /widgets
 # operationId: widgets_list
 export def "widgets list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -110,18 +146,15 @@ export def "widgets list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --field-name: string
-  --notion-version: string
-  --x-request-id: string
-  --x-custom-header: string
+  --accept: string@accept-completer # Response content type
+  --hdr-accept: string # application/json (default) or application/yaml
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "{field-name}" $field_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base "/widgets" $qp)
-  let accept_val = "application/json"
+  let full_url = (build-url $base "/widgets")
+  let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

@@ -1,0 +1,83 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "header-override-edge-cases",
+    "version": "1.0.0",
+    "description": "Synthetic Swagger 2.0 spec exercising header-param overrides for Accept and Content-Type. Captures issue #11-7 (Accept clobber) and issue #11-8 (runtime content-type body serialization)."
+  },
+  "host": "api.example.com",
+  "basePath": "/v1",
+  "schemes": ["https"],
+  "paths": {
+    "/oauth/token": {
+      "post": {
+        "operationId": "token_create",
+        "tags": ["oauth"],
+        "summary": "OAuth token (Content-type as header param, no consumes)",
+        "parameters": [
+          {
+            "name": "Content-type",
+            "in": "header",
+            "type": "string",
+            "required": true,
+            "description": "Equal to application/x-www-form-urlencoded"
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "type": "string",
+            "required": false,
+            "description": "Response media type override"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "grant_type": { "type": "string" },
+                "username":   { "type": "string" },
+                "password":   { "type": "string" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "access_token": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets": {
+      "get": {
+        "operationId": "widgets_list",
+        "tags": ["widgets"],
+        "summary": "Accept-overridable list",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "type": "string",
+            "required": false,
+            "description": "application/json (default) or application/yaml"
+          }
+        ],
+        "produces": ["application/json", "application/yaml"],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": { "type": "object" }
+          }
+        }
+      }
+    }
+  }
+}

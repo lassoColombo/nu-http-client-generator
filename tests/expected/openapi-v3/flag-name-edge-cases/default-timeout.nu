@@ -118,9 +118,9 @@ export def "widgets list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "{field-name}" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/widgets" $qp)
-  let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
 }

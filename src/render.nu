@@ -354,8 +354,10 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 }
 
 # Render the helper functions that go into every generated client.
-#
-export def render-helpers [token_env_var: string, auth_schemes: list, default_auth: string, default_timeout: string, default_headers: record] {
+# `needs_multipart` controls emission of the `build-multipart-body` helper —
+# only generated when at least one operation uses `multipart/form-data` so
+# clients that never upload files stay slim.
+export def render-helpers [token_env_var: string, auth_schemes: list, default_auth: string, default_timeout: string, default_headers: record, needs_multipart: bool = false] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -455,7 +457,35 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '  if ($method in ["head" "options"]) { return $resp }'
     '  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }'
     '}'
-  ] | str join "\n"
+  ] | append (if $needs_multipart { [
+    ''
+    '# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists'
+    '# the field names whose value should be read from disk as bytes; every'
+    '# other field is sent as a text part (records/lists JSON-stringified).'
+    '# Returns {content_type, body} ready to pass to `do-request`.'
+    'def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {'
+    '  let boundary = $"----nu-(random chars --length 24)"'
+    '  let crlf = "\r\n"'
+    '  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|'
+    '    let name = $p.k'
+    '    let val = $p.v'
+    '    if $name in $file_fields {'
+    '      let filename = ($val | path basename)'
+    '      let bytes = (open --raw $val | into binary | collect)'
+    '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)'
+    '      $head ++ $bytes ++ ($crlf | into binary)'
+    '    } else {'
+    '      let dt = ($val | describe)'
+    '      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }'
+    '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)'
+    '      $head ++ ($"($s)($crlf)" | into binary)'
+    '    }'
+    '  })'
+    '  let trailer = ($"--($boundary)--($crlf)" | into binary)'
+    '  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer'
+    '  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}'
+    '}'
+  ] } else { [] }) | str join "\n"
 }
 
 # Build the body code for a command.
@@ -550,6 +580,20 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
   }
 
+  # Emit the hardcoded `Accept` default FIRST, then merge user-driven
+   # `extra_headers` (which may carry the user's `--hdr-accept` value) on top.
+   # Nushell's `merge` is right-biased — the last operand wins on key collision,
+   # so this ordering guarantees user-supplied Accept (and any other header
+   # param the user set) overrides the spec-default. Without this swap, the
+   # hardcoded `accept_val` clobbered the user value (issue #11-7).
+  let default_accept = ($cmd.accept_types | first)
+  if ($cmd.accept_types | length) > 1 {
+    $lines = ($lines | append ($"  let accept_val = \($accept | default \"($default_accept)\"\)"))
+  } else {
+    $lines = ($lines | append ($"  let accept_val = \"($default_accept)\""))
+  }
+  $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
+
   if ($cmd.header_params | length) > 0 {
     let hp_record = (render-param-record $cmd.header_params "hdr" --quote-keys)
     $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
@@ -562,42 +606,54 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
 
-  let default_accept = ($cmd.accept_types | first)
-  if ($cmd.accept_types | length) > 1 {
-    $lines = ($lines | append ($"  let accept_val = \($accept | default \"($default_accept)\"\)"))
-  } else {
-    $lines = ($lines | append ($"  let accept_val = \"($default_accept)\""))
-  }
-  $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
-
-  if $cmd.has_body and ($cmd.content_type == "multipart/form-data") and ($cmd.body_fields | length) > 0 {
-    let file_fields = ($cmd.body_fields | where {|f| $f.type == "file" })
-    let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
-    for f in $file_fields {
-      let sanitized = (to-var-name $f.name)
-      let flag_var = (to-flag-var $f.name)
-      let collides = ($sanitized in $path_param_names) or ($sanitized in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized | is-empty)
-      let var = if $f.required and (not $collides) {
-        $'$($sanitized)'
-      } else {
-        let flag = if $collides { $'body_($flag_var)' } else { $flag_var }
-        $'$($flag)'
-      }
-      $lines = ($lines | append ($"  let req_body = if \(($var) | is-not-empty\) { $req_body | upsert ($f.name) \(open -r ($var)\) } else { $req_body }"))
-    }
+  # multipart/form-data: encode the request body as an RFC 7578 envelope so
+  # binary file fields are sent as bytes (not as a literal path string) and
+  # other fields are JSON-stringified per the common multipart convention.
+  # The `build-multipart-body` helper (emitted by `render-helpers` only when
+  # this spec needs it) does the actual envelope construction at runtime.
+  # Both Swagger-2 (`type: file`) and OAS3 (`type: string, format: binary`)
+  # shapes contribute to the file-fields list. Issue #11-6.
+  let is_multipart = $cmd.has_body and ($cmd.content_type == "multipart/form-data") and ($cmd.body_fields | length) > 0
+  if $is_multipart {
+    let file_field_names = ($cmd.body_fields | where {|f|
+      ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
+    } | each {|f| $f.name })
+    let file_list_lit = ($file_field_names | each {|n| $n | to nuon } | str join ' ')
+    $lines = ($lines | append ($"  let mp = \(build-multipart-body $req_body [($file_list_lit)]\)"))
   }
 
-  # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
-  # string, not a JSON record. Nushell's `http post --content-type "..."`
-  # sets the header but doesn't reshape the body. Spec-conformance with
-  # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
-  # Nulls are dropped — caller's --field with no value shouldn't appear.
-  if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
+  # Detect a user-facing `--content-type` flag. Some Swagger-2 specs declare
+  # Content-Type as a header parameter rather than via `consumes` (Akeneo's
+  # OAuth token endpoint is the canonical case). When that flag exists, the
+  # user can override the spec's default at runtime — but the body still
+  # needs to be serialized to match. Issue #11-8.
+  let ct_matches = ($cmd.header_params | where {|p| ($p.name | str downcase) == "content-type" })
+  let has_ct_override = (($ct_matches | length) > 0) and $cmd.has_body
+  let ct_var = if $has_ct_override {
+    let v = (effective-flag-var ($ct_matches | first | get name) "hdr")
+    $"$($v)"
+  } else { null }
+
+  if $has_ct_override {
+    # Effective content-type for body serialization and the request.
+    $lines = ($lines | append ($"  let effective_ct = \(($ct_var) | default \"($cmd.content_type)\"\)"))
+    # Runtime serialization branch: when the user (or the spec default) picks
+    # x-www-form-urlencoded, serialize the body record to `k=v&k=v`. Other
+    # content types pass the body through unchanged — JSON is what Nushell's
+    # `http post` already does by default.
+    $lines = ($lines | append '  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }')
+  } else if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
+    # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
+    # string, not a JSON record. Nushell's `http post --content-type "..."`
+    # sets the header but doesn't reshape the body. Spec-conformance with
+    # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
+    # Nulls are dropped — caller's --field with no value shouldn't appear.
     $lines = ($lines | append '  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")')
   }
 
-  let body_arg = if $cmd.has_body { " $req_body" } else { "" }
-  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "($cmd.content_type)"($body_arg)')
+  let body_arg = if $is_multipart { ' $mp.body' } else if $cmd.has_body { " $req_body" } else { "" }
+  let ct_arg = if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
+  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors ($ct_arg)($body_arg)')
 
   $lines | str join "\n"
 }
@@ -791,7 +847,18 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
   let completers = $completer_data.completers
   let mapping = $completer_data.mapping
 
-  let helpers_code = render-helpers $token_env_var $auth_schemes $default_auth $config.default_timeout $config.default_headers
+  # Only emit the multipart envelope builder when at least one operation in
+  # this spec uses `multipart/form-data` and exposes at least one binary field
+  # (a file upload). Slim out the helper for non-upload specs.
+  let needs_multipart = ($commands | any {|c|
+    ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false) and (
+      ($c.body_fields? | default [] | any {|f|
+        ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
+      })
+    )
+  })
+
+  let helpers_code = render-helpers $token_env_var $auth_schemes $default_auth $config.default_timeout $config.default_headers $needs_multipart
 
   let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $default_auth $all_urls $commands $auth_schemes $completers $helpers_code $config
 
