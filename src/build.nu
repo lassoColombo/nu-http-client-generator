@@ -310,6 +310,12 @@ def canonical-verb [prefix: string] {
     "unlock" => "unlock"
     "finalize" => "finalize"
     "abort" => "abort"
+    # Round-4 additions
+    "find" => "find"
+    "confirm" => "confirm"
+    "set" => "update"
+    "all" => "list"
+    "current" => "get"
     _ => $prefix
   }
 }
@@ -329,7 +335,8 @@ def known-verbs-regex [] {
     + 'get|post|put|patch|delete|list|create|retrieve|fetch|insert|remove|destroy|'
     + 'read|replace|append|query|inspect|attach|prune|exec|commit|build|ping|cancel|enable|disable|wait|restart|start|stop|clone|copy|move|add|'
     + 'request|export|import|info|version|kill|resize|rename|pull|push|search|top|changes|stats|logs|revoke|approve|reject|'
-    + 'upload|download|send|receive|sync|refresh|reload|reset|validate|verify|check|test|submit|trigger|close|open|finalize|abort')
+    + 'upload|download|send|receive|sync|refresh|reload|reset|validate|verify|check|test|submit|trigger|close|open|finalize|abort|'
+    + 'find|confirm|current|all|set')
 }
 
 # Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
@@ -355,16 +362,36 @@ def parse-verb-prefix [action_raw: string] {
   let verbs = (known-verbs-regex)
   let pattern = ('(?i)^(?<verb>(' + $verbs + '))(?<rest>([A-Z_].*)?)$')
   let m = ($action_raw | parse --regex $pattern)
-  if ($m | is-empty) {
-    {matched: false, verb: "", remainder: ""}
-  } else {
+  if ($m | is-not-empty) {
     let row = ($m | first)
     let rest_raw = ($row.rest | default "" | str trim --char '_')
     # Strip leading article (A / An / The) when followed by uppercase or end.
     let rest_no_article = ($rest_raw | str replace --regex '^(A|An|The)([A-Z_].*)?$' '$2')
     let remainder = (to-kebab $rest_no_article)
-    {matched: true, verb: (canonical-verb $row.verb), remainder: $remainder}
+    return {matched: true, verb: (canonical-verb $row.verb), remainder: $remainder}
   }
+  # Recursive prefix handling: `Un<Verb>` / `un<Verb>` and `bulk<Verb>`
+  # follow a strip-and-recurse pattern. Trigger only on uppercase boundary
+  # to avoid false-firing on `unknown*` / `until*` / `union*` / `bulk*`
+  # (the noun form). Inner parse must match a known verb — otherwise fall
+  # through, so e.g. `UnDoSomething` (where `do` isn't a verb) stays raw.
+  let recursive = if ($action_raw =~ '^[Uu]n[A-Z]') {
+    {prefix: "un", strip: 2}
+  } else if ($action_raw =~ '^bulk[A-Z]') {
+    {prefix: "bulk", strip: 4}
+  } else if ($action_raw =~ '^Bulk[A-Z]') {
+    {prefix: "bulk", strip: 4}
+  } else {
+    null
+  }
+  if $recursive != null {
+    let inner_input = ($action_raw | str substring $recursive.strip..)
+    let inner = (parse-verb-prefix $inner_input)
+    if $inner.matched {
+      return {matched: true, verb: $"($recursive.prefix)-($inner.verb)", remainder: $inner.remainder}
+    }
+  }
+  {matched: false, verb: "", remainder: ""}
 }
 
 # Try to interpret an operationId as a PascalCase resource followed by a
@@ -374,10 +401,12 @@ def parse-verb-prefix [action_raw: string] {
 # already carries the resource).
 def parse-trailing-verb [action_raw: string] {
   let verbs = (known-verbs-regex)
-  # Require the resource prefix to start uppercase and the trailing verb to
-  # start uppercase too — keeps clean camelCase (findPetsByStatus) untouched
-  # while catching PascalCase ContainerDelete / ConfigList.
-  let pattern = ('^(?<rest>[A-Z][a-z][A-Za-z0-9]*?)(?<verb>(?:' + (
+  # Allow the resource prefix to start with either upper- or lowercase (gitea
+  # uses `repoDelete` / `repoGet`; Docker uses `ContainerDelete`); the
+  # trailing verb still has to start uppercase to anchor the split.
+  # The overlap-with-path-resource check downstream prevents over-eager
+  # matches on arbitrary camelCase names like `findPetsByStatus`.
+  let pattern = ('^(?<rest>[a-zA-Z][a-z][A-Za-z0-9]*?)(?<verb>(?:' + (
     $verbs | split row '|' | each {|v| ($v | str substring 0..0 | str upcase) + ($v | str substring 1..) } | str join '|'
   ) + '))$')
   let m = ($action_raw | parse --regex $pattern)
@@ -621,8 +650,13 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   # Normalize slash-bearing operationIds (e.g. "repos/list-for-user").
   # If the trailing segment is verb-like, drop the leading namespace; otherwise
   # join with hyphens so the rest of the pipeline can deal with it.
-  let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '/') {
-    let segs = ($operation_id | split row '/' | where {|s| $s | is-not-empty })
+  # Handle both slash-separated (GitHub: "repos/list-for-user") and
+  # dot-separated (Google: "compute.firewallPolicies.list") namespaced
+  # operationIds. If the trailing segment looks verb-like, drop the leading
+  # namespace; otherwise join with hyphens so the rest of the pipeline can
+  # extract a verb from the joined form.
+  let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '[/.]') {
+    let segs = ($operation_id | split row --regex '[/.]' | where {|s| $s | is-not-empty })
     let last = ($segs | last)
     if ($last =~ ('(?i)^(' + (known-verbs-regex) + ')')) {
       $last
@@ -633,7 +667,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     $operation_id
   }
 
-  let action_raw = if ($normalized_opid | is-not-empty) {
+  let action_raw_unstripped = if ($normalized_opid | is-not-empty) {
     let parts = ($normalized_opid | split row '_')
     let last_part = ($parts | last)
     if ($last_part =~ '^\d+$') and ($parts | length) >= 2 {
@@ -647,6 +681,9 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   } else {
     $method
   }
+  # Strip leading non-alphanumeric chars so opIds like ".GetAvailableLocales"
+  # (bungie-net) still anchor the verb-prefix regex.
+  let action_raw = ($action_raw_unstripped | str replace --regex '^[^A-Za-z0-9]+' '')
 
   # Resource-token containment check used by both leading- and trailing-verb
   # detectors. Lowercases + singularizes, ignores trivial id/path-param tokens.

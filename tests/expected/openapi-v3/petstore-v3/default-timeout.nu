@@ -166,7 +166,7 @@ export def "pet create" [
 #
 # GET /pet/findByStatus
 # operationId: findPetsByStatus
-export def "pet-find-by-status findPetsByStatus" [
+export def "pet-find-by-status find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "pet-find-by-status findPetsByStatus" [
 #
 # GET /pet/findByTags
 # operationId: findPetsByTags
-export def "pet-find-by-tags findPetsByTags" [
+export def "pet-find-by-tags find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

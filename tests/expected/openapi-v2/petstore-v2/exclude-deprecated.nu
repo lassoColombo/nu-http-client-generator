@@ -195,7 +195,7 @@ export def "pet update" [
 #
 # GET /pet/findByStatus
 # operationId: findPetsByStatus
-export def "pet-find-by-status findPetsByStatus" [
+export def "pet-find-by-status find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
