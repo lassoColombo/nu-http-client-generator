@@ -236,7 +236,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id" [
   --notified-llama: oneof<nothing, bool>
   --notified-cardinalis: oneof<nothing, bool>
   --customer: int # nullable
-]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, ... (9 more fields)> {
+]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +284,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id-1" [
   --notified-llama: oneof<nothing, bool>
   --notified-cardinalis: oneof<nothing, bool>
   --customer: int # nullable
-]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, ... (9 more fields)> {
+]: any -> record<id: int, endpoint_name: string, endpoint_id: string, user_name: string, user_id: string, mapped_status: string, endpoint_atlantis_id: string, solved: string, type: string, created_at: string, updated_at: string, uniqueness: string, incident_name: string, eps_prevention: bool, eps_prevention_success: string, path: string, command_line: string, alert_ip: string, alert_domain: string, alert_url: string, username: string, severity: string, status: string, alert_type: string, date_in: string, last_seen: string, date_changed: string, remediation_status: string, scan_group_name: string, file: string, acknowledged: bool, notified_llama: bool, notified_cardinalis: bool, customer: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

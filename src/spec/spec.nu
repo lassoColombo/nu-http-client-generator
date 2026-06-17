@@ -302,31 +302,19 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
 }
 
 # Build "field1: type1, field2: type2" string from a properties map.
-# Caps total width so wide records (200+ fields) don't produce multi-thousand-
-# character return-type signatures that Nushell's help renderer dumps as one
-# ultra-wide line. Truncated entries are summarized as `... (N more fields)`.
-def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>, --max-width: int = 500] {
-  let entries = $properties | transpose name prop_schema | each {|entry|
+#
+# Output goes into a `record<...>` TYPE SIGNATURE — must be valid Nushell type
+# syntax. No truncation: a `... (N more fields)` marker would be a parse error.
+# Catastrophic depth is already bounded by `max_depth`; wide records produce
+# long-but-valid signatures, which is the correct tradeoff (terminals wrap,
+# parsers don't fix bad syntax).
+def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
+  $properties | transpose name prop_schema | each {|entry|
     let field_type = (schema-to-nu-type $entry.prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
     # sanitize field names: nushell doesn't allow special chars in record type keys
     let safe_name = ($entry.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
     $"($safe_name): ($field_type)"
-  }
-  let total = ($entries | length)
-  mut kept = []
-  mut len = 0
-  for entry in $entries {
-    let entry_len = ($entry | str length)
-    let proj = $len + $entry_len + (if ($kept | is-empty) { 0 } else { 2 })
-    if ($proj > $max_width) and (($kept | length) > 0) {
-      let remaining = ($total - ($kept | length))
-      $kept = ($kept | append $"... \(($remaining) more fields\)")
-      break
-    }
-    $kept = ($kept | append $entry)
-    $len = $proj
-  }
-  $kept | str join ", "
+  } | str join ", "
 }
 
 # Build an auth scheme record from a security definition entry.

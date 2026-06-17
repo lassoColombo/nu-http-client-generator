@@ -110,7 +110,7 @@ export def "meta get-root" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<current_user_url: string, current_user_authorizations_html_url: string, authorizations_url: string, code_search_url: string, commit_search_url: string, emails_url: string, emojis_url: string, events_url: string, feeds_url: string, followers_url: string, following_url: string, gists_url: string, hub_url: string, issue_search_url: string, issues_url: string, keys_url: string, label_search_url: string, notifications_url: string, organization_url: string, organization_repositories_url: string, ... (13 more fields)> {
+]: nothing -> record<current_user_url: string, current_user_authorizations_html_url: string, authorizations_url: string, code_search_url: string, commit_search_url: string, emails_url: string, emojis_url: string, events_url: string, feeds_url: string, followers_url: string, following_url: string, gists_url: string, hub_url: string, issue_search_url: string, issues_url: string, keys_url: string, label_search_url: string, notifications_url: string, organization_url: string, organization_repositories_url: string, organization_teams_url: string, public_gists_url: string, rate_limit_url: string, repository_url: string, repository_search_url: string, current_user_repositories_url: string, starred_url: string, starred_gists_url: string, topic_search_url: string, user_url: string, user_organizations_url: string, user_repositories_url: string, user_search_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
@@ -151,7 +151,7 @@ export def "advisories list-security-global" [
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --qp-sort: string@sort-completer # The property to sort the results by. (default: published)
-]: nothing -> table<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: list<record>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: list<record>, cvss: record<vector_string: string, score: float>, ... (4 more fields)> {
+]: nothing -> table<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: list<record>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: list<record>, cvss: record<vector_string: string, score: float>, cvss_severities: record<cvss_v3: record, cvss_v4: record>, epss: record<percentage: float, percentile: float>, cwes: list<record>, credits: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ghsa_id" $ghsa_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "cve_id" $cve_id "scalar") (serialize-qp "ecosystem" $ecosystem "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "cwes" $cwes "scalar") (serialize-qp "is_withdrawn" $is_withdrawn "scalar") (serialize-qp "affects" $affects "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "updated" $updated "scalar") (serialize-qp "modified" $modified "scalar") (serialize-qp "epss_percentage" $epss_percentage "scalar") (serialize-qp "epss_percentile" $epss_percentile "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -176,7 +176,7 @@ export def "advisories get-security-global-advisory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: table<type: string, value: string>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, ... (6 more fields)> {
+]: nothing -> record<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: table<type: string, value: string>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: table<package: record, vulnerable_version_range: string, first_patched_version: string, vulnerable_functions: list>, cvss: record<vector_string: string, score: float>, cvss_severities: record<cvss_v3: record<vector_string: string, score: float>, cvss_v4: record<vector_string: string, score: float>>, epss: record<percentage: float, percentile: float>, cwes: table<cwe_id: string, name: string>, credits: table<user: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({ghsa_id: $ghsa_id} | format pattern "/advisories/{ghsa_id}"))
@@ -242,6 +242,7 @@ export def "agents-repos-tasks create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/agents/repos/{owner}/{repo}/tasks"))
+  let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,7 +266,7 @@ export def "agents-repos-tasks get-by-and" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, ... (1 more fields)> {
+]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({owner: $owner, repo: $repo, task_id: $task_id} | format pattern "/agents/repos/{owner}/{repo}/tasks/{task_id}"))
@@ -320,7 +321,7 @@ export def "agents-tasks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, ... (1 more fields)> {
+]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base ({task_id: $task_id} | format pattern "/agents/tasks/{task_id}"))
@@ -420,6 +421,7 @@ export def "app-hook-config update-webhook" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app/hook/config")
+  let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,7 +519,7 @@ export def "app-installation-requests list-for-authenticated" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
-]: nothing -> table<id: int, node_id: string, account: any, requester: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, ... (1 more fields)> {
+]: nothing -> table<id: int, node_id: string, account: any, requester: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -545,7 +547,7 @@ export def "app-installations list" [
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --since: string # Only show results that were last updated after the given time. This is a timestamp in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format: `YYYY-MM-DDTHH:MM:SSZ`. (format: date-time)
   --outdated: string
-]: nothing -> table<id: int, account: any, repository_selection: string, access_tokens_url: string, repositories_url: string, html_url: string, app_id: int, client_id: string, target_id: int, target_type: string, ... (11 more fields)> {
+]: nothing -> table<id: int, account: any, repository_selection: string, access_tokens_url: string, repositories_url: string, html_url: string, app_id: int, client_id: string, target_id: int, target_type: string, permissions: record<actions: string, administration: string, artifact_metadata: string, attestations: string, checks: string, code_quality: string, codespaces: string, contents: string, dependabot_secrets: string, deployments: string, discussions: string, environments: string, issues: string, merge_queues: string, metadata: string, packages: string, pages: string, pull_requests: string, repository_custom_properties: string, repository_hooks: string, repository_projects: string, secret_scanning_alerts: string, secrets: string, security_events: string, single_file: string, statuses: string, vulnerability_alerts: string, workflows: string, custom_properties_for_organizations: string, members: string, organization_administration: string, organization_custom_roles: string, organization_custom_org_roles: string, organization_custom_properties: string, organization_copilot_seat_management: string, organization_copilot_agent_settings: string, organization_announcement_banners: string, organization_events: string, organization_hooks: string, organization_personal_access_tokens: string, organization_personal_access_token_requests: string, organization_plan: string, organization_projects: string, organization_packages: string, organization_secrets: string, organization_self_hosted_runners: string, organization_user_blocking: string, email_addresses: string, followers: string, git_ssh_keys: string, gpg_keys: string, interaction_limits: string, profile: string, starring: string, enterprise_custom_properties_for_organizations: string>, events: list<string>, created_at: string, updated_at: string, single_file_name: string, has_multiple_single_files: bool, single_file_paths: list<string>, app_slug: string, suspended_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, suspended_at: string, contact_email: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "outdated" $outdated "scalar")] | flatten | str join "&"

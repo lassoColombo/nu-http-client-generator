@@ -486,9 +486,18 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)\)"))
   }
 
-  if $cmd.has_body and ($cmd.body_fields | length) > 0 {
+  # Build the initial $req_body before the input-merge line. Two paths:
+  #   per-field: signature exposes individual --field flags; we assemble them
+  #              into a record literal.
+  #   collapsed: signature exposes a single `--body: record` flag, which
+  #              Nushell binds to $body. We seed $req_body from $body so the
+  #              merge line below has the same shape in both paths.
+  # Without the seed in the collapsed branch, $req_body would be undefined
+  # when the merge line tries to read it (regression #9-B).
+  if $cmd.has_body {
     let use_collapsed = ($config.body_threshold > 0) and (($cmd.body_fields | length) > $config.body_threshold)
-    if not $use_collapsed {
+    let has_per_field = (($cmd.body_fields | length) > 0) and (not $use_collapsed)
+    if $has_per_field {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       let body_parts = $cmd.body_fields | enumerate | each {|item|
         let f = $item.item
@@ -512,10 +521,9 @@ export def build-body-code [cmd: record, config: record] {
         $'($key | to nuon): ($var_name)'
       } | str join ", "
       $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
+    } else {
+      $lines = ($lines | append '  let req_body = $body')
     }
-  }
-
-  if $cmd.has_body {
     $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
   }
 

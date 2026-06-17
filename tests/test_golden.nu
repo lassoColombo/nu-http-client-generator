@@ -20,6 +20,28 @@ def run-variant [name: string] {
         let out = $tmp | path join "out.nu"
         let result = try {
             do $variant.gen $spec.path $out
+
+            # Parse-load check. Golden string-diff doesn't exercise the
+            # parser, so codegen changes that emit invalid Nushell syntax
+            # (e.g. `... (N more fields)` inside `record<>`, or a `$var`
+            # reference to a never-defined identifier) sail past it. A
+            # subprocess `use` catches the entire class of bugs that round-9
+            # filed two regressions for.
+            let parse = (^nu --no-config-file -c $"use \"($out)\"" | complete)
+            if $parse.exit_code != 0 {
+                let fail_dir = $"tests/failures/($spec.format)/($spec.stem)"
+                mkdir $fail_dir
+                let fail_path = $"($fail_dir)/($name).nu"
+                cp $out $fail_path
+                rm --recursive $tmp
+                let err = ($parse.stderr | lines | take 10 | str join "\n  ")
+                return {
+                    spec: $label
+                    status: "fail"
+                    msg: $"parse error in generated client \(($fail_path)\):\n  ($err)"
+                }
+            }
+
             let actual = open $out --raw | lib normalize
             let expected = open $golden --raw
             if $actual == $expected {
