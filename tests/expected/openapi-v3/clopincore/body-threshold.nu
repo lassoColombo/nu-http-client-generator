@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -111,7 +120,7 @@ export def "sspm list-by-idrs" [
 ]: nothing -> table<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/SSPM/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/SSPM/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +142,7 @@ export def "customers get-by-idrs" [
 ]: nothing -> record<id: int, idrs: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/customers/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +166,7 @@ export def "customers update-by-idrs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/customers/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let req_body = {"idrs": $body_idrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -181,7 +190,7 @@ export def "customers delete-by-idrs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/customers/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +212,7 @@ export def "dmilogs list-by-idrs" [
 ]: nothing -> table<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/dmilogs/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/dmilogs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,7 +234,7 @@ export def "domain-findings list-by-idrs" [
 ]: nothing -> table<insertion_date: string, url: string, domain: string, username: string, password: string, kind: int, anti_virus: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/domain-findings/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/domain-findings/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +256,7 @@ export def "domains list-by-idrs" [
 ]: nothing -> table<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/domains/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/domains/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +278,7 @@ export def "pegasus-sources list-by-idrs" [
 ]: nothing -> table<customer: int, dmilog: int, provider: int, identity: string, auth_expiry: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/pegasus-sources/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/pegasus-sources/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +300,7 @@ export def "startupvariables list-by-idrs" [
 ]: nothing -> table<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/startupvariables/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/startupvariables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +322,7 @@ export def "timonextractor list-by-idrs" [
 ]: nothing -> table<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/v1/{idrs}/timonextractor/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/timonextractor/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,7 +392,7 @@ export def "sspm get" [
 ]: nothing -> record<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer: $customer, tech: $tech} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,7 +418,7 @@ export def "sspm update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer: $customer, tech: $tech} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -434,7 +443,7 @@ export def "sspm delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({customer: $customer, tech: $tech} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
+  let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,7 +465,7 @@ export def "sspm get-by-id" [
 ]: nothing -> record<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/SSPM/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -481,7 +490,7 @@ export def "sspm update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/SSPM/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -505,7 +514,7 @@ export def "sspm delete-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/SSPM/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -573,7 +582,7 @@ export def "customers get" [
 ]: nothing -> record<id: int, idrs: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,7 +606,7 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let req_body = {"idrs": $idrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -621,7 +630,7 @@ export def "customers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/customers/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +699,7 @@ export def "dmilogs get" [
 ]: nothing -> record<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/dmilogs/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,7 +724,7 @@ export def "dmilogs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/dmilogs/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let req_body = {"name": $name, "customer": $customer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -739,7 +748,7 @@ export def "dmilogs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/dmilogs/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,7 +770,7 @@ export def "dmilogs get-by-name" [
 ]: nothing -> record<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilogs/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,7 +795,7 @@ export def "dmilogs update-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilogs/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let req_body = {"name": $body_name, "customer": $customer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -810,7 +819,7 @@ export def "dmilogs delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/dmilogs/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,7 +888,7 @@ export def "domain-findings get" [
 ]: nothing -> record<insertion_date: string, url: string, domain: string, username: string, password: string, kind: int, anti_virus: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domain-findings/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -904,7 +913,7 @@ export def "domain-findings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domain-findings/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -928,7 +937,7 @@ export def "domain-findings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domain-findings/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -998,7 +1007,7 @@ export def "domains get" [
 ]: nothing -> record<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domains/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1024,7 +1033,7 @@ export def "domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domains/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let req_body = {"name": $name, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1048,7 +1057,7 @@ export def "domains delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/domains/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1070,7 +1079,7 @@ export def "domains get-by-name" [
 ]: nothing -> record<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/domains/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1105,7 @@ export def "domains update-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/domains/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let req_body = {"name": $body_name, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1120,7 +1129,7 @@ export def "domains delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/domains/{name}/"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1189,7 +1198,7 @@ export def "pegasus-sources get" [
 ]: nothing -> record<customer: int, dmilog: int, provider: int, identity: string, auth_expiry: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pegasus-sources/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1214,7 +1223,7 @@ export def "pegasus-sources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pegasus-sources/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1238,7 +1247,7 @@ export def "pegasus-sources delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/pegasus-sources/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1308,7 +1317,7 @@ export def "startupvariables get" [
 ]: nothing -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dmilog: $dmilog, name: $name} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
+  let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1334,7 +1343,7 @@ export def "startupvariables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dmilog: $dmilog, name: $name} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
+  let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1359,7 +1368,7 @@ export def "startupvariables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({dmilog: $dmilog, name: $name} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
+  let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1390,7 @@ export def "startupvariables get-by-id" [
 ]: nothing -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/startupvariables/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1406,7 +1415,7 @@ export def "startupvariables update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/startupvariables/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1430,7 +1439,7 @@ export def "startupvariables delete-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/startupvariables/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1454,7 +1463,7 @@ export def "sync create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({project: $project, branch: $branch, path: $path} | format pattern "/api/v1/sync/{project}/{branch}/{path}/"))
+  let full_url = (build-url $base ({project: (encode-path-segment $project), branch: (encode-path-segment $branch), path: (encode-path-segment $path)} | format pattern "/api/v1/sync/{project}/{branch}/{path}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1523,7 +1532,7 @@ export def "timonextractor get" [
 ]: nothing -> record<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/timonextractor/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1548,7 +1557,7 @@ export def "timonextractor update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/timonextractor/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -1572,7 +1581,7 @@ export def "timonextractor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v1/timonextractor/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

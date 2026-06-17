@@ -45,8 +45,42 @@ export def drop-vendor-extensions []: any -> any {
   if ($vendor_keys | is-empty) { $obj } else { $obj | reject ...$vendor_keys }
 }
 
+# Generic JSON Pointer traversal (RFC 6901) over a full document.
+# Each segment indexes a record by string key or a list by integer index.
+# `~1` decodes to `/` and `~0` decodes to `~`. Returns null on any miss.
+def json-pointer-lookup [doc: any, ref_path: string]: nothing -> any {
+  if not ($ref_path | str starts-with "#/") { return null }
+  let stripped = ($ref_path | str substring 2..)
+  if ($stripped | is-empty) { return $doc }
+  let segments = ($stripped | split row '/' | each {|s|
+    # `~1` MUST be decoded before `~0` — per RFC 6901 — otherwise `~01`
+    # round-trips to `/` instead of `~1`.
+    $s | str replace --all '~1' '/' | str replace --all '~0' '~'
+  })
+  mut current = $doc
+  for seg in $segments {
+    let t = ($current | describe)
+    if ($t | str starts-with "record") {
+      if not ($seg in ($current | columns)) { return null }
+      $current = ($current | get $seg)
+    } else if ($t | str starts-with "list") or ($t | str starts-with "table") {
+      let idx = (try { $seg | into int } catch { -1 })
+      if $idx < 0 or $idx >= ($current | length) { return null }
+      $current = ($current | get $idx)
+    } else {
+      return null
+    }
+  }
+  $current
+}
+
 # Look up a $ref target in a nested schemas record (keyed by namespace).
-# Parses the ref path to find the right sub-record, with fallback search.
+# Parses the ref path to find the right sub-record, with two fallbacks:
+# (1) search all known namespaces by entity name, and (2) generic JSON Pointer
+# traversal of the full spec document when it's been stashed under `__spec__`
+# (DigitalOcean uses cross-path refs like `#/paths/~1v2~1.../get/parameters/0`
+# to dedupe pagination params; those don't name a schemas-table entity and
+# can only be resolved by walking the original spec).
 # Returns null if not found.
 def ref-lookup [ref_path: string, schemas: record] {
   let parts = ($ref_path | split row '/')
@@ -65,12 +99,21 @@ def ref-lookup [ref_path: string, schemas: record] {
       return ($sub | get $name)
     }
   }
-  # Fallback: search all sub-records
+  # Fallback 1: search known schemas-table namespaces by entity name. Skip
+  # `__spec__` so we don't accidentally return a top-level spec field that
+  # happens to share a name with the target.
   for col in ($schemas | columns) {
+    if $col == "__spec__" { continue }
     let sub = ($schemas | get $col)
     if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
       return ($sub | get $name)
     }
+  }
+  # Fallback 2: generic JSON Pointer traversal of the original spec document.
+  let spec_doc = ($schemas.__spec__? | default null)
+  if $spec_doc != null {
+    let target = (json-pointer-lookup $spec_doc $ref_path)
+    if $target != null { return $target }
   }
   null
 }

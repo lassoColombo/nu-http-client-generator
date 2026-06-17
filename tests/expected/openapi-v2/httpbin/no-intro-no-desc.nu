@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -84,7 +93,7 @@ export def "absolute-redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/absolute-redirect/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/absolute-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +220,7 @@ export def "anything delete-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({anything: $anything} | format pattern "/anything/{anything}"))
+  let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +242,7 @@ export def "anything get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({anything: $anything} | format pattern "/anything/{anything}"))
+  let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,7 +264,7 @@ export def "anything update-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({anything: $anything} | format pattern "/anything/{anything}"))
+  let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +286,7 @@ export def "anything create-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({anything: $anything} | format pattern "/anything/{anything}"))
+  let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +308,7 @@ export def "anything update-by-anything-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({anything: $anything} | format pattern "/anything/{anything}"))
+  let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,7 +330,7 @@ export def "base64 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({value: $value} | format pattern "/base64/{value}"))
+  let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/base64/{value}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +353,7 @@ export def "basic-auth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user, passwd: $passwd} | format pattern "/basic-auth/{user}/{passwd}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,7 +420,7 @@ export def "bytes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/bytes/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,7 +467,7 @@ export def "cache get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({value: $value} | format pattern "/cache/{value}"))
+  let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/cache/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -548,7 +557,7 @@ export def "cookies-set get-by-name-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name, value: $value} | format pattern "/cookies/set/{name}/{value}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name), value: (encode-path-segment $value)} | format pattern "/cookies/set/{name}/{value}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,7 +600,7 @@ export def "delay delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delay: $delay} | format pattern "/delay/{delay}"))
+  let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -613,7 +622,7 @@ export def "delay get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delay: $delay} | format pattern "/delay/{delay}"))
+  let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,7 +644,7 @@ export def "delay update-by-delay" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delay: $delay} | format pattern "/delay/{delay}"))
+  let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,7 +666,7 @@ export def "delay create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delay: $delay} | format pattern "/delay/{delay}"))
+  let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,7 +688,7 @@ export def "delay update-by-delay-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({delay: $delay} | format pattern "/delay/{delay}"))
+  let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,7 +754,7 @@ export def "digest-auth get-by-qop-user-passwd" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({qop: $qop, user: $user, passwd: $passwd} | format pattern "/digest-auth/{qop}/{user}/{passwd}"))
+  let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/digest-auth/{qop}/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -770,7 +779,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({qop: $qop, user: $user, passwd: $passwd, algorithm: $algorithm} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}"))
+  let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -796,7 +805,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({qop: $qop, user: $user, passwd: $passwd, algorithm: $algorithm, stale_after: $stale_after} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}"))
+  let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm), stale_after: (encode-path-segment $stale_after)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -867,7 +876,7 @@ export def "etag get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({etag: $etag} | format pattern "/etag/{etag}"))
+  let full_url = (build-url $base ({etag: (encode-path-segment $etag)} | format pattern "/etag/{etag}"))
   let extra_headers = {"If-None-Match": $if_none_match, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -955,7 +964,7 @@ export def "hidden-basic-auth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({user: $user, passwd: $passwd} | format pattern "/hidden-basic-auth/{user}/{passwd}"))
+  let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/hidden-basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1147,7 +1156,7 @@ export def "links get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n, offset: $offset} | format pattern "/links/{n}/{offset}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n), offset: (encode-path-segment $offset)} | format pattern "/links/{n}/{offset}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1232,7 +1241,7 @@ export def "range get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({numbytes: $numbytes} | format pattern "/range/{numbytes}"))
+  let full_url = (build-url $base ({numbytes: (encode-path-segment $numbytes)} | format pattern "/range/{numbytes}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1327,6 +1336,7 @@ export def "redirect-to create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
@@ -1353,6 +1363,7 @@ export def "redirect-to update-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
 }
 
@@ -1372,7 +1383,7 @@ export def "redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/redirect/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1394,7 +1405,7 @@ export def "relative-redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/relative-redirect/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/relative-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1483,7 +1494,7 @@ export def "status delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({codes: $codes} | format pattern "/status/{codes}"))
+  let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1505,7 +1516,7 @@ export def "status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({codes: $codes} | format pattern "/status/{codes}"))
+  let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1527,7 +1538,7 @@ export def "status update-by-codes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({codes: $codes} | format pattern "/status/{codes}"))
+  let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,7 +1560,7 @@ export def "status create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({codes: $codes} | format pattern "/status/{codes}"))
+  let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1571,7 +1582,7 @@ export def "status update-by-codes-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({codes: $codes} | format pattern "/status/{codes}"))
+  let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1593,7 +1604,7 @@ export def "stream-bytes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/stream-bytes/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream-bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1615,7 +1626,7 @@ export def "stream get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({n: $n} | format pattern "/stream/{n}"))
+  let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream/{n}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

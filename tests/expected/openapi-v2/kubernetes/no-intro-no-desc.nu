@@ -35,6 +35,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -195,7 +204,7 @@ export def "componentstatuses get-component-status" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({name: $name} | format pattern "/api/v1/componentstatuses/{name}") $qp)
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/componentstatuses/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,7 +452,7 @@ export def "namespaces-bindings create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/bindings") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/bindings") $qp)
   let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "target": $target} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -484,7 +493,7 @@ export def "namespaces-configmaps delete-collection-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,7 +529,7 @@ export def "namespaces-configmaps list-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,7 +564,7 @@ export def "namespaces-configmaps create-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let req_body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -588,7 +597,7 @@ export def "namespaces-configmaps delete-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,7 +624,7 @@ export def "namespaces-configmaps get-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,7 +654,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +690,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let req_body = {"apiVersion": $api_version, "binaryData": $binary_data, "data": $data, "immutable": $immutable, "kind": $kind, "metadata": $metadata} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -722,7 +731,7 @@ export def "namespaces-endpoints delete-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continue" $qp_continue "scalar") (serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -758,7 +767,7 @@ export def "namespaces-endpoints list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "allowWatchBookmarks" $allow_watch_bookmarks "scalar") (serialize-qp "continue" $qp_continue "scalar") (serialize-qp "fieldSelector" $field_selector "scalar") (serialize-qp "labelSelector" $label_selector "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "resourceVersion" $resource_version "scalar") (serialize-qp "resourceVersionMatch" $resource_version_match "scalar") (serialize-qp "sendInitialEvents" $send_initial_events "scalar") (serialize-qp "shardSelector" $shard_selector "scalar") (serialize-qp "timeoutSeconds" $timeout_seconds "scalar") (serialize-qp "watch" $watch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -791,7 +800,7 @@ export def "namespaces-endpoints create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
@@ -824,7 +833,7 @@ export def "namespaces-endpoints delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "gracePeriodSeconds" $grace_period_seconds "scalar") (serialize-qp "ignoreStoreReadErrorWithClusterBreakingPotential" $ignore_store_read_error_with_cluster_breaking_potential "scalar") (serialize-qp "orphanDependents" $orphan_dependents "scalar") (serialize-qp "propagationPolicy" $propagation_policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -851,7 +860,7 @@ export def "namespaces-endpoints get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -881,7 +890,7 @@ export def "namespaces-endpoints update-by-namespace-name" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar") (serialize-qp "force" $force "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -915,7 +924,7 @@ export def "namespaces-endpoints update-by-namespace-name-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dryRun" $qp_dry_run "scalar") (serialize-qp "fieldManager" $field_manager "scalar") (serialize-qp "fieldValidation" $field_validation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let req_body = {"apiVersion": $api_version, "kind": $kind, "metadata": $metadata, "subsets": $subsets} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")

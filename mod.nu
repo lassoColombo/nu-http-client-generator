@@ -129,7 +129,10 @@ def process-spec [spec_data: record, config: record] {
     "swagger" => (spec swagger2 helpers)
   }
   let raw_schemas = (do $h.get-schemas $spec_data)
-  let schemas = (spec build-resolved-schemas $raw_schemas)
+  # Stash the full spec under `__spec__` so cross-path refs (e.g. DigitalOcean's
+  # `#/paths/~1v2~1.../get/parameters/0`) can be resolved via generic JSON
+  # Pointer traversal — those refs don't name a schemas-table entity.
+  let schemas = ((spec build-resolved-schemas $raw_schemas) | upsert __spec__ $spec_data)
   let auth_schemes = (do $h.get-auth-schemes $spec_data)
   let default_auth = (spec get-default-auth $spec_data $auth_schemes)
   let commands = (build build-command-list $spec_data $schemas $h $auth_schemes $default_auth $config)

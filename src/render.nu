@@ -372,6 +372,15 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
       }
     }
   }
+  # When the spec advertises HTTP Basic, expose a sibling `basic-credentials`
+  # scheme that base64-encodes the token per RFC 7617. `basic` itself stays as
+  # the literal-prefix path for users who already pre-encode (no behaviour
+  # change). Pick `basic-credentials` when you'd rather pass `user:pass` raw.
+  let has_basic = ($auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" })
+  if $has_basic and (not ("basic-credentials" in $seen_names)) {
+    $seen_names = ($seen_names | append "basic-credentials")
+    $match_arms = ($match_arms | append '    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }')
+  }
   $match_arms = ($match_arms | append '    "none" => { {headers: {}, query: ""} }')
   $match_arms = ($match_arms | append '    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }')
   let match_body = $match_arms | str join "\n"
@@ -403,6 +412,15 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }'
     '    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }'
     '  }'
+    '}'
+    ''
+    '# Percent-encode a path-segment value per RFC 3986.'
+    '# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
+    '# Trick: `url encode --all` over-encodes, then we decode the four unreserved'
+    '# punctuation chars back. Pre-existing %XX sequences in the input survive'
+    '# because `url encode --all` first turns their % into %25.'
+    'def encode-path-segment [v: any]: nothing -> string {'
+    '  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"'
     '}'
     ''
     '# Build URL from base, path, and optional query string'
@@ -468,7 +486,12 @@ export def build-body-code [cmd: record, config: record] {
     }
     let record_fields = ($cmd.path_params | each {|p|
       let pvar = (effective-positional-var $p.name)
-      $'($pvar): $($pvar)'
+      # Percent-encode each value per RFC 3986 segment grammar — without this
+      # a path param like "feature/auth-fix" would render as a literal "/" in
+      # the URL and break routing (issue #10-1). The path-template literal
+      # (the `/{x}/{y}/` structure) stays intact; only the substituted values
+      # get encoded.
+      $"($pvar): \(encode-path-segment $($pvar)\)"
     } | str join ", ")
     $"\({($record_fields)} | format pattern ($pattern | to nuon)\)"
   } else {
@@ -564,6 +587,15 @@ export def build-body-code [cmd: record, config: record] {
     }
   }
 
+  # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
+  # string, not a JSON record. Nushell's `http post --content-type "..."`
+  # sets the header but doesn't reshape the body. Spec-conformance with
+  # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
+  # Nulls are dropped — caller's --field with no value shouldn't appear.
+  if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
+    $lines = ($lines | append '  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")')
+  }
+
   let body_arg = if $cmd.has_body { " $req_body" } else { "" }
   $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "($cmd.content_type)"($body_arg)')
 
@@ -593,8 +625,15 @@ def render-module-header [
   let has_public = ($commands | where {|c| $c.default_auth == "none" } | length) > 0
   let auth_names = $auth_schemes | each {|s| $s.name } | uniq
   let auth_names_with_none = if $has_public { $auth_names | append "none" } else { $auth_names }
-  let auth_completer_vals = if ($auth_names_with_none | length) > 0 {
-    $auth_names_with_none | each {|n| $'"($n)"' } | str join ' '
+  # If the spec offers HTTP Basic, expose `basic-credentials` as a completion
+  # option too — it base64-encodes `user:pass` per RFC 7617 (vs. `basic` which
+  # treats the token literally).
+  let has_basic = ($auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" })
+  let auth_names_final = if $has_basic and (not ("basic-credentials" in $auth_names_with_none)) {
+    $auth_names_with_none | append "basic-credentials"
+  } else { $auth_names_with_none }
+  let auth_completer_vals = if ($auth_names_final | length) > 0 {
+    $auth_names_final | each {|n| $'"($n)"' } | str join ' '
   } else {
     '"bearer"'
   }

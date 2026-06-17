@@ -37,6 +37,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -139,7 +148,7 @@ export def "carpet-asset-list-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/carpet/v1/asset_list/idrs/{idrs}/") $qp)
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/asset_list/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +171,7 @@ export def "carpet-host-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/carpet/v1/host/idrs/{idrs}/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/host/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +194,7 @@ export def "delivery-apikeys-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/delivery/v1/apikeys/idrs/{idrs}/"))
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/apikeys/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,7 +280,7 @@ export def "delivery-asset-tag-delete delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset-tag/delete/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +305,7 @@ export def "delivery-asset-tag-edit update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset-tag/edit/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/edit/{id}/"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -326,7 +335,7 @@ export def "delivery-asset-tag-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/delivery/v1/asset-tag/idrs/{idrs}/") $qp)
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset-tag/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,7 +390,7 @@ export def "delivery-asset-deactivate create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/deactivate/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/deactivate/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,7 +413,7 @@ export def "delivery-asset-delete delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/delete/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +436,7 @@ export def "delivery-asset-details get" [
 ]: nothing -> record<id: int, idrs: string, name: string, is_scannable: bool, is_public: bool, location: string, atlantis_id: int, is_active: bool, type: string, address: list<any>, has_whitelist: string, whitelist: string, scanner_name: string, scanner_id: int, number_of_host: string, error: string, tag: string, tag_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/details/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,7 +469,7 @@ export def "delivery-asset-details update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/details/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let req_body = {"name": $name, "is_scannable": $is_scannable, "atlantis_id": $atlantis_id, "is_active": $is_active, "type": $type, "address": $address, "scanner_id": $scanner_id, "error": $body_error, "tag_id": $tag_id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -490,7 +499,7 @@ export def "delivery-asset-idrs list" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({idrs: $idrs} | format pattern "/api/delivery/v1/asset/idrs/{idrs}/") $qp)
+  let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +527,7 @@ export def "delivery-asset-whitelist create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/delivery/v1/asset/whitelist/{id}/"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/whitelist/{id}/"))
   let req_body = {"ips": $ips, "creation_comment": $creation_comment, "expiration_date": $expiration_date, "description": $description} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"

@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -230,7 +239,7 @@ export def "pet get" [
 ]: nothing -> record<id: int, name: string, category: record<id: int, name: string>, photoUrls: list<string>, tags: table<id: int, name: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}"))
+  let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pet/{pet_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,7 +266,7 @@ export def "pet update-with-form" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}") $qp)
+  let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pet/{pet_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +290,7 @@ export def "pet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}"))
+  let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pet/{pet_id}"))
   let extra_headers = {"api_key": $api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -310,7 +319,7 @@ export def "pet-upload-image upload-file" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "additionalMetadata" $additional_metadata "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({pet_id: $pet_id} | format pattern "/pet/{pet_id}/uploadImage") $qp)
+  let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pet/{pet_id}/uploadImage") $qp)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -389,7 +398,7 @@ export def "store-order get" [
 ]: nothing -> record<id: int, petId: int, quantity: int, shipDate: string, status: string, complete: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/store/order/{order_id}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/store/order/{order_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,7 +421,7 @@ export def "store-order delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/store/order/{order_id}"))
+  let full_url = (build-url $base ({order_id: (encode-path-segment $order_id)} | format pattern "/store/order/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -545,7 +554,7 @@ export def "user get-by-name" [
 ]: nothing -> record<id: int, username: string, firstName: string, lastName: string, email: string, password: string, phone: string, userStatus: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/{username}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,7 +586,7 @@ export def "user update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/{username}"))
   let req_body = {"id": $id, "username": $body_username, "firstName": $first_name, "lastName": $last_name, "email": $email, "password": $password, "phone": $phone, "userStatus": $user_status} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -602,7 +611,7 @@ export def "user delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({username: $username} | format pattern "/user/{username}"))
+  let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/user/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

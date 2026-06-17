@@ -36,6 +36,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -124,7 +133,7 @@ export def "groups-access-requests get" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/access_requests") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/access_requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +156,7 @@ export def "groups-access-requests create" [
 ]: nothing -> record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: table<key: string, value: string>, web_url: string, requested_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/access_requests"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/access_requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +182,7 @@ export def "groups-access-requests-approve update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}/approve"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}/approve"))
   let req_body = {"access_level": $access_level} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -199,7 +208,7 @@ export def "groups-access-requests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, user_id: $user_id} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +235,7 @@ export def "groups-epics-award-emoji list" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +261,7 @@ export def "groups-epics-award-emoji create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -279,7 +288,7 @@ export def "groups-epics-award-emoji get" [
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,7 +313,7 @@ export def "groups-epics-award-emoji delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -332,7 +341,7 @@ export def "groups-epics-notes-award-emoji list" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -359,7 +368,7 @@ export def "groups-epics-notes-award-emoji create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -387,7 +396,7 @@ export def "groups-epics-notes-award-emoji get" [
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,7 +422,7 @@ export def "groups-epics-notes-award-emoji delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, epic_iid: $epic_iid, note_id: $note_id, award_id: $award_id} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,7 +449,7 @@ export def "groups-badges list" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/badges") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/badges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +476,7 @@ export def "groups-badges create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/badges"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/badges"))
   let req_body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -495,7 +504,7 @@ export def "groups-badges-render get" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "link_url" $link_url "scalar") (serialize-qp "image_url" $image_url "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/badges/render") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/badges/render") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,7 +528,7 @@ export def "groups-badges get" [
 ]: nothing -> record<name: string, link_url: string, image_url: string, rendered_link_url: string, rendered_image_url: string, id: int, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, badge_id: $badge_id} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), badge_id: (encode-path-segment $badge_id)} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +556,7 @@ export def "groups-badges update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, badge_id: $badge_id} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), badge_id: (encode-path-segment $badge_id)} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
   let req_body = {"link_url": $link_url, "image_url": $image_url, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -573,7 +582,7 @@ export def "groups-badges delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, badge_id: $badge_id} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), badge_id: (encode-path-segment $badge_id)} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,7 +605,7 @@ export def "groups-custom-attributes list" [
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/custom_attributes"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/custom_attributes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,7 +629,7 @@ export def "groups-custom-attributes get" [
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -646,7 +655,7 @@ export def "groups-custom-attributes update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let req_body = {"value": $value} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -672,7 +681,7 @@ export def "groups-custom-attributes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -878,7 +887,7 @@ export def "groups update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}"))
   let req_body = {"name": $name, "path": $path, "shared_runners_setting": $shared_runners_setting, "description": $description, "visibility": $visibility, "avatar": $avatar, "share_with_group_lock": $share_with_group_lock, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "project_creation_level": $project_creation_level, "auto_devops_enabled": $auto_devops_enabled, "subgroup_creation_level": $subgroup_creation_level, "emails_disabled": $emails_disabled, "emails_enabled": $emails_enabled, "show_diff_preview_in_email": $show_diff_preview_in_email, "mentions_disabled": $mentions_disabled, "lfs_enabled": $lfs_enabled, "request_access_enabled": $request_access_enabled, "default_branch": $default_branch, "default_branch_protection": $default_branch_protection, "default_branch_protection_defaults": $default_branch_protection_defaults, "enabled_git_access_protocol": $enabled_git_access_protocol, "membership_lock": $membership_lock, "ldap_cn": $ldap_cn, "ldap_access": $ldap_access, "shared_runners_minutes_limit": $shared_runners_minutes_limit, "extra_shared_runners_minutes_limit": $extra_shared_runners_minutes_limit, "wiki_access_level": $wiki_access_level, "duo_availability": $duo_availability, "duo_remote_flows_availability": $duo_remote_flows_availability, "duo_foundational_flows_availability": $duo_foundational_flows_availability, "duo_custom_agents_availability": $duo_custom_agents_availability, "duo_custom_flows_availability": $duo_custom_flows_availability, "duo_external_agents_availability": $duo_external_agents_availability, "tool_approval_for_session_availability": $tool_approval_for_session_availability, "amazon_q_auto_review_enabled": $amazon_q_auto_review_enabled, "experiment_features_enabled": $experiment_features_enabled, "model_prompt_cache_enabled": $model_prompt_cache_enabled, "foundational_agents_statuses": $foundational_agents_statuses, "ai_settings_attributes": $ai_settings_attributes, "prevent_sharing_groups_outside_hierarchy": $prevent_sharing_groups_outside_hierarchy, "step_up_auth_required_oauth_provider": $step_up_auth_required_oauth_provider, "lock_math_rendering_limits_enabled": $lock_math_rendering_limits_enabled, "math_rendering_limits_enabled": $math_rendering_limits_enabled, "max_artifacts_size": $max_artifacts_size, "file_template_project_id": $file_template_project_id, "prevent_forking_outside_group": $prevent_forking_outside_group, "unique_project_download_limit": $unique_project_download_limit, "unique_project_download_limit_interval_in_seconds": $unique_project_download_limit_interval_in_seconds, "unique_project_download_limit_allowlist": $unique_project_download_limit_allowlist, "unique_project_download_limit_alertlist": $unique_project_download_limit_alertlist, "auto_ban_user_on_excessive_projects_download": $auto_ban_user_on_excessive_projects_download, "ip_restriction_ranges": $ip_restriction_ranges, "allowed_email_domains_list": $allowed_email_domains_list, "service_access_tokens_expiration_enforced": $service_access_tokens_expiration_enforced, "duo_core_features_enabled": $duo_core_features_enabled, "duo_features_enabled": $duo_features_enabled, "lock_duo_features_enabled": $lock_duo_features_enabled, "auto_duo_code_review_enabled": $auto_duo_code_review_enabled, "web_based_commit_signing_enabled": $web_based_commit_signing_enabled, "only_allow_merge_if_pipeline_succeeds": $only_allow_merge_if_pipeline_succeeds, "allow_merge_on_skipped_pipeline": $allow_merge_on_skipped_pipeline, "only_allow_merge_if_all_discussions_are_resolved": $only_allow_merge_if_all_discussions_are_resolved, "enabled_foundational_flows": $enabled_foundational_flows, "duo_template_project_id": $duo_template_project_id, "allow_personal_snippets": $allow_personal_snippets, "duo_namespace_access_rules": $duo_namespace_access_rules, "built_in_project_templates_enabled": $built_in_project_templates_enabled, "lock_built_in_project_templates_enabled": $lock_built_in_project_templates_enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -906,7 +915,7 @@ export def "groups get" [
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_custom_attributes" $with_custom_attributes "scalar") (serialize-qp "with_projects" $with_projects "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}") $qp)
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -929,7 +938,7 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -952,7 +961,7 @@ export def "groups-archive create" [
 ]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/api/v4/groups/{id}/archive"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -34,6 +34,15 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
   }
 }
 
+# Percent-encode a path-segment value per RFC 3986.
+# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# Trick: `url encode --all` over-encodes, then we decode the four unreserved
+# punctuation chars back. Pre-existing %XX sequences in the input survive
+# because `url encode --all` first turns their % into %25.
+def encode-path-segment [v: any]: nothing -> string {
+  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -82,7 +91,7 @@ export def "containers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/containers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +180,7 @@ export def "configmaps get-config-map" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/configmaps/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +204,7 @@ export def "configmaps update-config-map" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({name: $name} | format pattern "/configmaps/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -242,7 +251,7 @@ export def "blocks-children create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({id: $id} | format pattern "/blocks/{id}/children"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocks/{id}/children"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -292,7 +301,7 @@ export def "certificates get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({thumbprint_algorithm: $thumbprint_algorithm, thumbprint: $thumbprint} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})"))
+  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +324,7 @@ export def "namespaces-configmaps-status get-config-map" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base ({namespace: $namespace, name: $name} | format pattern "/namespaces/{namespace}/configmaps/{name}/status"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/namespaces/{namespace}/configmaps/{name}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
