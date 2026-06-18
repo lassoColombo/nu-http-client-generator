@@ -55,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -65,13 +65,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://quality-pandora.k8s.elmec.ad"] }
@@ -80,7 +80,7 @@ def auth-scheme-completer [] { ["jwt" "bearer" "static"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "idrs-analysis-filename create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -113,6 +113,7 @@ export def "idrs-analysis-filename create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -120,7 +121,7 @@ export def "idrs-analysis-filename create" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /api/v1/idrs/{idrs}/analysis/filename/{filename}/
@@ -136,6 +137,7 @@ export def "idrs-analysis-filename create-by-idrs-filename" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -143,7 +145,7 @@ export def "idrs-analysis-filename create-by-idrs-filename" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs), filename: (encode-path-segment $filename)} | format pattern "/api/v1/idrs/{idrs}/analysis/filename/{filename}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /api/v1/idrs/{idrs}/analysis/sha256/
@@ -158,6 +160,7 @@ export def "idrs-analysis-sha256 create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -165,7 +168,7 @@ export def "idrs-analysis-sha256 create" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/idrs/{idrs}/analysis/sha256/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # POST /api/v1/idrs/{idrs}/analysis/url/{url}/
@@ -181,6 +184,7 @@ export def "idrs-analysis-url create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -188,7 +192,7 @@ export def "idrs-analysis-url create" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs), url: (encode-path-segment $url)} | format pattern "/api/v1/idrs/{idrs}/analysis/url/{url}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /api/v1/idrs/{idrs}/tasks/list/
@@ -203,6 +207,7 @@ export def "idrs-tasks-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -210,7 +215,7 @@ export def "idrs-tasks-list get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/idrs/{idrs}/tasks/list/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /api/v1/idrs/{idrs}/tasks/report/{id}/full/
@@ -226,6 +231,7 @@ export def "idrs-tasks-report-full get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -233,7 +239,7 @@ export def "idrs-tasks-report-full get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs), id: (encode-path-segment $id)} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/full/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /api/v1/idrs/{idrs}/tasks/report/{id}/summary/
@@ -249,6 +255,7 @@ export def "idrs-tasks-report-summary get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -256,7 +263,7 @@ export def "idrs-tasks-report-summary get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs), id: (encode-path-segment $id)} | format pattern "/api/v1/idrs/{idrs}/tasks/report/{id}/summary/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /api/v1/idrs/{idrs}/tasks/status/{id}/
@@ -272,6 +279,7 @@ export def "idrs-tasks-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -279,5 +287,5 @@ export def "idrs-tasks-status get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs), id: (encode-path-segment $id)} | format pattern "/api/v1/idrs/{idrs}/tasks/status/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

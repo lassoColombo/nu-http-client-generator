@@ -52,7 +52,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -61,13 +61,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://example.com"] }
@@ -91,6 +91,7 @@ export def "certificates get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -98,7 +99,7 @@ export def "certificates get" [
   let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /sites
@@ -112,6 +113,7 @@ export def "sites list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --anchorsite-override: string@anchorsite-override-completer
 ]: nothing -> record {
@@ -121,7 +123,7 @@ export def "sites list" [
   let full_url = (build-url $base "/sites" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /sites/active
@@ -135,6 +137,7 @@ export def "sites-active list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --anchorsite-override: string@anchorsite-override-completer
 ]: nothing -> record {
@@ -144,7 +147,7 @@ export def "sites-active list" [
   let full_url = (build-url $base "/sites/active" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # GET /quoted-enum
@@ -158,6 +161,7 @@ export def "quoted-enum get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --literal-quoted: string@literal-quoted-completer
 ]: nothing -> record {
@@ -167,5 +171,5 @@ export def "quoted-enum get" [
   let full_url = (build-url $base "/quoted-enum" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

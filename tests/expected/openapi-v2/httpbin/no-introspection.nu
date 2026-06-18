@@ -52,7 +52,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -61,13 +61,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://httpbin.org"] }
@@ -89,6 +89,7 @@ export def "absolute-redirect get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -96,7 +97,7 @@ export def "absolute-redirect get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/absolute-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -110,6 +111,7 @@ export def "anything delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -117,7 +119,7 @@ export def "anything delete" [
   let full_url = (build-url $base "/anything")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -131,6 +133,7 @@ export def "anything list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -138,7 +141,7 @@ export def "anything list" [
   let full_url = (build-url $base "/anything")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -152,6 +155,7 @@ export def "anything update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -159,7 +163,7 @@ export def "anything update" [
   let full_url = (build-url $base "/anything")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -173,6 +177,7 @@ export def "anything create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -180,7 +185,7 @@ export def "anything create" [
   let full_url = (build-url $base "/anything")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -194,6 +199,7 @@ export def "anything update-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -201,7 +207,7 @@ export def "anything update-1" [
   let full_url = (build-url $base "/anything")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -216,6 +222,7 @@ export def "anything delete-by-anything" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -223,7 +230,7 @@ export def "anything delete-by-anything" [
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -238,6 +245,7 @@ export def "anything get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -245,7 +253,7 @@ export def "anything get" [
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -260,6 +268,7 @@ export def "anything update-by-anything" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -267,7 +276,7 @@ export def "anything update-by-anything" [
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -282,6 +291,7 @@ export def "anything create-by-anything" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -289,7 +299,7 @@ export def "anything create-by-anything" [
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns anything passed in request data.
@@ -304,6 +314,7 @@ export def "anything update-by-anything-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -311,7 +322,7 @@ export def "anything update-by-anything-1" [
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Decodes base64url-encoded string.
@@ -326,6 +337,7 @@ export def "base64 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -333,7 +345,7 @@ export def "base64 get" [
   let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/base64/{value}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using HTTP Basic Auth.
@@ -349,6 +361,7 @@ export def "basic-auth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -356,7 +369,7 @@ export def "basic-auth get" [
   let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using bearer authentication.
@@ -370,6 +383,7 @@ export def "bearer get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string
 ]: nothing -> any {
@@ -380,7 +394,7 @@ export def "bearer get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Brotli-encoded data.
@@ -394,6 +408,7 @@ export def "brotli get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -401,7 +416,7 @@ export def "brotli get" [
   let full_url = (build-url $base "/brotli")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns n random bytes generated with given seed
@@ -416,6 +431,7 @@ export def "bytes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -423,7 +439,7 @@ export def "bytes get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a 304 if an If-Modified-Since header or If-None-Match is present. Returns the same as a GET otherwise.
@@ -437,6 +453,7 @@ export def "cache list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string
   --if-none-match: string
@@ -448,7 +465,7 @@ export def "cache list" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Sets a Cache-Control header for n seconds.
@@ -463,6 +480,7 @@ export def "cache get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -470,7 +488,7 @@ export def "cache get" [
   let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/cache/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns cookie data.
@@ -484,6 +502,7 @@ export def "cookies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -491,7 +510,7 @@ export def "cookies get" [
   let full_url = (build-url $base "/cookies")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Deletes cookie(s) as provided by the query string and redirects to cookie list.
@@ -505,6 +524,7 @@ export def "cookies-delete get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --freeform: string # allows empty value
 ]: nothing -> any {
@@ -514,7 +534,7 @@ export def "cookies-delete get" [
   let full_url = (build-url $base "/cookies/delete" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Sets cookie(s) as provided by the query string and redirects to cookie list.
@@ -528,6 +548,7 @@ export def "cookies-set get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --freeform: string # allows empty value
 ]: nothing -> any {
@@ -537,7 +558,7 @@ export def "cookies-set get" [
   let full_url = (build-url $base "/cookies/set" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Sets a cookie and redirects to cookie list.
@@ -553,6 +574,7 @@ export def "cookies-set get-by-name-value" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -560,7 +582,7 @@ export def "cookies-set get-by-name-value" [
   let full_url = (build-url $base ({name: (encode-path-segment $name), value: (encode-path-segment $value)} | format pattern "/cookies/set/{name}/{value}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns Deflate-encoded data.
@@ -574,6 +596,7 @@ export def "deflate get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -581,7 +604,7 @@ export def "deflate get" [
   let full_url = (build-url $base "/deflate")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a delayed response (max of 10 seconds).
@@ -596,6 +619,7 @@ export def "delay delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -603,7 +627,7 @@ export def "delay delete" [
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a delayed response (max of 10 seconds).
@@ -618,6 +642,7 @@ export def "delay get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -625,7 +650,7 @@ export def "delay get" [
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a delayed response (max of 10 seconds).
@@ -640,6 +665,7 @@ export def "delay update-by-delay" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -647,7 +673,7 @@ export def "delay update-by-delay" [
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a delayed response (max of 10 seconds).
@@ -662,6 +688,7 @@ export def "delay create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -669,7 +696,7 @@ export def "delay create" [
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a delayed response (max of 10 seconds).
@@ -684,6 +711,7 @@ export def "delay update-by-delay-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -691,7 +719,7 @@ export def "delay update-by-delay-1" [
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The request's DELETE parameters.
@@ -705,6 +733,7 @@ export def "delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -712,7 +741,7 @@ export def "delete delete" [
   let full_url = (build-url $base "/delete")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns page denied by robots.txt rules.
@@ -726,6 +755,7 @@ export def "deny get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -733,7 +763,7 @@ export def "deny get" [
   let full_url = (build-url $base "/deny")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using Digest Auth.
@@ -750,6 +780,7 @@ export def "digest-auth get-by-qop-user-passwd" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -757,7 +788,7 @@ export def "digest-auth get-by-qop-user-passwd" [
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/digest-auth/{qop}/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using Digest Auth + Algorithm.
@@ -775,6 +806,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -782,7 +814,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using Digest Auth + Algorithm.
@@ -801,6 +833,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -808,7 +841,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm), stale_after: (encode-path-segment $stale_after)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Drips data over a duration after an optional initial delay.
@@ -822,6 +855,7 @@ export def "drip get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --duration: float # The amount of time (in seconds) over which to drip each byte (default: 2)
   --numbytes: int # The number of bytes to respond with (default: 10)
@@ -834,7 +868,7 @@ export def "drip get" [
   let full_url = (build-url $base "/drip" $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a UTF-8 encoded body.
@@ -848,6 +882,7 @@ export def "encoding-utf8 get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -855,7 +890,7 @@ export def "encoding-utf8 get" [
   let full_url = (build-url $base "/encoding/utf8")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Assumes the resource has the given etag and responds to If-None-Match and If-Match headers appropriately.
@@ -870,6 +905,7 @@ export def "etag get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string
   --if-match: string
@@ -881,7 +917,7 @@ export def "etag get" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match, "If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The request's query parameters.
@@ -895,6 +931,7 @@ export def "get get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -902,7 +939,7 @@ export def "get get" [
   let full_url = (build-url $base "/get")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns GZip-encoded data.
@@ -916,6 +953,7 @@ export def "gzip get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -923,7 +961,7 @@ export def "gzip get" [
   let full_url = (build-url $base "/gzip")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return the incoming request's HTTP headers.
@@ -937,6 +975,7 @@ export def "headers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -944,7 +983,7 @@ export def "headers get" [
   let full_url = (build-url $base "/headers")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Prompts the user for authorization using HTTP Basic Auth.
@@ -960,6 +999,7 @@ export def "hidden-basic-auth get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -967,7 +1007,7 @@ export def "hidden-basic-auth get" [
   let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/hidden-basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple HTML document.
@@ -981,6 +1021,7 @@ export def "html get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -988,7 +1029,7 @@ export def "html get" [
   let full_url = (build-url $base "/html")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple image of the type suggest by the Accept header.
@@ -1002,6 +1043,7 @@ export def "image get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> any {
@@ -1010,7 +1052,7 @@ export def "image get" [
   let full_url = (build-url $base "/image")
   let accept_val = ($accept | default "image/webp")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple JPEG image.
@@ -1024,6 +1066,7 @@ export def "image-jpeg get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1031,7 +1074,7 @@ export def "image-jpeg get" [
   let full_url = (build-url $base "/image/jpeg")
   let accept_val = "image/jpeg"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple PNG image.
@@ -1045,6 +1088,7 @@ export def "image-png get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1052,7 +1096,7 @@ export def "image-png get" [
   let full_url = (build-url $base "/image/png")
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple SVG image.
@@ -1066,6 +1110,7 @@ export def "image-svg get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1073,7 +1118,7 @@ export def "image-svg get" [
   let full_url = (build-url $base "/image/svg")
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple WEBP image.
@@ -1087,6 +1132,7 @@ export def "image-webp get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1094,7 +1140,7 @@ export def "image-webp get" [
   let full_url = (build-url $base "/image/webp")
   let accept_val = "image/webp"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns the requester's IP Address.
@@ -1108,6 +1154,7 @@ export def "ip get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1115,7 +1162,7 @@ export def "ip get" [
   let full_url = (build-url $base "/ip")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple JSON document.
@@ -1129,6 +1176,7 @@ export def "json get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1136,7 +1184,7 @@ export def "json get" [
   let full_url = (build-url $base "/json")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Generate a page containing n links to other pages which do the same.
@@ -1152,6 +1200,7 @@ export def "links get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1159,7 +1208,7 @@ export def "links get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n), offset: (encode-path-segment $offset)} | format pattern "/links/{n}/{offset}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The request's PATCH parameters.
@@ -1173,6 +1222,7 @@ export def "patch update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1180,7 +1230,7 @@ export def "patch update" [
   let full_url = (build-url $base "/patch")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The request's POST parameters.
@@ -1194,6 +1244,7 @@ export def "post create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1201,7 +1252,7 @@ export def "post create" [
   let full_url = (build-url $base "/post")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # The request's PUT parameters.
@@ -1215,6 +1266,7 @@ export def "put update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1222,7 +1274,7 @@ export def "put update" [
   let full_url = (build-url $base "/put")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Streams n random bytes generated with given seed, at given chunk size per packet.
@@ -1237,6 +1289,7 @@ export def "range get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1244,7 +1297,7 @@ export def "range get" [
   let full_url = (build-url $base ({numbytes: (encode-path-segment $numbytes)} | format pattern "/range/{numbytes}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 302/3XX Redirects to the given URL.
@@ -1258,6 +1311,7 @@ export def "redirect-to delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1265,7 +1319,7 @@ export def "redirect-to delete" [
   let full_url = (build-url $base "/redirect-to")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 302/3XX Redirects to the given URL.
@@ -1279,6 +1333,7 @@ export def "redirect-to get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
   --status-code: any
@@ -1289,7 +1344,7 @@ export def "redirect-to get" [
   let full_url = (build-url $base "/redirect-to" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 302/3XX Redirects to the given URL.
@@ -1303,6 +1358,7 @@ export def "redirect-to update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1310,7 +1366,7 @@ export def "redirect-to update" [
   let full_url = (build-url $base "/redirect-to")
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # 302/3XX Redirects to the given URL.
@@ -1324,6 +1380,7 @@ export def "redirect-to create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string
   --status-code: any
@@ -1337,7 +1394,7 @@ export def "redirect-to create" [
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # 302/3XX Redirects to the given URL.
@@ -1351,6 +1408,7 @@ export def "redirect-to update-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string
   --status-code: any
@@ -1364,7 +1422,7 @@ export def "redirect-to update-1" [
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/x-www-form-urlencoded" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
 # 302 Redirects n times.
@@ -1379,6 +1437,7 @@ export def "redirect get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1386,7 +1445,7 @@ export def "redirect get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Relatively 302 Redirects n times.
@@ -1401,6 +1460,7 @@ export def "relative-redirect get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1408,7 +1468,7 @@ export def "relative-redirect get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/relative-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a set of response headers from the query string.
@@ -1422,6 +1482,7 @@ export def "response-headers get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --freeform: string # allows empty value
 ]: nothing -> any {
@@ -1431,7 +1492,7 @@ export def "response-headers get" [
   let full_url = (build-url $base "/response-headers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a set of response headers from the query string.
@@ -1445,6 +1506,7 @@ export def "response-headers create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --freeform: string # allows empty value
 ]: nothing -> any {
@@ -1454,7 +1516,7 @@ export def "response-headers create" [
   let full_url = (build-url $base "/response-headers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns some robots.txt rules.
@@ -1468,6 +1530,7 @@ export def "robots-txt get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1475,7 +1538,7 @@ export def "robots-txt get" [
   let full_url = (build-url $base "/robots.txt")
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return status code or random status code if more than one are given
@@ -1490,6 +1553,7 @@ export def "status delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1497,7 +1561,7 @@ export def "status delete" [
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return status code or random status code if more than one are given
@@ -1512,6 +1576,7 @@ export def "status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1519,7 +1584,7 @@ export def "status get" [
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return status code or random status code if more than one are given
@@ -1534,6 +1599,7 @@ export def "status update-by-codes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1541,7 +1607,7 @@ export def "status update-by-codes" [
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return status code or random status code if more than one are given
@@ -1556,6 +1622,7 @@ export def "status create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1563,7 +1630,7 @@ export def "status create" [
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return status code or random status code if more than one are given
@@ -1578,6 +1645,7 @@ export def "status update-by-codes-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1585,7 +1653,7 @@ export def "status update-by-codes-1" [
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Streams n random bytes generated with given seed, at given chunk size per packet.
@@ -1600,6 +1668,7 @@ export def "stream-bytes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1607,7 +1676,7 @@ export def "stream-bytes get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream-bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Stream n JSON responses
@@ -1622,6 +1691,7 @@ export def "stream get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1629,7 +1699,7 @@ export def "stream get" [
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream/{n}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return the incoming requests's User-Agent header.
@@ -1643,6 +1713,7 @@ export def "user-agent get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1650,7 +1721,7 @@ export def "user-agent get" [
   let full_url = (build-url $base "/user-agent")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return a UUID4.
@@ -1664,6 +1735,7 @@ export def "uuid get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1671,7 +1743,7 @@ export def "uuid get" [
   let full_url = (build-url $base "/uuid")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Returns a simple XML document.
@@ -1685,6 +1757,7 @@ export def "xml get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1692,5 +1765,5 @@ export def "xml get" [
   let full_url = (build-url $base "/xml")
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

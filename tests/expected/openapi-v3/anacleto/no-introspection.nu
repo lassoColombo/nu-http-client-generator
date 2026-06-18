@@ -55,7 +55,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -64,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["http://127.0.0.1:8000"] }
@@ -94,6 +94,7 @@ export def "carpet-active-idrs create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -101,7 +102,7 @@ export def "carpet-active-idrs create" [
   let full_url = (build-url $base "/api/carpet/v1/active_idrs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get asset list for customer
@@ -117,6 +118,7 @@ export def "carpet-asset-list-idrs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -129,7 +131,7 @@ export def "carpet-asset-list-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/asset_list/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get host vulnerabilities for customer
@@ -145,6 +147,7 @@ export def "carpet-host-idrs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -152,7 +155,7 @@ export def "carpet-host-idrs get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/host/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Return customer api key
@@ -168,6 +171,7 @@ export def "delivery-apikeys-idrs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -175,7 +179,7 @@ export def "delivery-apikeys-idrs get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/apikeys/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Asset list
@@ -190,6 +194,7 @@ export def "delivery-asset list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --address: string
   --idrs: string # IDRS
@@ -211,7 +216,7 @@ export def "delivery-asset list" [
   let full_url = (build-url $base "/api/delivery/v1/asset/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new asset tag
@@ -226,6 +231,7 @@ export def "delivery-asset-tag-create tag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   idrs: string
   name: string
@@ -238,7 +244,7 @@ export def "delivery-asset-tag-create tag" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete asset tag
@@ -254,6 +260,7 @@ export def "delivery-asset-tag-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -261,7 +268,7 @@ export def "delivery-asset-tag-delete delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Edit asset tag
@@ -277,6 +284,7 @@ export def "delivery-asset-tag-edit update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
 ]: any -> record<name: string> {
@@ -288,7 +296,7 @@ export def "delivery-asset-tag-edit update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get asset Tag for Customer
@@ -304,6 +312,7 @@ export def "delivery-asset-tag-idrs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -316,7 +325,7 @@ export def "delivery-asset-tag-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset-tag/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add new asset
@@ -331,6 +340,7 @@ export def "delivery-asset-create create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   idrs: string
   name: string
@@ -348,7 +358,7 @@ export def "delivery-asset-create create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Deactivate asset
@@ -364,6 +374,7 @@ export def "delivery-asset-deactivate create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -371,7 +382,7 @@ export def "delivery-asset-deactivate create" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/deactivate/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete asset
@@ -387,6 +398,7 @@ export def "delivery-asset-delete delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -394,7 +406,7 @@ export def "delivery-asset-delete delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get asset attribute
@@ -410,6 +422,7 @@ export def "delivery-asset-details get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, idrs: string, name: string, is_scannable: bool, is_public: bool, location: string, atlantis_id: int, is_active: bool, type: string, address: list<any>, has_whitelist: string, whitelist: string, scanner_name: string, scanner_id: int, number_of_host: string, error: string, tag: string, tag_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
@@ -417,7 +430,7 @@ export def "delivery-asset-details get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Edit asset attribute
@@ -433,6 +446,7 @@ export def "delivery-asset-details update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
   --is-scannable: oneof<nothing, bool>
@@ -452,7 +466,7 @@ export def "delivery-asset-details update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get asset for Customer
@@ -468,6 +482,7 @@ export def "delivery-asset-idrs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -480,7 +495,7 @@ export def "delivery-asset-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add whitelist for the asset
@@ -496,6 +511,7 @@ export def "delivery-asset-whitelist create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ips: list
   creation_comment: string@creation-comment-completer # * `Under decommissioning` - Under decommissioning * `Risk transferred` - Risk transferred * `Risk accepted` - Risk accepted
@@ -510,5 +526,5 @@ export def "delivery-asset-whitelist create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

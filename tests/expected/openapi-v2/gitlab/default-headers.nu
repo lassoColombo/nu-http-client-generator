@@ -54,7 +54,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -64,13 +64,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://gitlab.com"] }
@@ -92,7 +92,7 @@ def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups-access-requests get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -126,6 +126,7 @@ export def "groups-access-requests get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -136,7 +137,7 @@ export def "groups-access-requests get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/access_requests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Requests access for the authenticated user to a group.
@@ -152,6 +153,7 @@ export def "groups-access-requests create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: table<key: string, value: string>, web_url: string, requested_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -159,7 +161,7 @@ export def "groups-access-requests create" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/access_requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Approves an access request for the given user.
@@ -176,6 +178,7 @@ export def "groups-access-requests-approve update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-level: int # A valid access level (defaults: `30`, the Developer role) (format: int32, default: 30)
 ]: any -> record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: table<key: string, value: string>, web_url: string, access_level: string, created_at: string, created_by: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, expires_at: string, group_saml_identity: record<provider: string, extern_uid: string, saml_provider_id: string>, group_scim_identity: record<extern_uid: string, group_id: string, active: string>, email: string, is_using_seat: string, override: string, membership_state: string, member_role: record<id: int, group_id: int, name: any, description: any, base_access_level: int, apply_security_scan_profiles: bool, admin_merge_request: bool, archive_project: bool, admin_ai_catalog_item_consumer: bool, remove_project: bool, remove_group: bool, manage_security_policy_link: bool, admin_ai_catalog_item: bool, admin_compliance_framework: bool, admin_cicd_variables: bool, manage_deploy_tokens: bool, manage_group_access_tokens: bool, admin_group_member: bool, admin_integrations: bool, manage_merge_request_settings: bool, manage_project_access_tokens: bool, admin_protected_branch: bool, admin_protected_environments: bool, admin_push_rules: bool, admin_runners: bool, admin_security_attributes: bool, admin_terraform_state: bool, admin_vulnerability: bool, admin_web_hook: bool, read_compliance_dashboard: bool, read_security_scan_profiles: bool, read_virtual_registry: bool, update_sast_vulnerability_resolution_setting: bool, read_admin_cicd: bool, read_crm_contact: bool, read_dependency: bool, read_admin_groups: bool, read_admin_projects: bool, read_code: bool, read_runners: bool, read_security_attribute: bool, read_admin_subscription: bool, read_admin_monitoring: bool, read_admin_users: bool, read_vulnerability: bool>> {
@@ -187,7 +190,7 @@ export def "groups-access-requests-approve update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Denies an access request for the given user.
@@ -204,6 +207,7 @@ export def "groups-access-requests delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -211,7 +215,7 @@ export def "groups-access-requests delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), user_id: (encode-path-segment $user_id)} | format pattern "/api/v4/groups/{id}/access_requests/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List an awardable's emoji reactions for groups
@@ -228,6 +232,7 @@ export def "groups-epics-award-emoji list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -238,7 +243,7 @@ export def "groups-epics-award-emoji list" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a new emoji reaction
@@ -255,6 +260,7 @@ export def "groups-epics-award-emoji create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the emoji without colons.
 ]: any -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
@@ -266,7 +272,7 @@ export def "groups-epics-award-emoji create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a single emoji reaction
@@ -284,6 +290,7 @@ export def "groups-epics-award-emoji get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -291,7 +298,7 @@ export def "groups-epics-award-emoji get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an emoji reaction
@@ -309,6 +316,7 @@ export def "groups-epics-award-emoji delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -316,7 +324,7 @@ export def "groups-epics-award-emoji delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List an awardable's emoji reactions for groups
@@ -334,6 +342,7 @@ export def "groups-epics-notes-award-emoji list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -344,7 +353,7 @@ export def "groups-epics-notes-award-emoji list" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Add a new emoji reaction
@@ -362,6 +371,7 @@ export def "groups-epics-notes-award-emoji create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Name of the emoji without colons.
 ]: any -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
@@ -373,7 +383,7 @@ export def "groups-epics-notes-award-emoji create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a single emoji reaction
@@ -392,6 +402,7 @@ export def "groups-epics-notes-award-emoji get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string, user: record<id: int, username: string, public_email: string, name: string, state: string, locked: bool, avatar_url: string, avatar_path: string, custom_attributes: list<record>, web_url: string>, created_at: string, updated_at: string, awardable_id: int, awardable_type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -399,7 +410,7 @@ export def "groups-epics-notes-award-emoji get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Delete an emoji reaction
@@ -418,6 +429,7 @@ export def "groups-epics-notes-award-emoji delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -425,7 +437,7 @@ export def "groups-epics-notes-award-emoji delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), epic_iid: (encode-path-segment $epic_iid), note_id: (encode-path-segment $note_id), award_id: (encode-path-segment $award_id)} | format pattern "/api/v4/groups/{id}/epics/{epic_iid}/notes/{note_id}/award_emoji/{award_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a list of group badges viewable by the authenticated user.
@@ -441,6 +453,7 @@ export def "groups-badges list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32, default: 1, e.g. 1)
   --per-page: int # Number of items per page (format: int32, default: 20, e.g. 20)
@@ -452,7 +465,7 @@ export def "groups-badges list" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/badges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Adds a badge to a group.
@@ -468,6 +481,7 @@ export def "groups-badges create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   link_url: string # URL of the badge link
   image_url: string # URL of the badge image
@@ -481,7 +495,7 @@ export def "groups-badges create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Preview a badge from a group.
@@ -497,6 +511,7 @@ export def "groups-badges-render get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --link-url: string # URL of the badge link
   --image-url: string # URL of the badge image
@@ -507,7 +522,7 @@ export def "groups-badges-render get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/badges/render") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Gets a badge of a group.
@@ -524,6 +539,7 @@ export def "groups-badges get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<name: string, link_url: string, image_url: string, rendered_link_url: string, rendered_image_url: string, id: int, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -531,7 +547,7 @@ export def "groups-badges get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), badge_id: (encode-path-segment $badge_id)} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Updates a badge of a group.
@@ -548,6 +564,7 @@ export def "groups-badges update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --link-url: string # URL of the badge link
   --image-url: string # URL of the badge image
@@ -561,7 +578,7 @@ export def "groups-badges update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Removes a badge from the group.
@@ -578,6 +595,7 @@ export def "groups-badges delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -585,7 +603,7 @@ export def "groups-badges delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), badge_id: (encode-path-segment $badge_id)} | format pattern "/api/v4/groups/{id}/badges/{badge_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get all custom attributes on a group
@@ -601,6 +619,7 @@ export def "groups-custom-attributes list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -608,7 +627,7 @@ export def "groups-custom-attributes list" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/custom_attributes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a custom attribute on a group
@@ -625,6 +644,7 @@ export def "groups-custom-attributes get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -632,7 +652,7 @@ export def "groups-custom-attributes get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Set a custom attribute on a group
@@ -649,6 +669,7 @@ export def "groups-custom-attributes update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   value: string # The value of the custom attribute
 ]: any -> record<key: string, value: string> {
@@ -660,7 +681,7 @@ export def "groups-custom-attributes update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Delete a custom attribute on a group
@@ -677,6 +698,7 @@ export def "groups-custom-attributes delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -684,7 +706,7 @@ export def "groups-custom-attributes delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id), key: (encode-path-segment $key)} | format pattern "/api/v4/groups/{id}/custom_attributes/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a groups list
@@ -699,6 +721,7 @@ export def "groups list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --statistics: oneof<nothing, bool> # Include project statistics (default: false)
   --archived: oneof<nothing, bool> # Limit by archived status
@@ -724,7 +747,7 @@ export def "groups list" [
   let full_url = (build-url $base "/api/v4/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a group. Available only for users who can create groups.
@@ -742,6 +765,7 @@ export def "groups create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the group
   path: string # The path of the group
@@ -793,7 +817,7 @@ export def "groups create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Update a group. Available only for users who can administrate groups.
@@ -813,6 +837,7 @@ export def "groups update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the group
   --path: string # The path of the group
@@ -892,7 +917,7 @@ export def "groups update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a single group, with containing projects.
@@ -908,6 +933,7 @@ export def "groups get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-custom-attributes: oneof<nothing, bool> # Include custom attributes in the response (default: false)
   --with-projects: oneof<nothing, bool> # Omit project details (default: true)
@@ -918,7 +944,7 @@ export def "groups get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Remove a group.
@@ -934,6 +960,7 @@ export def "groups delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -941,7 +968,7 @@ export def "groups delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Archive a group
@@ -957,6 +984,7 @@ export def "groups-archive create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, web_url: string, name: string, path: string, description: string, visibility: string, share_with_group_lock: bool, require_two_factor_authentication: bool, two_factor_grace_period: int, project_creation_level: string, auto_devops_enabled: string, subgroup_creation_level: string, emails_disabled: bool, emails_enabled: bool, show_diff_preview_in_email: bool, mentions_disabled: string, lfs_enabled: bool, archived: bool, math_rendering_limits_enabled: bool, lock_math_rendering_limits_enabled: bool, default_branch: string, default_branch_protection: int, default_branch_protection_defaults: string, avatar_url: string, request_access_enabled: bool, full_name: string, full_path: string, created_at: string, parent_id: string, organization_id: int, shared_runners_setting: string, max_artifacts_size: int, custom_attributes: record<key: string, value: string>, statistics: record<storage_size: string, repository_size: string, wiki_size: string, lfs_objects_size: string, job_artifacts_size: string, pipeline_artifacts_size: string, packages_size: string, snippets_size: string, uploads_size: string>, marked_for_deletion_on: string, root_storage_statistics: record<build_artifacts_size: int, container_registry_size: int, container_registry_size_is_estimated: bool, dependency_proxy_size: int, lfs_objects_size: int, packages_size: int, pipeline_artifacts_size: int, repository_size: int, snippets_size: int, storage_size: int, uploads_size: int, wiki_size: int>, ldap_cn: string, ldap_access: string, ldap_group_links: record<cn: string, group_access: int, provider: string, filter: string, member_role_id: int>, saml_group_links: record<name: string, access_level: int, member_role_id: int, provider: string>, file_template_project_id: string, wiki_access_level: string, repository_storage: string, duo_core_features_enabled: bool, duo_features_enabled: string, lock_duo_features_enabled: string, auto_duo_code_review_enabled: string, web_based_commit_signing_enabled: string, allow_personal_snippets: string, duo_namespace_access_rules: string, built_in_project_templates_enabled: bool, lock_built_in_project_templates_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "private-token"))
@@ -964,5 +992,5 @@ export def "groups-archive create" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v4/groups/{id}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }

@@ -81,7 +81,7 @@ const RESERVED_VARS = [
   let mut const def export use module source overlay
   where each error try catch not do
   # generated signature flags
-  base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
+  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept
   # generated body-code internal variables. `body` was renamed to `req_body`
   # to free up spec-side `body` fields (GitHub discussion post body, etc.) —
   # the user-facing `--body` flag no longer collides with anything internal.
@@ -134,7 +134,7 @@ const RESERVED_POSITIONALS = [
   in nu nothing null true false env
   if else match for while loop break continue return
   let mut const def export use module overlay
-  base_url token auth_scheme insecure max_time raw allow_errors dry_run accept
+  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept
 ]
 
 # Effective positional path-param variable name. Sanitizes the path param's
@@ -283,6 +283,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     '  --max-time(-m): duration # Timeout'
     '  --raw(-r) # Fetch as text'
     '  --allow-errors(-e) # Return full response without error handling'
+    '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
     '  --dry-run(-n) # Return the request that would be sent without executing it'
   ])
 
@@ -434,7 +435,7 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '}'
     ''
     '# Execute HTTP request with method dispatch'
-    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {'
+    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {'
     '  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }'
     ('  let timeout = ($max_time | default ' + $default_timeout + ')')
     '  let ct = ($content_type | default "application/json")'
@@ -449,13 +450,13 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }'
     '    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }'
     '    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }'
-    '    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }'
-    '    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }'
-    '    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }'
+    '    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
+    '    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
+    '    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
     '    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }'
     '  }'
     '  if ($method in ["head" "options"]) { return $resp }'
-    '  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }'
+    '  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }'
     '}'
   ] | append (if $needs_multipart { [
     ''
@@ -463,15 +464,18 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '# the field names whose value should be read from disk as bytes; every'
     '# other field is sent as a text part (records/lists JSON-stringified).'
     '# Returns {content_type, body} ready to pass to `do-request`.'
-    'def build-multipart-body [parts: record, file_fields: list<string>]: nothing -> record {'
+    '# When `$dry_run` is true, file fields are NOT read from disk — they emit'
+    '# an empty-bytes placeholder so callers can inspect the request shape'
+    '# without the file existing on disk (issue 11.B).'
+    'def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {'
     '  let boundary = $"----nu-(random chars --length 24)"'
     '  let crlf = "\r\n"'
     '  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|'
     '    let name = $p.k'
     '    let val = $p.v'
     '    if $name in $file_fields {'
-    '      let filename = ($val | path basename)'
-    '      let bytes = (open --raw $val | into binary | collect)'
+    '      let filename = ($val | into string | path basename)'
+    '      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }'
     '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)'
     '      $head ++ $bytes ++ ($crlf | into binary)'
     '    } else {'
@@ -577,7 +581,15 @@ export def build-body-code [cmd: record, config: record] {
     } else {
       $lines = ($lines | append '  let req_body = $body')
     }
-    $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
+    # Pipeline-input merge: records merge deep into the assembled body. When
+    # the spec declares `oneOf: [{object}, {array}]` (or anyOf), we also accept
+    # a bare list and pass it straight through — the object variant remains
+    # reachable via flags, and the array variant via pipeline. Issue 13.B.
+    if ($cmd.body_polymorphic_array? | default false) {
+      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }')
+    } else {
+      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
+    }
   }
 
   # Emit the hardcoded `Accept` default FIRST, then merge user-driven
@@ -613,13 +625,24 @@ export def build-body-code [cmd: record, config: record] {
   # this spec needs it) does the actual envelope construction at runtime.
   # Both Swagger-2 (`type: file`) and OAS3 (`type: string, format: binary`)
   # shapes contribute to the file-fields list. Issue #11-6.
-  let is_multipart = $cmd.has_body and ($cmd.content_type == "multipart/form-data") and ($cmd.body_fields | length) > 0
+  #
+  # The gate keys on content-type alone, not on a non-empty file-fields list:
+  # some multipart specs have empty/array/bare-binary body schemas (Jira
+  # setColumns, Codat push-*-attachments, Jira addAttachment). The helper
+  # accepts an empty `file_fields` list and still builds a well-formed
+  # envelope (records JSON-stringified). Issue 11.A.
+  let is_multipart = $cmd.has_body and ($cmd.content_type == "multipart/form-data")
   if $is_multipart {
     let file_field_names = ($cmd.body_fields | where {|f|
       ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
     } | each {|f| $f.name })
     let file_list_lit = ($file_field_names | each {|n| $n | to nuon } | str join ' ')
-    $lines = ($lines | append ($"  let mp = \(build-multipart-body $req_body [($file_list_lit)]\)"))
+    # Guard against $req_body being a non-record (bare array/string body, or
+    # the empty-schema case where $req_body comes from `--body: record` but
+    # the user might pass nothing). Coerce to {} so the helper's `transpose`
+    # works; the empty body yields a multipart envelope with just the trailer.
+    $lines = ($lines | append '  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }')
+    $lines = ($lines | append ($"  let mp = \(build-multipart-body $req_body [($file_list_lit)] $dry_run\)"))
   }
 
   # Detect a user-facing `--content-type` flag. Some Swagger-2 specs declare
@@ -653,7 +676,7 @@ export def build-body-code [cmd: record, config: record] {
 
   let body_arg = if $is_multipart { ' $mp.body' } else if $cmd.has_body { " $req_body" } else { "" }
   let ct_arg = if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
-  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors ($ct_arg)($body_arg)')
+  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full ($ct_arg)($body_arg)')
 
   $lines | str join "\n"
 }
@@ -701,7 +724,7 @@ def render-module-header [
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
-      '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]'
+      '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]'
       $"  let mod_name = \(scope modules | where { $in.commands | any { $in.name == \"($first_cmd_name)\" } } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)'
@@ -848,14 +871,13 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
   let mapping = $completer_data.mapping
 
   # Only emit the multipart envelope builder when at least one operation in
-  # this spec uses `multipart/form-data` and exposes at least one binary field
-  # (a file upload). Slim out the helper for non-upload specs.
+  # this spec uses `multipart/form-data`. The gate keys on the operation's
+  # content-type, not on a non-empty file-fields list — some multipart specs
+  # (Jira, Codat) have empty/array/bare-binary body schemas where the file-
+  # field detector returns nothing, but the operation still needs to send a
+  # well-formed multipart envelope at runtime. Issue 11.D.
   let needs_multipart = ($commands | any {|c|
-    ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false) and (
-      ($c.body_fields? | default [] | any {|f|
-        ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
-      })
-    )
+    ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false)
   })
 
   let helpers_code = render-helpers $token_env_var $auth_schemes $default_auth $config.default_timeout $config.default_headers $needs_multipart

@@ -150,7 +150,22 @@ def extract-body-fields [schema: record, schemas: record] {
   } | where {|field|
     not ($field.field_spec.readOnly? | default false)
   } | each {|field|
-    let field_type = (spec normalize-type ($field.field_spec.type? | default "any"))
+    # Defensive guard: a malformed spec may leave `.type` as a record (e.g.
+    # codat.io/accounting nests `definitions.itemType` one level too deep, so
+    # the JSON-Pointer resolves to `{type: {description, enum, type}}` instead
+    # of the inner schema). Records can't be coerced to a render-time type
+    # string, so fall back to "any". OAS 3.1 list-typed unions (e.g.
+    # `[string, null]`) are still handled by `normalize-type`. Logged as a
+    # warning so a legitimate generator regression doesn't degrade silently.
+    # Issue 13.A.
+    let raw_type = ($field.field_spec.type? | default "any")
+    let raw_type_desc = ($raw_type | describe)
+    let field_type = if ($raw_type_desc | str starts-with "record") {
+      log warn $"field ($field.name): record-typed `.type` \(malformed spec\) → coerced to any"
+      "any"
+    } else {
+      spec normalize-type $raw_type
+    }
     let items_type = if $field_type == "array" {
       let items = (spec resolve-ref ($field.field_spec.items? | default {}) $schemas)
       spec normalize-type ($items.type? | default null)
@@ -691,7 +706,28 @@ def extract-body-info [op: record, schemas: record, h: record] {
     null
   }
 
-  {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator}
+  # Detect polymorphic body schemas where one oneOf/anyOf variant is a bare
+  # array. The per-field signature only covers object variants; the array
+  # variant is unreachable through any flag. We flag the command so the
+  # renderer can accept a list pipeline input and pass it straight through as
+  # the request body (e.g. GitHub branch-protection contexts). Issue 13.B.
+  let body_polymorphic_array = if (($body_schema | describe) | str starts-with "record") {
+    let variants = ($body_schema.oneOf? | default ($body_schema.anyOf? | default []))
+    $variants | any {|v|
+      let resolved = (spec resolve-ref $v $schemas)
+      if (($resolved | describe) | str starts-with "record") {
+        let t = ($resolved.type? | default null)
+        # Plain "array" or OAS 3.1 list-typed union containing "array".
+        ($t == "array") or ((($t | describe) | str starts-with "list") and ("array" in ($t | default [])))
+      } else {
+        false
+      }
+    }
+  } else {
+    false
+  }
+
+  {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array}
 }
 
 # Extract response info: accept_types, return_type, returns_body.
@@ -946,6 +982,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         has_body: $body.has_body
         content_type: $body.content_type
         body_fields: $body.body_fields
+        body_polymorphic_array: $body.body_polymorphic_array
         field_shapes: $field_shapes
         returns_body: $resp.returns_body
         description: $meta.description

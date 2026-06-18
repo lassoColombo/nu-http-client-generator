@@ -53,7 +53,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
@@ -63,13 +63,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://localhost"] }
@@ -82,7 +82,7 @@ def accept-completer-2 [] { ["application/cbor" "application/cbor-seq" "applicat
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-service-account-issuer-open" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -115,6 +115,7 @@ export def "well-known-openid-configuration get-service-account-issuer-open" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -122,7 +123,7 @@ export def "well-known-openid-configuration get-service-account-issuer-open" [
   let full_url = (build-url $base "/.well-known/openid-configuration/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # get available API versions
@@ -137,6 +138,7 @@ export def "core get-versions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<apiVersion: string, kind: string, serverAddressByClientCIDRs: table<clientCIDR: string, serverAddress: string>, versions: list<string>> {
@@ -145,7 +147,7 @@ export def "core get-versions" [
   let full_url = (build-url $base "/api/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # get available resources
@@ -160,6 +162,7 @@ export def "core-v1 get-resources" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
 ]: nothing -> record<apiVersion: string, groupVersion: string, kind: string, resources: table<categories: list, group: string, kind: string, name: string, namespaced: bool, shortNames: list, singularName: string, storageVersionHash: string, verbs: list, version: string>> {
@@ -168,7 +171,7 @@ export def "core-v1 get-resources" [
   let full_url = (build-url $base "/api/v1/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list objects of kind ComponentStatus
@@ -183,6 +186,7 @@ export def "componentstatuses list-component-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -204,7 +208,7 @@ export def "componentstatuses list-component-status" [
   let full_url = (build-url $base "/api/v1/componentstatuses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # read the specified ComponentStatus
@@ -220,6 +224,7 @@ export def "componentstatuses get-component-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string # If 'true', then the output is pretty printed. Defaults to 'false' unless the user-agent indicates a browser or command-line HTTP tool (curl and wget).
@@ -230,7 +235,7 @@ export def "componentstatuses get-component-status" [
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/componentstatuses/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind ConfigMap
@@ -245,6 +250,7 @@ export def "configmaps list-config-map-for-list-namespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -266,7 +272,7 @@ export def "configmaps list-config-map-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind Endpoints
@@ -281,6 +287,7 @@ export def "endpoints list-for-list-namespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -302,7 +309,7 @@ export def "endpoints list-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind Event
@@ -317,6 +324,7 @@ export def "events list-for-list-namespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -338,7 +346,7 @@ export def "events list-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind LimitRange
@@ -353,6 +361,7 @@ export def "limitranges list-limit-range-for-list-namespaces" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -374,7 +383,7 @@ export def "limitranges list-limit-range-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/limitranges" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind Namespace
@@ -389,6 +398,7 @@ export def "namespaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -409,7 +419,7 @@ export def "namespaces list" [
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # create a Namespace
@@ -427,6 +437,7 @@ export def "namespaces create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -447,7 +458,7 @@ export def "namespaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # create a Binding
@@ -465,6 +476,7 @@ export def "namespaces-bindings create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -485,7 +497,7 @@ export def "namespaces-bindings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # delete collection of ConfigMap
@@ -501,6 +513,7 @@ export def "namespaces-configmaps delete-collection-config-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string # The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key". This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
@@ -524,7 +537,7 @@ export def "namespaces-configmaps delete-collection-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind ConfigMap
@@ -540,6 +553,7 @@ export def "namespaces-configmaps list-config-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -560,7 +574,7 @@ export def "namespaces-configmaps list-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # create a ConfigMap
@@ -577,6 +591,7 @@ export def "namespaces-configmaps create-config-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -598,7 +613,7 @@ export def "namespaces-configmaps create-config-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # delete a ConfigMap
@@ -615,6 +630,7 @@ export def "namespaces-configmaps delete-config-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -629,7 +645,7 @@ export def "namespaces-configmaps delete-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # read the specified ConfigMap
@@ -646,6 +662,7 @@ export def "namespaces-configmaps get-config-map" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string # If 'true', then the output is pretty printed. Defaults to 'false' unless the user-agent indicates a browser or command-line HTTP tool (curl and wget).
@@ -656,7 +673,7 @@ export def "namespaces-configmaps get-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # partially update the specified ConfigMap
@@ -673,6 +690,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -686,7 +704,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # replace the specified ConfigMap
@@ -704,6 +722,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -725,7 +744,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # delete collection of Endpoints
@@ -741,6 +760,7 @@ export def "namespaces-endpoints delete-collection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-continue: string # The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key". This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
@@ -764,7 +784,7 @@ export def "namespaces-endpoints delete-collection" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # list or watch objects of kind Endpoints
@@ -780,6 +800,7 @@ export def "namespaces-endpoints list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --allow-watch-bookmarks: oneof<nothing, bool> # allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
@@ -800,7 +821,7 @@ export def "namespaces-endpoints list" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # create Endpoints
@@ -818,6 +839,7 @@ export def "namespaces-endpoints create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -837,7 +859,7 @@ export def "namespaces-endpoints create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # delete Endpoints
@@ -854,6 +876,7 @@ export def "namespaces-endpoints delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -868,7 +891,7 @@ export def "namespaces-endpoints delete" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # read the specified Endpoints
@@ -885,6 +908,7 @@ export def "namespaces-endpoints get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --pretty: string # If 'true', then the output is pretty printed. Defaults to 'false' unless the user-agent indicates a browser or command-line HTTP tool (curl and wget).
@@ -895,7 +919,7 @@ export def "namespaces-endpoints get" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # partially update the specified Endpoints
@@ -912,6 +936,7 @@ export def "namespaces-endpoints update-by-namespace-name" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -925,7 +950,7 @@ export def "namespaces-endpoints update-by-namespace-name" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # replace the specified Endpoints
@@ -944,6 +969,7 @@ export def "namespaces-endpoints update-by-namespace-name-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --qp-dry-run: string # When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
@@ -963,5 +989,5 @@ export def "namespaces-endpoints update-by-namespace-name-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }

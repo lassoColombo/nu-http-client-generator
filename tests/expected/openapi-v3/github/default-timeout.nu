@@ -52,7 +52,7 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 }
 
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 5min)
   let ct = ($content_type | default "application/json")
@@ -61,13 +61,13 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
     "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
-    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
+    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
     "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
   }
   if ($method in ["head" "options"]) { return $resp }
-  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
 def base-url-completer [] { ["https://api.github.com"] }
@@ -84,7 +84,7 @@ def status-completer [] { ["failure" "success"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta get-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -118,6 +118,7 @@ export def "meta get-root" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<current_user_url: string, current_user_authorizations_html_url: string, authorizations_url: string, code_search_url: string, commit_search_url: string, emails_url: string, emojis_url: string, events_url: string, feeds_url: string, followers_url: string, following_url: string, gists_url: string, hub_url: string, issue_search_url: string, issues_url: string, keys_url: string, label_search_url: string, notifications_url: string, organization_url: string, organization_repositories_url: string, organization_teams_url: string, public_gists_url: string, rate_limit_url: string, repository_url: string, repository_search_url: string, current_user_repositories_url: string, starred_url: string, starred_gists_url: string, topic_search_url: string, user_url: string, user_organizations_url: string, user_repositories_url: string, user_search_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -125,7 +126,7 @@ export def "meta get-root" [
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List global security advisories
@@ -141,6 +142,7 @@ export def "advisories list-security-global" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ghsa-id: string # If specified, only advisories with this GHSA (GitHub Security Advisory) identifier will be returned.
   --type: string@type-completer # If specified, only advisories of this type will be returned. By default, a request with no other parameters defined will only return reviewed advisories that are not malware. (default: reviewed)
@@ -167,7 +169,7 @@ export def "advisories list-security-global" [
   let full_url = (build-url $base "/advisories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a global security advisory
@@ -184,6 +186,7 @@ export def "advisories get-security-global-advisory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: table<type: string, value: string>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: table<package: record, vulnerable_version_range: string, first_patched_version: string, vulnerable_functions: list>, cvss: record<vector_string: string, score: float>, cvss_severities: record<cvss_v3: record<vector_string: string, score: float>, cvss_v4: record<vector_string: string, score: float>>, epss: record<percentage: float, percentile: float>, cwes: table<cwe_id: string, name: string>, credits: table<user: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -191,7 +194,7 @@ export def "advisories get-security-global-advisory" [
   let full_url = (build-url $base ({ghsa_id: (encode-path-segment $ghsa_id)} | format pattern "/advisories/{ghsa_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List tasks for repository
@@ -209,6 +212,7 @@ export def "agents-repos-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). (default: 30)
   --page: int # The page number of the results to fetch. (default: 1)
@@ -225,7 +229,7 @@ export def "agents-repos-tasks list" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/agents/repos/{owner}/{repo}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Start a task
@@ -243,6 +247,7 @@ export def "agents-repos-tasks create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   prompt: string # The user's prompt for the agent
   --model: string # The model to use for this task. The allowed models may change over time and depend on the user's GitHub Copilot plan and organization policies. Currently supported values: `claude-sonnet-4.6`, `claude-opus-4.6`, `gpt-5.2-codex`, `gpt-5.3-codex`, `gpt-5.4`, `claude-sonnet-4.5`, `claude-opus-4.5`
@@ -258,7 +263,7 @@ export def "agents-repos-tasks create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # Get a task by repo
@@ -277,6 +282,7 @@ export def "agents-repos-tasks get-by-and" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -284,7 +290,7 @@ export def "agents-repos-tasks get-by-and" [
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), task_id: (encode-path-segment $task_id)} | format pattern "/agents/repos/{owner}/{repo}/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List tasks
@@ -300,6 +306,7 @@ export def "agents-tasks list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). (default: 30)
   --page: int # The page number of the results to fetch. (default: 1)
@@ -315,7 +322,7 @@ export def "agents-tasks list" [
   let full_url = (build-url $base "/agents/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a task by ID
@@ -332,6 +339,7 @@ export def "agents-tasks get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -339,7 +347,7 @@ export def "agents-tasks get" [
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/agents/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get the authenticated app
@@ -355,6 +363,7 @@ export def "app get-authenticated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, slug: string, node_id: string, client_id: string, owner: any, name: string, description: string, external_url: string, html_url: string, created_at: string, updated_at: string, permissions: record<issues: string, checks: string, metadata: string, contents: string, deployments: string>, events: list<string>, installations_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -362,7 +371,7 @@ export def "app get-authenticated" [
   let full_url = (build-url $base "/app")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Create a GitHub App from a manifest
@@ -379,6 +388,7 @@ export def "app-manifests-conversions create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, slug: string, node_id: string, client_id: string, owner: any, name: string, description: string, external_url: string, html_url: string, created_at: string, updated_at: string, permissions: record<issues: string, checks: string, metadata: string, contents: string, deployments: string>, events: list<string>, installations_count: int, client_secret: string, webhook_secret: string, pem: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -386,7 +396,7 @@ export def "app-manifests-conversions create" [
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/app-manifests/{code}/conversions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a webhook configuration for an app
@@ -402,6 +412,7 @@ export def "app-hook-config get-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string, content_type: string, secret: string, insecure_ssl: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -409,7 +420,7 @@ export def "app-hook-config get-webhook" [
   let full_url = (build-url $base "/app/hook/config")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Update a webhook configuration for an app
@@ -425,6 +436,7 @@ export def "app-hook-config update-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # The URL to which the payloads will be delivered. (format: uri, e.g. https://example.com/webhook)
   --content-type: string # The media type used to serialize the payloads. Supported values include `json` and `form`. The default is `form`. (e.g. "json")
@@ -439,7 +451,7 @@ export def "app-hook-config update-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
 }
 
 # List deliveries for an app webhook
@@ -455,6 +467,7 @@ export def "app-hook-deliveries list-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --cursor: string # Used for pagination: the starting delivery from which the page of deliveries is fetched. Refer to the `link` header for the next and previous page cursors.
@@ -466,7 +479,7 @@ export def "app-hook-deliveries list-webhook" [
   let full_url = (build-url $base "/app/hook/deliveries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Get a delivery for an app webhook
@@ -483,6 +496,7 @@ export def "app-hook-deliveries get-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, guid: string, delivered_at: string, redelivery: bool, duration: float, status: string, status_code: int, event: string, action: string, installation_id: int, repository_id: int, throttled_at: string, url: string, request: record<headers: record, payload: record>, response: record<headers: record, payload: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -490,7 +504,7 @@ export def "app-hook-deliveries get-webhook" [
   let full_url = (build-url $base ({delivery_id: (encode-path-segment $delivery_id)} | format pattern "/app/hook/deliveries/{delivery_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # Redeliver a delivery for an app webhook
@@ -507,6 +521,7 @@ export def "app-hook-deliveries-attempts create-redeliver-webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -514,7 +529,7 @@ export def "app-hook-deliveries-attempts create-redeliver-webhook" [
   let full_url = (build-url $base ({delivery_id: (encode-path-segment $delivery_id)} | format pattern "/app/hook/deliveries/{delivery_id}/attempts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List installation requests for the authenticated app
@@ -530,6 +545,7 @@ export def "app-installation-requests list-for-authenticated" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
@@ -540,7 +556,7 @@ export def "app-installation-requests list-for-authenticated" [
   let full_url = (build-url $base "/app/installation-requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
 
 # List installations for the authenticated app
@@ -556,6 +572,7 @@ export def "app-installations list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
@@ -568,5 +585,5 @@ export def "app-installations list" [
   let full_url = (build-url $base "/app/installations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
 }
