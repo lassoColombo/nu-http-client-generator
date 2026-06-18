@@ -122,6 +122,55 @@ def effective-flag-var [name: string, prefix: string] {
   effective-flag-name $name $prefix | str replace --all '-' '_'
 }
 
+# Disambiguate a flag name against an already-seen set. Returns
+# {flag_name, suffix} — suffix is the disambiguating tail ("" if untouched,
+# otherwise "-list", "-2", "-3", ...). Issue 27.A: two query params whose
+# kebab-case forms collide (e.g. `dataSegmentCode` and `dataSegmentCode[]`)
+# would otherwise both bind the same flag, silently dropping the user's
+# value. The array-shaped variant gets `-list`; subsequent collisions get
+# `-2`, `-3`, etc.
+def disambiguate-flag-name [proposed: string, is_array: bool, seen: list<string>]: nothing -> record {
+  if not ($proposed in $seen) { return {flag_name: $proposed, suffix: ""} }
+  if $is_array {
+    let candidate = $"($proposed)-list"
+    if not ($candidate in $seen) { return {flag_name: $candidate, suffix: "-list"} }
+  }
+  mut n = 2
+  mut result: record<flag_name: string, suffix: string> = {flag_name: "", suffix: ""}
+  mut done = false
+  while not $done {
+    let candidate = $"($proposed)-($n)"
+    if not ($candidate in $seen) {
+      $result = {flag_name: $candidate, suffix: $"-($n)"}
+      $done = true
+    } else {
+      $n = $n + 1
+    }
+  }
+  $result
+}
+
+# Walk a list of params (query/header/cookie) and assign each a
+# collision-free flag_name and flag_var, threading a seen-names set so
+# later groups (and the body) avoid colliding with earlier groups. Returns
+# {items, seen} where items has the original params merged with
+# {flag_name, flag_var, name_suffix} — `name_suffix` is the disambiguating
+# tail (empty when no collision) so callers can append origin notes to the
+# description text. Issue 27.A.
+def decorate-param-group [params: list, prefix: string, seen: list<string>]: nothing -> record {
+  mut items = []
+  mut acc = $seen
+  for p in $params {
+    let proposed = (effective-flag-name $p.name $prefix)
+    let is_array = (($p.items_type? | default null) != null) or (($p.name | str ends-with "[]"))
+    let res = (disambiguate-flag-name $proposed $is_array $acc)
+    let flag_var = ($res.flag_name | str replace --all '-' '_')
+    $items = ($items | append ($p | merge {flag_name: $res.flag_name, flag_var: $flag_var, name_suffix: $res.suffix}))
+    $acc = ($acc | append $res.flag_name)
+  }
+  {items: $items, seen: $acc}
+}
+
 # Names that cannot appear as a positional parameter on a generated `def`.
 # Narrower than RESERVED_VARS — body-code `let` bindings can safely shadow
 # positionals, so we only block actual language keywords, built-in variables,
@@ -153,9 +202,9 @@ export def effective-positional-var [name: string] {
 # headers can't repeat. The runtime check handles `null` (compact-friendly) and
 # scalar values unchanged, so this is safe even when the user passes a single
 # string into a list-typed flag.
-def render-param-record [params: list, prefix: string, --quote-keys] {
+def render-param-record [params: list, --quote-keys] {
   $params | each {|p|
-    let var = (effective-flag-var $p.name $prefix)
+    let var = $p.flag_var
     let value_expr = if (($p.items_type? | default null) != null) {
       $"\(if \($($var) | describe | str starts-with \"list\"\) { $($var) | each { into string } | str join \",\" } else { $($var) }\)"
     } else {
@@ -248,8 +297,17 @@ def render-param-group [params: list, mapping: record, config: record, shapes: l
     let flag_name = $q.flag_name
     let shape_hint = (lookup-shape $q.shape_key $shapes)
     let desc_text = if ($q.description | is-not-empty) { $q.description | lines | str join " " } else { "" }
+    # Append origin note when this flag was disambiguated via suffix
+    # (issue 27.A) so users can tell which spec-side parameter the flag
+    # actually maps to.
+    let suffix_note = match ($q.name_suffix? | default "") {
+      "" => ""
+      "-list" => " (array variant)"
+      $s => $" \(disambiguated($s)\)"
+    }
     let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
-    let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
+    let desc_final = $"($desc_with_shape)($suffix_note)"
+    let desc = if $config.no_descriptions { "" } else if ($desc_final | is-not-empty) { $" # ($desc_final)" } else { "" }
     let cname = if ($q.enum | is-not-empty) { resolve-completer $q.completer_key $mapping } else { null }
     $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
     if ($q.deprecated? | default false) {
@@ -304,21 +362,25 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     }
   }
 
-  # Query params
-  let qp_items = ($cmd.query_params | each {|q| $q | merge {flag_name: (effective-flag-name $q.name "qp"), shape_key: ($q.name | str kebab-case), completer_key: $q} })
-  let qp_result = (render-param-group $qp_items $mapping $config $shapes)
+  # Query params — decorate with collision-aware flag names, threading
+  # the seen-flag-name set into header/cookie/body groups so cross-group
+  # collisions (e.g. body field `NextToken` vs query param `NextToken`,
+  # AWS Smithy pattern) get suffixed instead of silently dropping values.
+  # Issue 27.A.
+  let qp_decorated = (decorate-param-group ($cmd.query_params | each {|q| $q | merge {shape_key: ($q.name | str kebab-case), completer_key: $q} }) "qp" [])
+  let qp_result = (render-param-group $qp_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $qp_result.parts)
   $dep_flags = ($dep_flags | append $qp_result.dep_flags)
 
   # Header params
-  let hdr_items = ($cmd.header_params | each {|q| $q | merge {flag_name: (effective-flag-name $q.name "hdr"), shape_key: (effective-flag-name $q.name "hdr"), completer_key: $q} })
-  let hdr_result = (render-param-group $hdr_items $mapping $config $shapes)
+  let hdr_decorated = (decorate-param-group ($cmd.header_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "hdr") }) "hdr" $qp_decorated.seen)
+  let hdr_result = (render-param-group $hdr_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $hdr_result.parts)
   $dep_flags = ($dep_flags | append $hdr_result.dep_flags)
 
   # Cookie params
-  let ck_items = ($cmd.cookie_params | each {|q| $q | merge {flag_name: (effective-flag-name $q.name "ck"), shape_key: (effective-flag-name $q.name "ck"), completer_key: $q} })
-  let ck_result = (render-param-group $ck_items $mapping $config $shapes)
+  let ck_decorated = (decorate-param-group ($cmd.cookie_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "ck") }) "ck" $hdr_decorated.seen)
+  let ck_result = (render-param-group $ck_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $ck_result.parts)
   $dep_flags = ($dep_flags | append $ck_result.dep_flags)
 
@@ -330,23 +392,48 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
       $parts = ($parts | append $"  --body: record($body_desc)")
     } else {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
+      mut body_seen = $ck_decorated.seen
       for f in $cmd.body_fields {
         let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
         let shape_hint = (lookup-shape $f.name $shapes)
         let desc_text = if ($f.description | is-not-empty) { $f.description | lines | str join " " } else { "" }
         let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
-        let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
         let sanitized_name = (to-var-name $f.name)
         let flag_var = (to-flag-var $f.name)
-        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        let proposed_flag = (to-flag-name $f.name)
+        # Pre-existing reserved-word collision (path positional / language
+        # keyword): keep the `body-` PREFIX disambiguation that's been in
+        # place since the generator's earliest cycles — emitting clients
+        # already use those names, so changing the disambiguation would
+        # break callers.
+        let reserved_collision = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        # Issue 27.A: a body field whose flag-name matches one already
+        # used by query/header/cookie is a NEW collision class. Suffix
+        # with `-body` (so `--max-items` query stays, body becomes
+        # `--max-items-body`). This silently-data-loss bug previously
+        # affected 216 client files / 1778 operations.
+        let cross_group_collision = (not $reserved_collision) and ($proposed_flag in $body_seen)
+        let collides = $reserved_collision or $cross_group_collision
         let cname = if ($f.enum | is-not-empty) { resolve-completer $f $mapping } else { null }
         let is_nullable = ($f.nullable? | default false)
         if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
+          let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
           $parts = ($parts | append (render-param-sig $sanitized_name $nu_type $desc $cname --positional))
+          $body_seen = ($body_seen | append $sanitized_name)
           # @deprecated --flag doesn't work on positional params — skip
         } else {
-          let flag_name = if $collides { $"body-(to-flag-name $f.name)" } else { to-flag-name $f.name }
+          let flag_name = if $cross_group_collision {
+            $"($proposed_flag)-body"
+          } else if $reserved_collision {
+            $"body-($proposed_flag)"
+          } else {
+            $proposed_flag
+          }
+          let body_note = if $cross_group_collision { " (body field)" } else { "" }
+          let desc_with_note = $"($desc_with_shape)($body_note)"
+          let desc = if $config.no_descriptions { "" } else if ($desc_with_note | is-not-empty) { $" # ($desc_with_note)" } else { "" }
           $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
+          $body_seen = ($body_seen | append $flag_name)
           if ($f.deprecated? | default false) {
             $dep_flags = ($dep_flags | append {flag_name: $flag_name, reason: ($f.description? | default "")})
           }
@@ -554,9 +641,18 @@ export def build-body-code [cmd: record, config: record] {
     $cmd.path_template | to nuon
   }
 
-  if ($cmd.query_params | is-not-empty) {
-    let calls = $cmd.query_params | each {|q|
-      let var_name = $"$(effective-flag-var $q.name "qp")"
+  # Issue 27.A: decorate query/header/cookie param lists with
+  # collision-aware flag_name/flag_var so the variable references emitted
+  # here match the signature flags declared in build-signature. Walked in
+  # the same priority order (query → header → cookie → body).
+  let qp_decorated = (decorate-param-group $cmd.query_params "qp" [])
+  let hdr_decorated = (decorate-param-group $cmd.header_params "hdr" $qp_decorated.seen)
+  let ck_decorated = (decorate-param-group $cmd.cookie_params "ck" $hdr_decorated.seen)
+  let pre_body_seen = $ck_decorated.seen
+
+  if ($qp_decorated.items | is-not-empty) {
+    let calls = $qp_decorated.items | each {|q|
+      let var_name = $"$($q.flag_var)"
       $"\(serialize-qp \"($q.name)\" ($var_name) \"($q.collection_style)\"\)"
     } | str join " "
     $lines = ($lines | append ($"  let qp = [($calls)] | flatten | str join \"&\""))
@@ -578,27 +674,45 @@ export def build-body-code [cmd: record, config: record] {
     let has_per_field = ($cmd.body_fields | is-not-empty) and (not $use_collapsed)
     if $has_per_field {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
-      let body_parts = $cmd.body_fields | enumerate | each {|item|
+      # Mirror the body-field naming logic from build-signature so the
+      # variable references here line up with the flag declarations.
+      # Issue 27.A.
+      mut body_seen = $pre_body_seen
+      mut body_parts_list = []
+      for item in ($cmd.body_fields | enumerate) {
         let f = $item.item
         let idx = $item.index
         let sanitized_name = (to-var-name $f.name)
         let flag_base = (to-flag-var $f.name)
-        let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_base in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        let proposed_flag = (to-flag-name $f.name)
+        let reserved_collision = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_base in $RESERVED_VARS) or ($sanitized_name | is-empty)
+        let cross_group_collision = (not $reserved_collision) and ($proposed_flag in $body_seen)
+        let collides = $reserved_collision or $cross_group_collision
         let nu_type = (openapi-to-nu-type $f.type)
         let is_nullable = ($f.nullable? | default false)
         let var_name = if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
+          $body_seen = ($body_seen | append $sanitized_name)
           $'$($sanitized_name)'
+        } else if $cross_group_collision {
+          let flag_var = $"($flag_base)_body"
+          $body_seen = ($body_seen | append $"($proposed_flag)-body")
+          $'$($flag_var)'
+        } else if $reserved_collision {
+          let flag_var = $'body_($flag_base)'
+          $body_seen = ($body_seen | append $"body-($proposed_flag)")
+          $'$($flag_var)'
         } else {
-          let flag = if $collides { $'body_($flag_base)' } else { $flag_base }
-          $'$($flag)'
+          $body_seen = ($body_seen | append $proposed_flag)
+          $'$($flag_base)'
         }
         # Use the original spec field name as the body key, but fall back to a
         # synthetic name when it is empty (e.g. the field name was ":" and the
         # sanitizer reduced it to ""). Always quote the key so names with
         # spaces, slashes, or colons are valid Nushell record syntax.
         let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
-        $'($key | to nuon): ($var_name)'
-      } | str join ", "
+        $body_parts_list = ($body_parts_list | append $'($key | to nuon): ($var_name)')
+      }
+      let body_parts = ($body_parts_list | str join ", ")
       $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
     } else {
       $lines = ($lines | append '  let req_body = $body')
@@ -640,14 +754,14 @@ export def build-body-code [cmd: record, config: record] {
   }
   $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
 
-  if ($cmd.header_params | is-not-empty) {
-    let hp_record = (render-param-record $cmd.header_params "hdr" --quote-keys)
+  if ($hdr_decorated.items | is-not-empty) {
+    let hp_record = (render-param-record $hdr_decorated.items --quote-keys)
     $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
     $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))')
   }
 
-  if ($cmd.cookie_params | is-not-empty) {
-    let cp_record = (render-param-record $cmd.cookie_params "ck" --quote-keys)
+  if ($ck_decorated.items | is-not-empty) {
+    let cp_record = (render-param-record $ck_decorated.items --quote-keys)
     $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
@@ -684,10 +798,10 @@ export def build-body-code [cmd: record, config: record] {
   # OAuth token endpoint is the canonical case). When that flag exists, the
   # user can override the spec's default at runtime — but the body still
   # needs to be serialized to match. Issue #11-8.
-  let ct_matches = ($cmd.header_params | where {|p| ($p.name | str downcase) == "content-type" })
+  let ct_matches = ($hdr_decorated.items | where {|p| ($p.name | str downcase) == "content-type" })
   let has_ct_override = ($ct_matches | is-not-empty) and $cmd.has_body
   let ct_var = if $has_ct_override {
-    let v = (effective-flag-var ($ct_matches | first | get name) "hdr")
+    let v = ($ct_matches | first | get flag_var)
     $"$($v)"
   } else { null }
 
