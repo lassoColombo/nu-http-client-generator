@@ -104,6 +104,7 @@ export def helpers [] {
     }
     get-base-url: {|spec| get-base-url-impl $spec }
     get-all-urls: {|spec| get-all-urls-impl $spec }
+    resolve-server-url: {|server| $server.url? | default null }
     get-param-type: {|param|
       $param.type? | default "string"
     }

@@ -175,6 +175,7 @@ export def helpers [] {
     }
     get-base-url: {|spec| get-base-url-impl $spec }
     get-all-urls: {|spec| collect-oa3-urls $spec }
+    resolve-server-url: {|server| resolve-server-url $server }
     get-param-type: {|param|
       # support `content` field as alternative to `schema` (OA3 5.9)
       if ($param.content? | is-not-empty) {

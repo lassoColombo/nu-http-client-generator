@@ -148,13 +148,27 @@ export def effective-positional-var [name: string] {
 }
 
 # Render a list of params as a nushell record literal string (e.g. "key": $var, ...)
+#
+# Header- and cookie-param values are emitted into a record that's then merged
+# into `--headers`. Nushell's `http get --headers {…}` silently drops values
+# typed `list<…>` (Issue 18.A), so array-typed params must be serialized to a
+# single string. Per OpenAPI `style: simple` (default for headers) and RFC 7230
+# §3.2.6, multi-value headers are comma-joined regardless of `explode` — HTTP
+# headers can't repeat. The runtime check handles `null` (compact-friendly) and
+# scalar values unchanged, so this is safe even when the user passes a single
+# string into a list-typed flag.
 def render-param-record [params: list, prefix: string, --quote-keys] {
   $params | each {|p|
     let var = (effective-flag-var $p.name $prefix)
-    if $quote_keys {
-      $'($p.name | to nuon): $($var)'
+    let value_expr = if (($p.items_type? | default null) != null) {
+      $"\(if \($($var) | describe | str starts-with \"list\"\) { $($var) | each { into string } | str join \",\" } else { $($var) }\)"
     } else {
-      $'($p.name): $($var)'
+      $"$($var)"
+    }
+    if $quote_keys {
+      $'($p.name | to nuon): ($value_expr)'
+    } else {
+      $'($p.name): ($value_expr)'
     }
   } | str join ", "
 }
@@ -400,20 +414,22 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '}'
     ''
     '# Serialize a single query parameter based on collection style'
+    '# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars'
+    '# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
     'def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {'
     '  if ($value == null) { return [] }'
-    '  let n = ($name | url encode)'
+    '  let n = (encode-path-segment $name)'
     '  let is_list = ($value | describe | str starts-with "list")'
-    '  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }'
-    '  if not $is_list { return [$"($n)=($value | into string | url encode)"] }'
+    '  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }'
+    '  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }'
     '  match $style {'
-    '    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }'
-    '    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }'
-    '    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }'
-    '    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }'
-    '    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }'
-    '    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }'
-    '    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }'
+    '    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }'
+    '    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }'
+    '    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }'
+    '    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }'
+    '    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }'
+    '    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }'
+    '    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }'
     '  }'
     '}'
     ''

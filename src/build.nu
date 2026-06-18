@@ -552,7 +552,7 @@ def resolve-path-item [path_entry: record, schemas: record] {
 }
 
 # Extract operation-level metadata: description, auth, server override, etc.
-def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: string, methods: record] {
+def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: string, methods: record, h: record] {
   let operation_id = ($op.operationId? | default "")
   let summary = ($op.summary? | default "")
   let description_text = ($op.description? | default "")
@@ -579,8 +579,9 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     $root_default_auth
   }
 
-  # per-operation/path server overrides
-  let base_url = ($op.servers?.0?.url? | default ($methods.servers?.0?.url? | default null))
+  # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
+  let chosen_server = ($op.servers?.0? | default ($methods.servers?.0? | default null))
+  let base_url = if ($chosen_server == null) { null } else { do $h.resolve-server-url $chosen_server }
 
   {
     description: $description
@@ -929,7 +930,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         if not $has_match { return null }
       }
 
-      let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $methods)
+      let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $methods $h)
 
       # DEPRECATED FILTER
       if $config.exclude_deprecated and $meta.deprecated {
