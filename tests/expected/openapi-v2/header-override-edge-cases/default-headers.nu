@@ -133,7 +133,7 @@ export def "oauth-token create" [
   let extra_headers = {"Content-type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }
+  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body
 }
 

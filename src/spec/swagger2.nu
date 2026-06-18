@@ -25,8 +25,8 @@ def get-all-urls-impl [spec_data: record] {
 def get-body-info-impl [op: record, schemas: record] {
   let params = ($op.parameters? | default [])
   let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
-  if ($form_params | length) > 0 {
-    let has_file = ($form_params | where {|p| ($p.type? | default "") == "file" } | length) > 0
+  if ($form_params | is-not-empty) {
+    let has_file = ($form_params | any {|p| ($p.type? | default "") == "file" })
     let ct = if $has_file { $spec.CT_MULTIPART } else { $spec.CT_FORM }
     mut props = {}
     mut required = []
@@ -77,15 +77,14 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
 
 def get-auth-schemes-impl [spec_data: record] {
   let schemes = ($spec_data.securityDefinitions? | default {})
-  $schemes | transpose spec_name def | each {|entry|
-    let d = $entry.def
+  $schemes | items {|spec_name, d|
     if ($d.type? == "basic") {
-      {spec_name: $entry.spec_name, name: "basic", header_name: "Authorization", prefix: "Basic", in: "header"}
+      {spec_name: $spec_name, name: "basic", header_name: "Authorization", prefix: "Basic", in: "header"}
     } else {
-      let shared = (spec build-auth-scheme $entry)
+      let shared = (spec build-auth-scheme {spec_name: $spec_name, def: $d})
       if ($shared != null) { $shared } else {
-        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($entry.spec_name)', defaulting to bearer"
-        {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($spec_name)', defaulting to bearer"
+        {spec_name: $spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
       }
     }
   }

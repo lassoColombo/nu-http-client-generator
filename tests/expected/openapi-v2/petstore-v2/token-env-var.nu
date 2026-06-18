@@ -84,10 +84,8 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
-  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
-    let name = $p.k
-    let val = $p.v
-    if $name in $file_fields {
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
       let filename = ($val | into string | path basename)
       let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
       let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
@@ -98,7 +96,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
       let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
       $head ++ ($"($s)($crlf)" | into binary)
     }
-  })
+  } | compact)
   let trailer = ($"--($boundary)--($crlf)" | into binary)
   let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
@@ -342,7 +340,7 @@ export def "pet update-with-form" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")
+  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body
 }
 
@@ -495,14 +493,14 @@ export def "user-create-with-list create-input" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body: record
+  --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/createWithList")
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
@@ -660,14 +658,14 @@ export def "user-create-with-array create-input" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body: record
+  --body: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/createWithArray")
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body

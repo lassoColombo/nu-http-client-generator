@@ -324,7 +324,7 @@ export def "pet-upload-image upload-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --additional-metadata: string # Additional Metadata
-  --body: record
+  --body: string
 ]: any -> record<code: int, type: string, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -332,7 +332,7 @@ export def "pet-upload-image upload-file" [
   let qp = [(serialize-qp "additionalMetadata" $additional_metadata "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pet/{pet_id}/uploadImage") $qp)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/octet-stream" $req_body
@@ -492,14 +492,14 @@ export def "user-create-with-list create-input" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --body: record
+  --body: list
 ]: any -> record<id: int, username: string, firstName: string, lastName: string, email: string, password: string, phone: string, userStatus: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/createWithList")
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body

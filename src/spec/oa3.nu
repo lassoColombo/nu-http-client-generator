@@ -6,20 +6,30 @@ use ../log.nu
 
 # ── Private helpers ───────────────────────────────────────────────
 
+# Resolve a server-URL template against a record of OAS server `variables`,
+# with optional per-call overrides. Backfills any `{var}` placeholder that
+# isn't declared in `variables[]` with empty string — preserves the old
+# lenient behavior (str-replace silently no-op'd unknown vars), since
+# `format pattern` errors on missing keys.
+def resolve-server-template [raw: string, vars: record, overrides: record = {}]: nothing -> string {
+  if ($vars | is-empty) and ($overrides | is-empty) {
+    return $raw
+  }
+  let defaults = ($vars | transpose name def | reduce -f {} {|v, acc|
+    let val = ($overrides | get -o $v.name | default ($v.def.default? | default ""))
+    $acc | upsert $v.name $val })
+  let placeholders = ($raw | parse --regex '\{(?P<n>[A-Za-z0-9_]+)\}' | get n | uniq)
+  let full = ($placeholders | reduce -f $defaults {|n, acc|
+    if ($n in ($acc | columns)) { $acc } else { $acc | upsert $n "" }
+  })
+  $full | format pattern $raw
+}
+
 # Resolve OA3 server URL with variable substitution
 def resolve-server-url [server: record] {
   let raw = ($server.url? | default $"http://($spec.DEFAULT_HOST)")
   let vars = ($server.variables? | default {})
-  let substituted = if ($vars | columns | length) == 0 {
-    $raw
-  } else {
-    mut result = $raw
-    for v in ($vars | transpose name def) {
-      let default_val = ($v.def.default? | default "")
-      $result = ($result | str replace $"{($v.name)}" $default_val)
-    }
-    $result
-  }
+  let substituted = (resolve-server-template $raw $vars)
   # Prepend localhost for relative URLs
   let absolute = if ($substituted | str starts-with "/") {
     $"http://($spec.DEFAULT_HOST)($substituted)"
@@ -42,14 +52,7 @@ def collect-oa3-urls [spec_data: record] {
     for v in ($vars | transpose name def) {
       let enum_vals = ($v.def.enum? | default [])
       for ev in $enum_vals {
-        let variant_url = ($s.url? | default "" | str replace $"{($v.name)}" $ev)
-        # resolve other vars with defaults
-        mut resolved = $variant_url
-        for v2 in ($vars | transpose name def) {
-          if $v2.name != $v.name {
-            $resolved = ($resolved | str replace $"{($v2.name)}" ($v2.def.default? | default ""))
-          }
-        }
+        let resolved = (resolve-server-template ($s.url? | default "") $vars {$v.name: $ev})
         let resolved_abs = if ($resolved | str starts-with "/") { $"http://($spec.DEFAULT_HOST)($resolved)" } else { $resolved }
         $urls = ($urls | append ($resolved_abs | str trim --right --char '/'))
       }
@@ -79,7 +82,7 @@ def collect-oa3-urls [spec_data: record] {
 
 def get-base-url-impl [spec_data: record] {
   let servers = ($spec_data.servers? | default [])
-  if ($servers | length) > 0 {
+  if ($servers | is-not-empty) {
     resolve-server-url ($servers | first)
   } else {
     $"http://($spec.DEFAULT_HOST)"
@@ -146,16 +149,15 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
 
 def get-auth-schemes-impl [spec_data: record] {
   let schemes = ($spec_data.components?.securitySchemes? | default {})
-  $schemes | transpose spec_name def | each {|entry|
-    let d = $entry.def
+  $schemes | items {|spec_name, d|
     if ($d.type? == "http") {
       let s = ($d.scheme? | default "bearer") | str downcase
-      {spec_name: $entry.spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
+      {spec_name: $spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
     } else {
-      let shared = (spec build-auth-scheme $entry)
+      let shared = (spec build-auth-scheme {spec_name: $spec_name, def: $d})
       if ($shared != null) { $shared } else {
-        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($entry.spec_name)', defaulting to bearer"
-        {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
+        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($spec_name)', defaulting to bearer"
+        {spec_name: $spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
       }
     }
   }

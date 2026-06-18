@@ -14,7 +14,7 @@ export def build-shape-doc [fields: list, --max-width: int = 500] {
   let entries = ($fields | each {|f|
     let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
     let suffix = if ($f.required? | default false) { "" } else { "?" }
-    let type_str = if ($f.enum | length) > 0 {
+    let type_str = if ($f.enum | is-not-empty) {
       $f.enum | each { $'"($in)"' } | str join "|"
     } else {
       $nu_type
@@ -27,7 +27,7 @@ export def build-shape-doc [fields: list, --max-width: int = 500] {
   for entry in $entries {
     let entry_len = ($entry | str length)
     let proj = $len + $entry_len + (if ($kept | is-empty) { 0 } else { 2 })
-    if ($proj > $max_width) and (($kept | length) > 0) {
+    if ($proj > $max_width) and ($kept | is-not-empty) {
       let remaining = ($total - ($kept | length))
       $kept = ($kept | append $"... \(($remaining) more fields\)")
       break
@@ -92,11 +92,7 @@ const RESERVED_VARS = [
 
 # Convert param names to valid nushell flag names
 export def to-flag-name [name: string] {
-  let cleaned = $name
-    | str kebab-case
-    | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' ''
-    | str replace --regex '-{2,}' '-'
-    | str trim --char '-'
+  let cleaned = ($name | str kebab-case)
   if ($cleaned in $RESERVED_NAMES) or ($cleaned | is-empty) {
     $"($cleaned)-param" | str trim --char '-'
   } else {
@@ -106,7 +102,7 @@ export def to-flag-name [name: string] {
 
 # Sanitize a field name to a valid nushell variable name (underscores, no special chars)
 def to-var-name [name: string] {
-  $name | str kebab-case | str replace --all '-' '_' | str replace --all --regex '[\\${}()\[\]<>.*/\x27"#!@%^&+=~`;:?]' '' | str replace --regex '_{2,}' '_' | str trim --char '_'
+  $name | str snake-case
 }
 
 # Convert a parameter name to a nushell variable name (flag-style then underscored)
@@ -175,34 +171,31 @@ def render-param-record [params: list, prefix: string, --quote-keys] {
 
 # Collect all unique enum sets and map each (flag_name, enum_values) to a completer name.
 export def collect-completers [commands: list] {
-  mut completers = {}
-  mut mapping = {}
-  mut name_counts = {}
-
-  for cmd in $commands {
+  let initial = {completers: {}, mapping: {}, name_counts: {}}
+  let final = ($commands | reduce -f $initial {|cmd, state|
     let accept_source = if ($cmd.accept_types | length) > 1 { [{name: "accept", enum: $cmd.accept_types}] } else { [] }
-    let enum_sources = ($cmd.query_params | append $cmd.body_fields | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
-    for q in $enum_sources {
-      if ($q.enum | length) > 0 {
-        let flag_name = (to-flag-name $q.name)
-        let vals = ($q.enum | each { $"($in)" } | sort)
-        let fingerprint = $"($flag_name):($vals | str join ',')"
-
-        if not ($fingerprint in ($mapping | columns)) {
-          let count = ($name_counts | get -o $flag_name | default 0)
-          let cname = if $count == 0 {
-            $"($flag_name)-completer"
-          } else {
-            $"($flag_name)-completer-($count)"
-          }
-          $name_counts = ($name_counts | upsert $flag_name ($count + 1))
-          $completers = ($completers | insert $cname $vals)
-          $mapping = ($mapping | insert $fingerprint $cname)
-        }
+    let enum_sources = ($cmd.query_params | append $cmd.body_fields
+      | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
+    $enum_sources | reduce -f $state {|q, st|
+      if ($q.enum | is-empty) { return $st }
+      let flag_name = (to-flag-name $q.name)
+      let vals = ($q.enum | each { $"($in)" } | sort)
+      let fingerprint = $"($flag_name):($vals | str join ',')"
+      if ($fingerprint in ($st.mapping | columns)) { return $st }
+      let count = ($st.name_counts | get -o $flag_name | default 0)
+      let cname = if $count == 0 {
+        $"($flag_name)-completer"
+      } else {
+        $"($flag_name)-completer-($count)"
+      }
+      $st | merge {
+        name_counts: ($st.name_counts | upsert $flag_name ($count + 1))
+        completers: ($st.completers | insert $cname $vals)
+        mapping: ($st.mapping | insert $fingerprint $cname)
       }
     }
-  }
-  {completers: $completers, mapping: $mapping}
+  })
+  {completers: $final.completers, mapping: $final.mapping}
 }
 
 # Render completer functions as nushell source.
@@ -210,9 +203,9 @@ export def collect-completers [commands: list] {
 # include `"\"Latency\""` as an enum value). Escape those so the emitted
 # string literal is well-formed.
 export def render-completers [completers: record] {
-  $completers | transpose name values | each {|c|
-    let vals = ($c.values | each {|v| ($v | to nuon) } | str join ' ')
-    $'def ($c.name) [] { [($vals)] }'
+  $completers | items {|name, values|
+    let vals = ($values | each {|v| ($v | to nuon) } | str join ' ')
+    $'def ($name) [] { [($vals)] }'
   } | str join "\n"
 }
 
@@ -257,7 +250,7 @@ def render-param-group [params: list, mapping: record, config: record, shapes: l
     let desc_text = if ($q.description | is-not-empty) { $q.description | lines | str join " " } else { "" }
     let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
     let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
-    let cname = if ($q.enum | length) > 0 { resolve-completer $q.completer_key $mapping } else { null }
+    let cname = if ($q.enum | is-not-empty) { resolve-completer $q.completer_key $mapping } else { null }
     $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
     if ($q.deprecated? | default false) {
       $dep_flags = ($dep_flags | append {flag_name: $flag_name, reason: ($q.description? | default "")})
@@ -346,7 +339,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
         let sanitized_name = (to-var-name $f.name)
         let flag_var = (to-flag-var $f.name)
         let collides = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
-        let cname = if ($f.enum | length) > 0 { resolve-completer $f $mapping } else { null }
+        let cname = if ($f.enum | is-not-empty) { resolve-completer $f $mapping } else { null }
         let is_nullable = ($f.nullable? | default false)
         if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
           $parts = ($parts | append (render-param-sig $sanitized_name $nu_type $desc $cname --positional))
@@ -359,8 +352,23 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
           }
         }
       }
-      if ($cmd.body_fields | length) == 0 {
-        $parts = ($parts | append "  --body: record")
+      if ($cmd.body_fields | is-empty) {
+        # Issue 25.A: when the body schema is non-record (e.g. `type: string`
+        # for a `text/plain` body), emit a typed flag matching the scalar so
+        # callers can pass a raw value. For non-JSON content-types whose
+        # schema IS record-shaped (e.g. AWS text/xml AttachInstancesQuery),
+        # emit `--body: any` — `http post --content-type text/xml <record>`
+        # rejects records, so the caller has to pre-serialize to a string;
+        # `any` lets them pass either a record or a string. JSON-family
+        # records keep the historical `--body: record` typing.
+        let scalar = ($cmd.body_scalar_type? | default "any")
+        let ct = ($cmd.content_type? | default "")
+        let body_t = if ($scalar == "any") {
+          if ($ct | str starts-with "application/json") or ($ct == "multipart/form-data") or ($ct == "application/x-www-form-urlencoded") or ($ct | is-empty) { "record" } else { "any" }
+        } else {
+          (nu-type-for $scalar)
+        }
+        $parts = ($parts | append $"  --body: ($body_t)")
       }
     }
   }
@@ -379,9 +387,9 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     if not ($s.name in $seen_names) {
       $seen_names = ($seen_names | append $s.name)
       if $s.in == "query" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {}, query: $\"($s.header_name)=\($token_val\)\"} }"))
+        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {}, query: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"} }"))
       } else if $s.in == "cookie" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {Cookie: $\"($s.header_name)=\($token_val\)\"}, query: \"\"} }"))
+        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {Cookie: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"}, query: \"\"} }"))
       } else if $s.prefix == "" {
         $match_arms = ($match_arms | append $"    \"($s.name)\" => { {headers: {($s.header_name): $token_val}, query: \"\"} }")
       } else {
@@ -455,8 +463,8 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }'
     ('  let timeout = ($max_time | default ' + $default_timeout + ')')
     '  let ct = ($content_type | default "application/json")'
-  ] | if ($default_headers | columns | length) > 0 {
-    let header_pairs = ($default_headers | transpose k v | each {|h| $'"($h.k)": "($h.v)"' } | str join ", ")
+  ] | if ($default_headers | is-not-empty) {
+    let header_pairs = ($default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
     $in | append ('  let auth = {headers: ({' + $header_pairs + '} | merge $auth.headers), query: $auth.query}')
   } else {
     $in
@@ -486,10 +494,8 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     'def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {'
     '  let boundary = $"----nu-(random chars --length 24)"'
     '  let crlf = "\r\n"'
-    '  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|'
-    '    let name = $p.k'
-    '    let val = $p.v'
-    '    if $name in $file_fields {'
+    '  let chunks = ($parts | items {|name, val|'
+    '    if $val == null { null } else if $name in $file_fields {'
     '      let filename = ($val | into string | path basename)'
     '      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }'
     '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)'
@@ -500,7 +506,7 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)'
     '      $head ++ ($"($s)($crlf)" | into binary)'
     '    }'
-    '  })'
+    '  } | compact)'
     '  let trailer = ($"--($boundary)--($crlf)" | into binary)'
     '  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer'
     '  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}'
@@ -523,7 +529,7 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append '  let base = ($base_url | default $BASE_URL)')
   }
 
-  let path_expr = if ($cmd.path_params | length) > 0 {
+  let path_expr = if ($cmd.path_params | is-not-empty) {
     # Emit a `format pattern` call so the path text is a plain string literal —
     # parens, quotes, backslashes pass through untouched (only `{` and `}` are
     # meta to format pattern). Translate each spec placeholder name to its
@@ -548,7 +554,7 @@ export def build-body-code [cmd: record, config: record] {
     $cmd.path_template | to nuon
   }
 
-  if ($cmd.query_params | length) > 0 {
+  if ($cmd.query_params | is-not-empty) {
     let calls = $cmd.query_params | each {|q|
       let var_name = $"$(effective-flag-var $q.name "qp")"
       $"\(serialize-qp \"($q.name)\" ($var_name) \"($q.collection_style)\"\)"
@@ -569,7 +575,7 @@ export def build-body-code [cmd: record, config: record] {
   # when the merge line tries to read it (regression #9-B).
   if $cmd.has_body {
     let use_collapsed = ($config.body_threshold > 0) and (($cmd.body_fields | length) > $config.body_threshold)
-    let has_per_field = (($cmd.body_fields | length) > 0) and (not $use_collapsed)
+    let has_per_field = ($cmd.body_fields | is-not-empty) and (not $use_collapsed)
     if $has_per_field {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       let body_parts = $cmd.body_fields | enumerate | each {|item|
@@ -601,8 +607,20 @@ export def build-body-code [cmd: record, config: record] {
     # the spec declares `oneOf: [{object}, {array}]` (or anyOf), we also accept
     # a bare list and pass it straight through — the object variant remains
     # reachable via flags, and the array variant via pipeline. Issue 13.B.
+    # Issue 25.A: when the body schema is a non-record scalar (string, int,
+    # etc.) OR the content-type is non-JSON-family (`text/xml`, `text/plain`,
+    # `application/vnd.X+json`, `application/octet-stream`, …), accept the
+    # raw pipeline input as the body so callers can `"text" | op` without a
+    # flag. Nushell's `http` only auto-encodes records for content-types
+    # matching `application/json*`; for everything else the wire format is
+    # the user's responsibility.
+    let ct = ($cmd.content_type? | default "")
+    let priority_ct = ($ct | str starts-with "application/json") or ($ct == "multipart/form-data") or ($ct == "application/x-www-form-urlencoded") or ($ct | is-empty)
+    let non_record_body = (($cmd.body_scalar_type? | default "any") != "any")
     if ($cmd.body_polymorphic_array? | default false) {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }')
+    } else if (not $priority_ct) or $non_record_body {
+      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }')
     } else {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
     }
@@ -622,15 +640,15 @@ export def build-body-code [cmd: record, config: record] {
   }
   $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
 
-  if ($cmd.header_params | length) > 0 {
+  if ($cmd.header_params | is-not-empty) {
     let hp_record = (render-param-record $cmd.header_params "hdr" --quote-keys)
     $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
     $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))')
   }
 
-  if ($cmd.cookie_params | length) > 0 {
+  if ($cmd.cookie_params | is-not-empty) {
     let cp_record = (render-param-record $cmd.cookie_params "ck" --quote-keys)
-    $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | transpose k v | where { $in.v != null } | each { $\"\($in.k\)=\($in.v\)\" } | str join \"; \""))
+    $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
 
@@ -667,7 +685,7 @@ export def build-body-code [cmd: record, config: record] {
   # user can override the spec's default at runtime — but the body still
   # needs to be serialized to match. Issue #11-8.
   let ct_matches = ($cmd.header_params | where {|p| ($p.name | str downcase) == "content-type" })
-  let has_ct_override = (($ct_matches | length) > 0) and $cmd.has_body
+  let has_ct_override = ($ct_matches | is-not-empty) and $cmd.has_body
   let ct_var = if $has_ct_override {
     let v = (effective-flag-var ($ct_matches | first | get name) "hdr")
     $"$($v)"
@@ -680,14 +698,14 @@ export def build-body-code [cmd: record, config: record] {
     # x-www-form-urlencoded, serialize the body record to `k=v&k=v`. Other
     # content types pass the body through unchanged — JSON is what Nushell's
     # `http post` already does by default.
-    $lines = ($lines | append '  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&" } else { $req_body }')
+    $lines = ($lines | append '  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }')
   } else if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
     # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
     # string, not a JSON record. Nushell's `http post --content-type "..."`
     # sets the header but doesn't reshape the body. Spec-conformance with
     # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
     # Nulls are dropped — caller's --field with no value shouldn't appear.
-    $lines = ($lines | append '  let req_body = ($req_body | transpose k v | where {|p| $p.v != null} | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } | str join "&")')
+    $lines = ($lines | append '  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)')
   }
 
   let body_arg = if $is_multipart { ' $mp.body' } else if $cmd.has_body { " $req_body" } else { "" }
@@ -704,7 +722,7 @@ def render-module-header [
   auth_schemes: list, completers: record, helpers_code: string,
   config: record
 ] {
-  let completers_code = if ($completers | columns | length) > 0 {
+  let completers_code = if ($completers | is-not-empty) {
     $"# Completers for enum parameters\n(render-completers $completers)\n"
   } else {
     ""
@@ -717,7 +735,7 @@ def render-module-header [
   let base_url_completer = $'def base-url-completer [] { [($base_url_vals)] }'
 
   # auth-scheme completer
-  let has_public = ($commands | where {|c| $c.default_auth == "none" } | length) > 0
+  let has_public = ($commands | where {|c| $c.default_auth == "none" } | is-not-empty)
   let auth_names = $auth_schemes | each {|s| $s.name } | uniq
   let auth_names_with_none = if $has_public { $auth_names | append "none" } else { $auth_names }
   # If the spec offers HTTP Basic, expose `basic-credentials` as a completion
@@ -727,7 +745,7 @@ def render-module-header [
   let auth_names_final = if $has_basic and (not ("basic-credentials" in $auth_names_with_none)) {
     $auth_names_with_none | append "basic-credentials"
   } else { $auth_names_with_none }
-  let auth_completer_vals = if ($auth_names_final | length) > 0 {
+  let auth_completer_vals = if ($auth_names_final | is-not-empty) {
     $auth_names_final | each {|n| $'"($n)"' } | str join ' '
   } else {
     '"bearer"'
@@ -804,7 +822,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   if ($cmd.discriminator != null) {
     let d = $cmd.discriminator
     let mapping_keys = ($d.mapping | columns)
-    if ($mapping_keys | length) > 0 {
+    if ($mapping_keys | is-not-empty) {
       $extra = ($extra | append $"# Discriminator \(($d.context)\): ($d.propertyName) = ($mapping_keys | str join ', ')")
     } else {
       $extra = ($extra | append $"# Discriminator \(($d.context)\): ($d.propertyName)")
@@ -831,7 +849,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
       $extra = ($extra | append $"# --($shape.flag) ($label): ($shape.shape)")
     }
   }
-  if ($extra | length) > 0 {
+  if ($extra | is-not-empty) {
     $cmd_lines = ($cmd_lines | append "#")
     $cmd_lines = ($cmd_lines | append $extra)
   }
@@ -852,7 +870,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   for df in $sig_result.deprecated_flags {
     $annotations = ($annotations | append $'@deprecated --flag ($df.flag_name)')
   }
-  if ($annotations | length) > 0 {
+  if ($annotations | is-not-empty) {
     $cmd_lines = ($cmd_lines | append $annotations)
   }
 

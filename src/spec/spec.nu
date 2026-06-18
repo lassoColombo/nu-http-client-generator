@@ -155,7 +155,7 @@ export def build-resolved-schemas [raw_schemas: record] {
 def collapse-ref-chain [val: any, schemas: record, visited: list<string>] {
   let t = ($val | describe)
   if not ($t | str starts-with "record") { return $val }
-  if not ($val | columns | any {|c| $c == "$ref" }) { return $val }
+  if not ("$ref" in ($val | columns)) { return $val }
   let ref_path = ($val | get "$ref")
   if not (($ref_path | describe) == "string") { return $val }
   if ($ref_path in $visited) { return $val }
@@ -177,7 +177,7 @@ def collapse-ref-chain [val: any, schemas: record, visited: list<string>] {
 export def resolve-ref [val: any, schemas: record] {
   let t = ($val | describe)
   if not ($t | str starts-with "record") { return $val }
-  if not ($val | columns | any {|c| $c == "$ref" }) { return $val }
+  if not ("$ref" in ($val | columns)) { return $val }
   let ref_path = ($val | get "$ref")
   if not (($ref_path | describe) == "string") { return $val }
   let resolved = (ref-lookup $ref_path $schemas)
@@ -242,17 +242,17 @@ export def detect [spec: record] {
 # Determine default auth scheme from root-level security + parsed auth schemes
 export def get-default-auth [spec: record, auth_schemes: list] {
   let security = ($spec.security? | default [])
-  if ($security | length) > 0 {
+  if ($security | is-not-empty) {
     let first_req = ($security | first)
     if (($first_req | describe) | str starts-with "record") {
       let ref_name = ($first_req | columns | first)
       let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
-      if ($matched | length) > 0 {
+      if ($matched | is-not-empty) {
         return ($matched | first | get name)
       }
     }
   }
-  if ($auth_schemes | length) > 0 {
+  if ($auth_schemes | is-not-empty) {
     $auth_schemes | first | get name
   } else {
     "bearer"
@@ -265,7 +265,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
   if ($schema == null) or (not (($schema | describe) | str starts-with "record")) { return "any" }
 
   # resolve $ref
-  if ($schema | columns | any { $in == "$ref" }) {
+  if ("$ref" in ($schema | columns)) {
     let ref_path = ($schema | get "$ref")
     if not (($ref_path | describe) == "string") { return "any" }
     if ($ref_path in $visited) { return "any" }  # circular ref
@@ -329,7 +329,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
             $merged_props = ($merged_props | merge ($resolved.properties? | default {}))
           }
         }
-        if ($merged_props | columns | length) > 0 {
+        if ($merged_props | is-not-empty) {
           let fields = (build-record-fields $merged_props $schemas ($depth + 1) $max_depth $visited)
           if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
         } else { "record" }
@@ -352,10 +352,10 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
 # long-but-valid signatures, which is the correct tradeoff (terminals wrap,
 # parsers don't fix bad syntax).
 def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
-  $properties | transpose name prop_schema | each {|entry|
-    let field_type = (schema-to-nu-type $entry.prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
+  $properties | items {|name, prop_schema|
+    let field_type = (schema-to-nu-type $prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
     # sanitize field names: nushell doesn't allow special chars in record type keys
-    let safe_name = ($entry.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
+    let safe_name = ($name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
     $"($safe_name): ($field_type)"
   } | str join ", "
 }

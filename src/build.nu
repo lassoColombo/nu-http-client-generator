@@ -92,40 +92,42 @@ def normalize-discriminator [disc: any] {
 # Merge properties from a body schema, handling allOf/oneOf/anyOf/discriminator.
 # Returns {props: record, required: list<string>}.
 def merge-body-props [schema: record, schemas: record] {
-  mut merged_props = ($schema.properties? | default {})
-  mut merged_required = ($schema.required? | default [])
-  let all_of = ($schema.allOf? | default [])
-  for sub in $all_of {
-    let resolved_sub = (spec resolve-ref $sub $schemas)
-    if (($resolved_sub | describe) | str starts-with "record") {
-      let sub_props = ($resolved_sub.properties? | default {})
-      let sub_req = ($resolved_sub.required? | default [])
-      $merged_props = ($merged_props | merge $sub_props)
-      $merged_required = ($merged_required | append $sub_req)
-    }
-  }
+  let all_of_resolved = (($schema.allOf? | default [])
+    | each {|sub| spec resolve-ref $sub $schemas }
+    | where {($in | describe) | str starts-with "record"})
+
+  let props_after_allof = ($all_of_resolved | reduce -f ($schema.properties? | default {}) {|s, acc|
+    $acc | merge ($s.properties? | default {})
+  })
+  let required_after_allof = ($all_of_resolved | reduce -f ($schema.required? | default []) {|s, acc|
+    $acc | append ($s.required? | default [])
+  })
 
   let disc = (normalize-discriminator ($schema.discriminator? | default null))
   let disc_prop = if ($disc != null) { $disc.propertyName } else { null }
   let disc_mapping = if ($disc != null) { $disc.mapping } else { {} }
-  let poly_variants = ($schema.oneOf? | default ($schema.anyOf? | default []))
-  for variant in $poly_variants {
-    let resolved_variant = (spec resolve-ref $variant $schemas)
-    if (($resolved_variant | describe) | str starts-with "record") {
-      let v_props = ($resolved_variant.properties? | default {})
-      for col in ($v_props | columns) {
-        if not ($col in ($merged_props | columns)) {
-          $merged_props = ($merged_props | insert $col ($v_props | get $col))
-        }
-      }
-    }
-  }
 
-  if ($disc_prop != null) and ($disc_prop in ($merged_props | columns)) {
-    $merged_required = ($merged_required | append $disc_prop | uniq)
-    if ($disc_mapping | columns | length) > 0 {
-      $merged_props = ($merged_props | upsert $disc_prop ($merged_props | get $disc_prop | upsert enum ($disc_mapping | columns)))
-    }
+  let poly_resolved = (($schema.oneOf? | default ($schema.anyOf? | default []))
+    | each {|v| spec resolve-ref $v $schemas }
+    | where {($in | describe) | str starts-with "record"})
+
+  let merged_props_pre_disc = ($poly_resolved | reduce -f $props_after_allof {|v, acc|
+    let v_props = ($v.properties? | default {})
+    $v_props | items {|col, val|
+      if $col in ($acc | columns) { null } else { {col: $col, val: $val} }
+    } | compact | reduce -f $acc {|kv, a| $a | insert $kv.col $kv.val }
+  })
+  let merged_required_pre_disc = $required_after_allof
+
+  let merged_required = if ($disc_prop != null) and ($disc_prop in ($merged_props_pre_disc | columns)) {
+    $merged_required_pre_disc | append $disc_prop | uniq
+  } else {
+    $merged_required_pre_disc
+  }
+  let merged_props = if ($disc_prop != null) and ($disc_prop in ($merged_props_pre_disc | columns)) and ($disc_mapping | is-not-empty) {
+    $merged_props_pre_disc | upsert $disc_prop ($merged_props_pre_disc | get $disc_prop | upsert enum ($disc_mapping | columns))
+  } else {
+    $merged_props_pre_disc
   }
 
   {props: $merged_props, required: $merged_required}
@@ -139,11 +141,11 @@ def extract-body-fields [schema: record, schemas: record] {
   # Filter out malformed entries where a property value isn't a schema record
   # (e.g. meilisearch's open-api.yaml uses `$ref` as a property name, leaving
   # a bare string sibling that would crash subsequent cell-path accesses).
-  $props | transpose name field_spec | each {|field|
-    if (($field.field_spec | describe) | str starts-with "record") {
-      $field | upsert field_spec (spec resolve-ref $field.field_spec $schemas)
+  $props | items {|name, field_spec|
+    if (($field_spec | describe) | str starts-with "record") {
+      {name: $name, field_spec: (spec resolve-ref $field_spec $schemas)}
     } else {
-      $field
+      {name: $name, field_spec: $field_spec}
     }
   } | where {|field|
     ($field.field_spec | describe | str starts-with "record")
@@ -202,26 +204,28 @@ def extract-body-fields [schema: record, schemas: record] {
 # Returns list of {flag: string, shape: string, is_item: bool}.
 def build-field-shapes [schema: record, schemas: record] {
   let merged = (merge-body-props $schema $schemas)
-  $merged.props | transpose name field_spec | where {|field|
-    ($field.field_spec | describe | str starts-with "record")
-  } | each {|field|
-    let fs = (spec resolve-ref $field.field_spec $schemas)
-    let ft = (spec normalize-type ($fs.type? | default ""))
-    if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
-      let sub_fields = (extract-body-fields $fs $schemas)
-      if ($sub_fields | is-empty) { null } else {
-        {flag: $field.name, shape: (render build-shape-doc $sub_fields), is_item: false}
-      }
-    } else if $ft == "array" {
-      let items = ($fs.items? | default {})
-      let resolved_items = (spec resolve-ref $items $schemas)
-      if ($resolved_items.properties? | is-not-empty) or ($resolved_items.allOf? | is-not-empty) {
-        let sub_fields = (extract-body-fields $resolved_items $schemas)
+  $merged.props | items {|name, field_spec|
+    if (not (($field_spec | describe) | str starts-with "record")) {
+      null
+    } else {
+      let fs = (spec resolve-ref $field_spec $schemas)
+      let ft = (spec normalize-type ($fs.type? | default ""))
+      if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
+        let sub_fields = (extract-body-fields $fs $schemas)
         if ($sub_fields | is-empty) { null } else {
-          {flag: $field.name, shape: (render build-shape-doc $sub_fields), is_item: true}
+          {flag: $name, shape: (render build-shape-doc $sub_fields), is_item: false}
         }
+      } else if $ft == "array" {
+        let items = ($fs.items? | default {})
+        let resolved_items = (spec resolve-ref $items $schemas)
+        if ($resolved_items.properties? | is-not-empty) or ($resolved_items.allOf? | is-not-empty) {
+          let sub_fields = (extract-body-fields $resolved_items $schemas)
+          if ($sub_fields | is-empty) { null } else {
+            {flag: $name, shape: (render build-shape-doc $sub_fields), is_item: true}
+          }
+        } else { null }
       } else { null }
-    } else { null }
+    }
   } | compact
 }
 
@@ -345,7 +349,7 @@ def naive-singular [word: string] {
   if ($word | str ends-with "ss") {
     $word
   } else if ($word | str ends-with "s") and (($word | str length) > 1) {
-    $word | str substring 0..<(($word | str length) - 1)
+    $word | str substring 0..-2
   } else {
     $word
   }
@@ -506,10 +510,9 @@ def pick-action [classified: list, method: string] {
 
   # Build discriminator: walk tokens, keeping OTHER and secondary VERBs and
   # PREPOSITIONS (when followed by a kept token).
-  mut parts = []
-  let n = ($classified | length)
-  for i in 0..<$n {
-    let entry = ($classified | get $i)
+  let parts = ($classified | enumerate | each {|e|
+    let i = $e.index
+    let entry = $e.item
     let label = $entry.label
     let tok = $entry.token
     let keep = if $i == $chosen_idx {
@@ -524,10 +527,11 @@ def pick-action [classified: list, method: string] {
       true   # OTHER or secondary VERB
     }
     if $keep {
-      let emit = if $label == "VERB" { canonical-verb $tok } else { $tok }
-      $parts = ($parts | append $emit)
+      if $label == "VERB" { canonical-verb $tok } else { $tok }
+    } else {
+      null
     }
-  }
+  } | compact)
 
   if ($parts | is-empty) {
     $primary_verb
@@ -538,9 +542,9 @@ def pick-action [classified: list, method: string] {
 
 # Resolve PathItem-level $ref. Returns the methods record.
 def resolve-path-item [path_entry: record, schemas: record] {
-  if ($path_entry.methods | columns | any {|c| $c == "$ref"}) {
+  if ("$ref" in ($path_entry.methods | columns)) {
     let resolved = (spec resolve-ref $path_entry.methods $schemas)
-    if ($resolved | columns | any {|c| $c == "$ref"}) {
+    if ("$ref" in ($resolved | columns)) {
       log warn $"unresolved PathItem $ref for path '($path_entry.path)', skipping referenced operations"
       $path_entry.methods
     } else {
@@ -563,14 +567,14 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   # per-operation security override
   let op_security = ($op.security?)
   let default_auth = if ($op_security | is-not-empty) {
-    if ($op_security | length) == 0 {
+    if ($op_security | is-empty) {
       "none"
     } else {
       let first_req = ($op_security | first)
-      if (($first_req | describe) | str starts-with "record") and (($first_req | columns | length) > 0) {
+      if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
         let ref_name = ($first_req | columns | first)
         let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
-        if ($matched | length) > 0 { $matched | first | get name } else { $root_default_auth }
+        if ($matched | is-not-empty) { $matched | first | get name } else { $root_default_auth }
       } else {
         $root_default_auth
       }
@@ -607,11 +611,11 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
   # resolve $ref in params, filter out body params
   # resolve-ref is shallow, so we also resolve the nested .schema if it's a ref
   let resolved_params = $parameters | each {|p|
-    let resolved = if ($p | columns | any {|c| $c == "$ref"}) {
+    let resolved = if ("$ref" in ($p | columns)) {
       spec resolve-ref $p $schemas
     } else { $p }
     let s = ($resolved.schema? | default null)
-    if ($s != null) and (($s | describe) | str starts-with "record") and ($s | columns | any {|c| $c == "$ref"}) {
+    if ($s != null) and (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
       $resolved | upsert schema (spec resolve-ref $s $schemas)
     } else {
       $resolved
@@ -668,16 +672,47 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
 def extract-body-info [op: record, schemas: record, h: record] {
   let body_info = (do $h.get-body-info $op $schemas)
   let has_body = $body_info.has_body
-  let body_schema = $body_info.body_schema
   let content_type = ($body_info.content_type? | default $spec.CT_JSON)
 
-  let has_schema = ($body_schema | is-not-empty) and (($body_schema | describe) | str starts-with "record") and (($body_schema | columns | length) > 0)
-  let body_fields = if $has_schema {
+  # Issue 25.A: when the body content-type is non-priority (e.g. text/plain,
+  # text/xml, application/vnd.X+json), `get-body-info` records the
+  # content_type but returns an empty `body_schema` because it only resolves
+  # schemas for application/json / multipart / form-urlencoded. To surface
+  # `body_scalar_type` for those endpoints, bridge here by re-reading the
+  # schema directly from op.requestBody.content.{content_type}.schema (OA3
+  # shape only — Swagger 2 always uses application/json so its body_schema
+  # is already populated by get-body-info).
+  let body_schema = if ($body_info.body_schema | is-empty) and $has_body and (($op.requestBody? | describe) | str starts-with "record") {
+    let rb = (spec resolve-ref ($op.requestBody) $schemas)
+    let content = ($rb.content? | default {})
+    let s = ($content | get -o $content_type | default {} | get -o schema)
+    if ($s | is-not-empty) {
+      spec resolve-ref $s $schemas
+    } else {
+      {}
+    }
+  } else {
+    $body_info.body_schema
+  }
+
+  # For non-JSON content-types (text/xml, application/vnd.X+json, …) we do
+  # NOT expand record schemas into per-field flags: there is no canonical
+  # Nushell-record-to-XML codec, no canonical record-to-octet-stream codec,
+  # etc. Callers pre-serialize and either pass a string via --body or pipe
+  # one into the operation. Per-field flags would be misleading. JSON-family
+  # content-types still expand because `http post --content-type application/json
+  # <record>` auto-encodes correctly. Multipart and form-urlencoded also
+  # expand — the renderer has dedicated `build-multipart-body` and
+  # `url build-query` codecs for them.
+  let priority_ct = ($content_type | str starts-with "application/json") or ($content_type == "multipart/form-data") or ($content_type == "application/x-www-form-urlencoded")
+  let has_schema = ($body_schema | is-not-empty) and (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
+  let expand_fields = $has_schema and ($priority_ct or (not $has_body))
+  let body_fields = if $expand_fields {
     extract-body-fields $body_schema $schemas
   } else {
     []
   }
-  let field_shapes = if $has_schema {
+  let field_shapes = if $expand_fields {
     build-field-shapes $body_schema $schemas
   } else {
     []
@@ -698,7 +733,7 @@ def extract-body-info [op: record, schemas: record, h: record] {
       null
     }
   } | where { $in != null }
-  let resp_disc = if ($resp_discs | length) > 0 { $resp_discs | first } else { null }
+  let resp_disc = if ($resp_discs | is-not-empty) { $resp_discs | first } else { null }
   let discriminator = if ($body_disc != null) {
     {context: "request", propertyName: $body_disc.propertyName, mapping: $body_disc.mapping}
   } else if ($resp_disc != null) {
@@ -728,7 +763,29 @@ def extract-body-info [op: record, schemas: record, h: record] {
     false
   }
 
-  {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array}
+  # Determine the body schema's scalar type so the renderer can emit a typed
+  # `--body: <type>` flag (and accept matching pipeline input) when the body
+  # has no enumerable fields. "any" covers record-shaped, missing, and
+  # unresolvable schemas — those keep the existing `--body: record` path.
+  # Issue 25.A: non-record schemas (`type: string`/`integer`/etc.) and
+  # non-JSON content-types like text/xml were unreachable because the
+  # generator hardcoded `--body: record` and the pipeline-merge dropped
+  # non-record input.
+  let body_scalar_type = if (not $has_schema) {
+    "any"
+  } else {
+    let raw = ($body_schema.type? | default null)
+    let normalized = (spec normalize-type $raw)
+    if ($normalized == null) or ($normalized == "object") {
+      "any"
+    } else if (($normalized | describe) | str starts-with "record") {
+      "any"
+    } else {
+      $normalized
+    }
+  }
+
+  {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
 }
 
 # Extract response info: accept_types, return_type, returns_body.
@@ -759,7 +816,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   let path_segments = ($url_path | split row '/' | where {|s|
     ($s | is-not-empty) and ($s != "api") and (not ($s | str starts-with "{")) and (not ($s =~ '^v\d+$'))
   })
-  let resource = if ($path_segments | length) > 0 {
+  let resource = if ($path_segments | is-not-empty) {
     $path_segments | where {|s| $s != "-" and $s != "--" }
     # Strip OData function-call suffixes from path segments —
     # `certificates(thumbprintAlgorithm={a},thumbprint={t})` → `certificates`.
@@ -777,7 +834,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     | flatten
     | where {|s| $s | is-not-empty }
     | str join '-' | str kebab-case
-  } else if ($tags | length) > 0 {
+  } else if ($tags | is-not-empty) {
     $tags.0 | str kebab-case
   } else {
     "api"
@@ -807,7 +864,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   # `storage.k8s.io` or `account.cart.add.json` get glued into one token and
   # opId tokens that visually appear in the path stay as discriminator noise.
   # See issue #6.1.
-  let resource_token_set = if ($path_segments | length) > 0 {
+  let resource_token_set = if ($path_segments | is-not-empty) {
     $path_segments
     | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
     | each {|s| tokenize-resource $s }
@@ -903,7 +960,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
   ($spec_data.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
-    if ($config.filter_prefixes | length) > 0 {
+    if ($config.filter_prefixes | is-not-empty) {
       let matches = ($config.filter_prefixes | any {|prefix| $path_entry.path | str starts-with $prefix })
       if not $matches { return null }
     }
@@ -912,7 +969,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
 
     $methods | transpose method op | where {|m|
       ($m.method in [get post put patch delete head options]) and (
-        ($config.filter_methods | length) == 0 or ($m.method in $config.filter_methods)
+        ($config.filter_methods | is-empty) or ($m.method in $config.filter_methods)
       )
     } | each {|method_entry|
       let method = $method_entry.method
@@ -924,7 +981,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
       }
 
       # TAG FILTER
-      if ($config.filter_tags | length) > 0 {
+      if ($config.filter_tags | is-not-empty) {
         let op_tags = ($op.tags? | default [])
         let has_match = ($config.filter_tags | any {|t| $t in $op_tags })
         if not $has_match { return null }
@@ -984,6 +1041,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         content_type: $body.content_type
         body_fields: $body.body_fields
         body_polymorphic_array: $body.body_polymorphic_array
+        body_scalar_type: $body.body_scalar_type
         field_shapes: $field_shapes
         returns_body: $resp.returns_body
         description: $meta.description

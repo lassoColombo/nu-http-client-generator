@@ -83,10 +83,8 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"
-  let chunks = ($parts | transpose k v | where {|p| $p.v != null} | each {|p|
-    let name = $p.k
-    let val = $p.v
-    if $name in $file_fields {
+  let chunks = ($parts | items {|name, val|
+    if $val == null { null } else if $name in $file_fields {
       let filename = ($val | into string | path basename)
       let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }
       let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)
@@ -97,7 +95,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
       let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)
       $head ++ ($"($s)($crlf)" | into binary)
     }
-  })
+  } | compact)
   let trailer = ($"--($boundary)--($crlf)" | into binary)
   let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}

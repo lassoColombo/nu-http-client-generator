@@ -12,7 +12,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
   match $scheme {
     "private-token" => { {headers: {PRIVATE-TOKEN: $token_val}, query: ""} }
-    "query-private_token" => { {headers: {}, query: $"private_token=($token_val)"} }
+    "query-private_token" => { {headers: {}, query: $"(encode-path-segment "private_token")=(encode-path-segment $token_val)"} }
     "none" => { {headers: {}, query: ""} }
     _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
   }
