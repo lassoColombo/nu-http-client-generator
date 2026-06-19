@@ -551,7 +551,14 @@ def pick-action [classified: list, method: string] {
       # `list-list-of-unsubscribed-addresses` (GET + Query→list).
       (canonical-verb $tok) != $primary_verb
     } else {
-      true   # OTHER
+      # OTHER. Issue 41.A: when the primary verb came from method-fallback
+      # (no token classified as VERB), also drop OTHER tokens whose word
+      # matches the fallback method verb itself. Suppresses
+      # `options-options` stutter on OPTIONS opIds like `options_events`,
+      # `optionsProxy` (where `options` stays out of KNOWN_VERBS so that
+      # `<X>Options_Verb` opIds don't mis-classify their trailing real verb).
+      # Mirrors 33.A's secondary-VERB drop for the no-real-VERB-token case.
+      if ($chosen_idx == -1) and ($tok == $primary_verb) { false } else { true }
     }
     if $keep {
       if $label == "VERB" { canonical-verb $tok } else { $tok }
