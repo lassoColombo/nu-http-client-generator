@@ -558,7 +558,21 @@ def pick-action [classified: list, method: string] {
       # `optionsProxy` (where `options` stays out of KNOWN_VERBS so that
       # `<X>Options_Verb` opIds don't mis-classify their trailing real verb).
       # Mirrors 33.A's secondary-VERB drop for the no-real-VERB-token case.
-      if ($chosen_idx == -1) and ($tok == $primary_verb) { false } else { true }
+      #
+      # Issue 43.A: extend the drop to glued-suffix forms like `deleteall`
+      # (= delete + all) on `deleteAll` opIds where the 36.A tokenizer's
+      # `>= 5` remainder guard rejects the split. Only fires when the
+      # primary verb came from method-fallback AND the remainder is in a
+      # small allow-list of common short noun-stems. Suppresses
+      # `delete-deleteall`, `get-getall`, `delete-deletebulk` etc.
+      if ($chosen_idx == -1) and ($tok == $primary_verb) {
+        false
+      } else if ($chosen_idx == -1) and ($tok | str starts-with $primary_verb) and (($tok | str length) > ($primary_verb | str length)) {
+        let rem = ($tok | str substring (($primary_verb | str length)..))
+        if $rem in ["all" "bulk" "byid" "byname" "many" "one"] { false } else { true }
+      } else {
+        true
+      }
     }
     if $keep {
       if $label == "VERB" { canonical-verb $tok } else { $tok }
