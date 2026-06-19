@@ -65,7 +65,10 @@ def deduplicate-commands [commands: list] {
         $cmd
       }
     } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | length) > 0 {
-      let suffix = $cmd.path_params | each {|p| $p.name } | str join '-'
+      # Issue 34.B: kebab-case each path-param name so the suffix stays
+      # internally consistent with the rest of the command (no surviving
+      # camelCase or underscore from the spec).
+      let suffix = $cmd.path_params | each {|p| $p.name | str kebab-case } | str join '-'
       $cmd | update name $"($cmd.name)-by-($suffix)"
     } else {
       $cmd

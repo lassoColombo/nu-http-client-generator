@@ -892,7 +892,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
 # Prompts the user for authorization using Digest Auth + Algorithm.
 #
 # GET /digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}
-export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
+export def "digest-auth get-by-qop-user-passwd-algorithm-stale-after" [
   qop: string
   user: string
   passwd: string

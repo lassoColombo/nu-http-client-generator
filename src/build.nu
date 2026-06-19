@@ -959,8 +959,18 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   }
 
   if $is_duplicate {
-    let param_suffix = $path_params | each {|p| $p.name } | str join '-'
-    $"($resource) ($action)-by-($param_suffix)"
+    # Issue 34.B: kebab-case each path-param name so the suffix stays
+    # internally consistent with the rest of the command (no surviving
+    # camelCase or underscore from the spec).
+    let param_suffix = $path_params | each {|p| $p.name | str kebab-case } | str join '-'
+    # Issue 34.A: when there are no path params, the `-by-` marker would
+    # collapse to a hanging hyphen. Skip it and let pass-2 numeric-suffix
+    # dedup handle the collision (matches same-resource same-verb path).
+    if ($param_suffix | is-empty) {
+      $"($resource) ($action)"
+    } else {
+      $"($resource) ($action)-by-($param_suffix)"
+    }
   } else {
     $"($resource) ($action)"
   }
