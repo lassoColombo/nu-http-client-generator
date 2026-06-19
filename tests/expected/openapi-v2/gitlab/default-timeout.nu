@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.GITLAB_API_TOKEN
 
 const BASE_URL = "https://gitlab.com"
-const DEFAULT_AUTH = "private-token"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

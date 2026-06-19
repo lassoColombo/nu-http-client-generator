@@ -467,7 +467,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 # `needs_multipart` controls emission of the `build-multipart-body` helper —
 # only generated when at least one operation uses `multipart/form-data` so
 # clients that never upload files stay slim.
-export def render-helpers [token_env_var: string, auth_schemes: list, default_auth: string, default_timeout: string, default_headers: record, needs_multipart: bool = false] {
+export def render-helpers [token_env_var: string, auth_schemes: list, default_timeout: string, default_headers: record, needs_multipart: bool = false] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -845,7 +845,7 @@ export def build-body-code [cmd: record, config: record] {
 # Render the module header: comment header, constants, helpers, completers, introspection command.
 def render-module-header [
   title: string, version_str: string, spec_file: string, token_env_var: string,
-  base_url: string, default_auth: string, all_urls: list, commands: list,
+  base_url: string, all_urls: list, commands: list,
   auth_schemes: list, completers: record, helpers_code: string,
   config: record
 ] {
@@ -917,7 +917,6 @@ def render-module-header [
     $'# Auth: --token flag or $env.($token_env_var)'
     ""
     $'const BASE_URL = "($base_url)"'
-    $'const DEFAULT_AUTH = "($default_auth)"'
     ""
     $helpers_code
     ""
@@ -1015,7 +1014,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
 }
 
 # Render the full module file
-export def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, default_auth: string, config: record] {
+export def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, config: record] {
   let title = ($spec_data.info?.title? | default $module_name)
   let version_str = ($spec_data.info?.version? | default "0.0.0")
   let token_env_var = if ($config.token_env_var != null) and ($config.token_env_var | is-not-empty) {
@@ -1041,9 +1040,9 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
     ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false)
   })
 
-  let helpers_code = render-helpers $token_env_var $auth_schemes $default_auth $config.default_timeout $config.default_headers $needs_multipart
+  let helpers_code = render-helpers $token_env_var $auth_schemes $config.default_timeout $config.default_headers $needs_multipart
 
-  let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $default_auth $all_urls $commands $auth_schemes $completers $helpers_code $config
+  let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $all_urls $commands $auth_schemes $completers $helpers_code $config
 
   let command_sections = ($commands | each {|cmd| render-command $cmd $completers $mapping $config })
 

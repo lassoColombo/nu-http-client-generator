@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.GITHUB_V3_REST_API_TOKEN
 
 const BASE_URL = "https://api.github.com"
-const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

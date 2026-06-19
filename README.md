@@ -200,12 +200,11 @@ If you generated with `--body-threshold N`, any endpoint with more than N body f
 At call time the client resolves a token by checking `--token` first, then `$env.<NAME>_TOKEN`. You can customize the default token name at generation time by using the `--token-env-var` flag.
 The scheme comes from `--auth-scheme` if set, otherwise the default the spec declared - or `bearer` if the spec didn't declare one. If the scheme resolves to `none` or no token turns up, the request goes out unauthenticated.
 
-The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. The defaults are baked into the module header so you can see them at a glance:
+The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. The base URL is baked into the module header so you can see it at a glance:
 
 ```nu
 # Auth: --token flag or $env.PETSTORE_TOKEN
 const BASE_URL = "https://petstore3.swagger.io/api/v3"
-const DEFAULT_AUTH = "bearer"
 ```
 
 ### Tab completion and dry runs

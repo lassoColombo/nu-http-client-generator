@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.ANACLETO_TOKEN
 
 const BASE_URL = "https://custom.example.com"
-const DEFAULT_AUTH = "jwt"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

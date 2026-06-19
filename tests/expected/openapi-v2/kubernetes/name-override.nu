@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.TEST_CLIENT_TOKEN
 
 const BASE_URL = "https://localhost"
-const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

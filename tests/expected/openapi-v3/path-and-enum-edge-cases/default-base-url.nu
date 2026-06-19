@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.PATH_AND_ENUM_EDGE_CASES_TOKEN
 
 const BASE_URL = "https://custom.example.com"
-const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

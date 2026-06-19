@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.SWAGGER_PETSTORE_OPENAPI_3_0_TOKEN
 
 const BASE_URL = "http://localhost/api/v3"
-const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

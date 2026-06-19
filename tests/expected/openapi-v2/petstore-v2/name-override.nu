@@ -3,7 +3,6 @@
 # Auth: --token flag or $env.TEST_CLIENT_TOKEN
 
 const BASE_URL = "https://petstore.swagger.io/v2"
-const DEFAULT_AUTH = "api_key"
 
 # Build auth: returns {headers: record, query: string}
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {

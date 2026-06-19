@@ -121,7 +121,7 @@ def check-spec-generatable [loaded: record] {
 }
 
 # Shared pipeline: parse spec, resolve refs, extract metadata, build & dedupe commands.
-# Returns {commands, auth_schemes, default_auth, base_url, all_urls}.
+# Returns {commands, auth_schemes, base_url, all_urls}.
 def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = match $info.schema {
@@ -139,7 +139,6 @@ def process-spec [spec_data: record, config: record] {
   {
     commands: (deduplicate-commands $commands)
     auth_schemes: $auth_schemes
-    default_auth: $default_auth
     base_url: (do $h.get-base-url $spec_data)
     all_urls: (do $h.get-all-urls $spec_data)
   }
@@ -191,7 +190,7 @@ export def main [
     return null
   }
   let extra_urls = (($urls | default []) | append $result.all_urls)
-  let output_content = (render render-module $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $result.default_auth $config)
+  let output_content = (render render-module $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $config)
   let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
   $output_content | save --force $out_path
 }
