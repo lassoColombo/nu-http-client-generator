@@ -1063,7 +1063,7 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
   let token_env_var = if ($config.token_env_var != null) and ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {
-    $"($module_name | str upcase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
+    $"($module_name | str upcase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --all --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
   }
 
   let base_url = if ($config.default_base_url != null) and ($config.default_base_url | is-not-empty) { $config.default_base_url } else { $base_url }
