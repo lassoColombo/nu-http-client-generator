@@ -417,6 +417,26 @@ def tokenize-opid [s: string] {
     | flatten
     | where {|t| $t | is-not-empty }
     | each {|t| $t | str downcase }
+    # Issue 36.A: split lowercase-glued verb-prefix tokens like `getairlines`
+    # -> [`get`, `airlines`]. Only applies to tokens that survived the case-
+    # boundary sweeps unchanged (i.e. all-lowercase, separator-less). Uses
+    # a small fixed set of HTTP-method-shaped verbs (not the full KNOWN_VERBS
+    # list) to avoid mis-splitting common nouns like `findings`, `deliveries`,
+    # `startup*`. Guard: remainder must be alphabetic and >= 5 chars so
+    # `listings` (`list`+`ings`, 4), `getable` (`get`+`able`, 4), `headers`
+    # (`head`+`ers`, 3), `gets` (1), `lister` (2) all stay unsplit while
+    # `getairlines` (8), `gethotels` (6) split correctly.
+    | each {|t|
+        let pref = ([get post put patch delete list create update retrieve fetch insert remove destroy head]
+          | where {|v| ($t | str starts-with $v) and (($t | str length) - ($v | str length) >= 5) and (($t | str substring (($v | str length)..)) =~ '^[a-z]+$') }
+          | sort-by {|v| 0 - ($v | str length) }
+          | first
+          | default null)
+        if $pref == null { [$t] } else {
+          [$pref ($t | str substring (($pref | str length)..))]
+        }
+      }
+    | flatten
   )
   # Collapse Django REST framework's `partial_update` compound verb to `patch`.
   # Tokens are scanned pairwise; the rest of the list passes through.
