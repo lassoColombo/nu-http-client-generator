@@ -24,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -160,6 +161,7 @@ export def "dmilog get" [
 ]: nothing -> record<id: int, atl_id: int, idrs: string, name: string, domain: string, public_domain: string, private_ip: string, vpn_ip: string, services: table<id: int, name: string, category: string>> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilog/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,6 +190,7 @@ export def "dmilog update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilog/{name}/"))
   let req_body = {"name": $body_name, "activate": $activate, "deactivate": $deactivate, "commit_message": $commit_message} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -270,6 +273,8 @@ export def "jobs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queue_name' must be non-empty" } }
+  if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job_id' must be non-empty" } }
   let full_url = (build-url $base ({queue_name: (encode-path-segment $queue_name), job_id: (encode-path-segment $job_id)} | format pattern "/api/v1/jobs/{queue_name}/{job_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

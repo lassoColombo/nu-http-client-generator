@@ -21,8 +21,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -140,6 +141,7 @@ export def "things get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($in_arg | is-empty) { error make --unspanned { msg: "path parameter 'in' must be non-empty" } }
   let full_url = (build-url $base ({in_arg: (encode-path-segment $in_arg)} | format pattern "/things/{in_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -163,6 +165,7 @@ export def "envs get-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($env_arg | is-empty) { error make --unspanned { msg: "path parameter 'env' must be non-empty" } }
   let full_url = (build-url $base ({env_arg: (encode-path-segment $env_arg)} | format pattern "/envs/{env_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -21,8 +21,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -118,6 +119,9 @@ export def "items-sub get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($pet_id | is-empty) { error make --unspanned { msg: "path parameter 'petId' must be non-empty" } }
+  if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
   let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id), account_id: (encode-path-segment $account_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/items/{pet_id}/sub/{account_id}/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -142,6 +146,8 @@ export def "mixed get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($b | is-empty) { error make --unspanned { msg: "path parameter 'b' must be non-empty" } }
+  if ($a | is-empty) { error make --unspanned { msg: "path parameter 'a' must be non-empty" } }
   let full_url = (build-url $base ({b: (encode-path-segment $b), a: (encode-path-segment $a)} | format pattern "/mixed/{b}/{a}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

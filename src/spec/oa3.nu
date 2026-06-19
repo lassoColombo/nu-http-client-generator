@@ -219,7 +219,7 @@ export def helpers [] {
         }
       }
     }
-    get-body-info: {|op, schemas| get-body-info-impl $op $schemas }
+    get-body-info: {|op, schemas, _spec| get-body-info-impl $op $schemas }
     get-response-content-types: {|op, _spec| get-response-content-types-impl $op }
     get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }

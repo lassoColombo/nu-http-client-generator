@@ -23,8 +23,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -124,6 +125,7 @@ export def "sspm list-by-idrs" [
 ]: nothing -> table<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/SSPM/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,6 +149,7 @@ export def "customers get-by-idrs" [
 ]: nothing -> record<id: int, idrs: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,6 +175,7 @@ export def "customers update-by-idrs" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let req_body = {"idrs": $body_idrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -197,6 +201,7 @@ export def "customers delete-by-idrs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/customers/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,6 +225,7 @@ export def "dmilogs list-by-idrs" [
 ]: nothing -> table<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/dmilogs/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,6 +249,7 @@ export def "domain-findings list-by-idrs" [
 ]: nothing -> table<insertion_date: string, url: string, domain: string, username: string, password: string, kind: int, anti_virus: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/domain-findings/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,6 +273,7 @@ export def "domains list-by-idrs" [
 ]: nothing -> table<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/domains/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,6 +297,7 @@ export def "pegasus-sources list-by-idrs" [
 ]: nothing -> table<customer: int, dmilog: int, provider: int, identity: string, auth_expiry: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/pegasus-sources/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,6 +321,7 @@ export def "startupvariables list-by-idrs" [
 ]: nothing -> table<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/startupvariables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,6 +345,7 @@ export def "timonextractor list-by-idrs" [
 ]: nothing -> table<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/v1/{idrs}/timonextractor/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,6 +421,8 @@ export def "sspm get" [
 ]: nothing -> record<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
+  if ($tech | is-empty) { error make --unspanned { msg: "path parameter 'tech' must be non-empty" } }
   let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,6 +452,8 @@ export def "sspm update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
+  if ($tech | is-empty) { error make --unspanned { msg: "path parameter 'tech' must be non-empty" } }
   let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let req_body = {"tech": $body_tech, "customer": $body_customer, "activation_date": $activation_date, "dismission_date": $dismission_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -465,6 +480,8 @@ export def "sspm delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
+  if ($tech | is-empty) { error make --unspanned { msg: "path parameter 'tech' must be non-empty" } }
   let full_url = (build-url $base ({customer: (encode-path-segment $customer), tech: (encode-path-segment $tech)} | format pattern "/api/v1/SSPM/{customer}/{tech}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,6 +505,7 @@ export def "sspm get-by-id" [
 ]: nothing -> record<id: int, tech: int, customer: int, activation_date: string, dismission_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -516,6 +534,7 @@ export def "sspm update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let req_body = {"tech": $tech, "customer": $customer, "activation_date": $activation_date, "dismission_date": $dismission_date} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -541,6 +560,7 @@ export def "sspm delete-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/SSPM/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -612,6 +632,7 @@ export def "customers get" [
 ]: nothing -> record<id: int, idrs: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -637,6 +658,7 @@ export def "customers update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let req_body = {"idrs": $idrs} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -662,6 +684,7 @@ export def "customers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/customers/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -734,6 +757,7 @@ export def "dmilogs get" [
 ]: nothing -> record<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -760,6 +784,7 @@ export def "dmilogs update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let req_body = {"name": $name, "customer": $customer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -785,6 +810,7 @@ export def "dmilogs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/dmilogs/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -808,6 +834,7 @@ export def "dmilogs get-by-name" [
 ]: nothing -> record<id: int, name: string, customer: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -834,6 +861,7 @@ export def "dmilogs update-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let req_body = {"name": $body_name, "customer": $customer} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -859,6 +887,7 @@ export def "dmilogs delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/dmilogs/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -936,6 +965,7 @@ export def "domain-findings get" [
 ]: nothing -> record<insertion_date: string, url: string, domain: string, username: string, password: string, kind: int, anti_virus: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,6 +997,7 @@ export def "domain-findings update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let req_body = {"insertion_date": $insertion_date, "url": $url, "domain": $domain, "username": $username, "password": $password, "kind": $kind, "anti_virus": $anti_virus} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -992,6 +1023,7 @@ export def "domain-findings delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domain-findings/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,6 +1097,7 @@ export def "domains get" [
 ]: nothing -> record<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,6 +1125,7 @@ export def "domains update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let req_body = {"name": $name, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1117,6 +1151,7 @@ export def "domains delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/domains/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,6 +1175,7 @@ export def "domains get-by-name" [
 ]: nothing -> record<id: int, name: string, customer: int, state: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1167,6 +1203,7 @@ export def "domains update-by-name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let req_body = {"name": $body_name, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1192,6 +1229,7 @@ export def "domains delete-by-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/domains/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1268,6 +1306,7 @@ export def "pegasus-sources get" [
 ]: nothing -> record<customer: int, dmilog: int, provider: int, identity: string, auth_expiry: string, source: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,6 +1337,7 @@ export def "pegasus-sources update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let req_body = {"customer": $customer, "dmilog": $dmilog, "provider": $provider, "identity": $identity, "auth_expiry": $auth_expiry, "source": $body_source} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1323,6 +1363,7 @@ export def "pegasus-sources delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/pegasus-sources/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1398,6 +1439,8 @@ export def "startupvariables get" [
 ]: nothing -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($dmilog | is-empty) { error make --unspanned { msg: "path parameter 'dmilog' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1427,6 +1470,8 @@ export def "startupvariables update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($dmilog | is-empty) { error make --unspanned { msg: "path parameter 'dmilog' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let req_body = {"name": $body_name, "dmilog": $body_dmilog, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1453,6 +1498,8 @@ export def "startupvariables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($dmilog | is-empty) { error make --unspanned { msg: "path parameter 'dmilog' must be non-empty" } }
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({dmilog: (encode-path-segment $dmilog), name: (encode-path-segment $name)} | format pattern "/api/v1/startupvariables/{dmilog}/{name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,6 +1523,7 @@ export def "startupvariables get-by-id" [
 ]: nothing -> record<id: int, name: string, dmilog: int, customer: int, state: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1504,6 +1552,7 @@ export def "startupvariables update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let req_body = {"name": $name, "dmilog": $dmilog, "customer": $customer, "state": $state} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1529,6 +1578,7 @@ export def "startupvariables delete-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/startupvariables/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,6 +1604,9 @@ export def "sync create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
+  if ($branch | is-empty) { error make --unspanned { msg: "path parameter 'branch' must be non-empty" } }
+  if ($path | is-empty) { error make --unspanned { msg: "path parameter 'path' must be non-empty" } }
   let full_url = (build-url $base ({project: (encode-path-segment $project), branch: (encode-path-segment $branch), path: (encode-path-segment $path)} | format pattern "/api/v1/sync/{project}/{branch}/{path}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1628,6 +1681,7 @@ export def "timonextractor get" [
 ]: nothing -> record<customer: int, dmilog: int, size_limit: int, submit: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1656,6 +1710,7 @@ export def "timonextractor update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let req_body = {"customer": $customer, "dmilog": $dmilog, "size_limit": $size_limit, "submit": $submit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1681,6 +1736,7 @@ export def "timonextractor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/v1/timonextractor/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

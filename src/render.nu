@@ -513,8 +513,9 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_au
     '# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
     'def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {'
     '  if ($value == null) { return [] }'
-    '  let n = (encode-path-segment $name)'
     '  let is_list = ($value | describe | str starts-with "list")'
+    '  if $is_list and ($value | is-empty) { return [] }'
+    '  let n = (encode-path-segment $name)'
     '  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }'
     '  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }'
     '  match $style {'
@@ -614,6 +615,18 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append ($"  let base = \($base_url | default \"($cmd.base_url)\"\)"))
   } else {
     $lines = ($lines | append '  let base = ($base_url | default $BASE_URL)')
+  }
+
+  # Issue 30.A: validate each required path param is non-empty before URL
+  # substitution. Without this guard, `format pattern` substitutes the empty
+  # string, leaving `/foo//bar` in the templated path which `build-url`'s
+  # `/+ -> /` collapse then erases — silently routing the request to a
+  # different endpoint. Naming the original spec param in the error gives the
+  # caller a clear pointer to which arg was passed empty.
+  for p in $cmd.path_params {
+    let pvar = (effective-positional-var $p.name)
+    let orig = ($p.original_name? | default $p.name)
+    $lines = ($lines | append ($"  if \($($pvar) | is-empty\) { error make --unspanned { msg: \"path parameter '($orig)' must be non-empty\" } }"))
   }
 
   let path_expr = if ($cmd.path_params | is-not-empty) {

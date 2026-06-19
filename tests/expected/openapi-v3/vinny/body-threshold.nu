@@ -24,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -122,6 +123,7 @@ export def "avcfg-asset get" [
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/asset/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,6 +150,7 @@ export def "avcfg-asset-enable update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/asset/enable/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -175,6 +178,7 @@ export def "avcfg-chart-endpoints list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/chart/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -228,6 +232,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -256,6 +261,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/alerts/acknowledge/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -322,6 +328,7 @@ export def "avcfg-cynet-alerts-list list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/list/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -388,6 +395,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/list/scangroup/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -453,6 +461,7 @@ export def "avcfg-cynet-alerts-summary list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -501,6 +510,7 @@ export def "avcfg-cynet-carpet-endpoints list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/carpet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -525,6 +535,7 @@ export def "avcfg-cynet-endpoint-ci get" [
 ]: nothing -> record<id: int, type: string, hostname: string, last_seen: string, health_status: string, active_av: string, person_name: string, via_login: string, additional_info: string, atlantis_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($atlantis_id | is-empty) { error make --unspanned { msg: "path parameter 'atlantis_id' must be non-empty" } }
   let full_url = (build-url $base ({atlantis_id: (encode-path-segment $atlantis_id)} | format pattern "/avcfg/cynet/endpoint/ci/{atlantis_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,6 +568,7 @@ export def "avcfg-cynet-endpoints list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "cynet_info__last_seen_at__gte" $cynet_info_last_seen_at_gte "scalar") (serialize-qp "cynet_info__last_seen_at__lte" $cynet_info_last_seen_at_lte "scalar") (serialize-qp "hostname" $hostname "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "scan_group" $scan_group "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -622,6 +634,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'idrs' must be non-empty" } }
   let qp = [(serialize-qp "acknowledged" $acknowledged "scalar") (serialize-qp "alert_domain" $alert_domain "scalar") (serialize-qp "alert_ip" $alert_ip "scalar") (serialize-qp "alert_type" $alert_type "scalar") (serialize-qp "alert_url" $alert_url "scalar") (serialize-qp "command_line" $command_line "scalar") (serialize-qp "created_at" $created_at "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "date_changed" $date_changed "scalar") (serialize-qp "date_in" $date_in "scalar") (serialize-qp "date_in__gte" $date_in_gte "scalar") (serialize-qp "date_in__lte" $date_in_lte "scalar") (serialize-qp "endpoint" $endpoint "scalar") (serialize-qp "endpoint_name" $endpoint_name "scalar") (serialize-qp "endpoint_type" $endpoint_type "scalar") (serialize-qp "eps_prevention" $eps_prevention "scalar") (serialize-qp "eps_prevention_success" $eps_prevention_success "scalar") (serialize-qp "file" $file "scalar") (serialize-qp "incident_name" $incident_name "scalar") (serialize-qp "last_seen" $last_seen "scalar") (serialize-qp "last_seen__gte" $last_seen_gte "scalar") (serialize-qp "last_seen__lte" $last_seen_lte "scalar") (serialize-qp "notified_cardinalis" $notified_cardinalis "scalar") (serialize-qp "notified_llama" $notified_llama "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "remediation_status" $remediation_status "scalar") (serialize-qp "scan_group_name" $scan_group_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "solved" $solved "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "tenant" $tenant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "uniqueness" $uniqueness "scalar") (serialize-qp "updated_at" $updated_at "scalar") (serialize-qp "user" $user "scalar") (serialize-qp "user_name" $user_name "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/endpoints/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -646,6 +659,7 @@ export def "avcfg-cynet-tenant get" [
 ]: nothing -> record<id: int, name: string, enable: bool, note: string, alert: bool, discovery: bool, cynet_info: record<id: int, tenant_id: string, client_id: string, shared: bool, source: string, is_older_item_monitored: bool>, customer: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -672,6 +686,7 @@ export def "avcfg-cynet-tenant update-by-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -700,6 +715,7 @@ export def "avcfg-cynet-tenant update-by-id-1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

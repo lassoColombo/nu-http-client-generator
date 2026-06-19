@@ -22,8 +22,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -206,6 +207,7 @@ export def "access-requests-approve approve" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_request_gid | is-empty) { error make --unspanned { msg: "path parameter 'access_request_gid' must be non-empty" } }
   let full_url = (build-url $base ({access_request_gid: (encode-path-segment $access_request_gid)} | format pattern "/access_requests/{access_request_gid}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,6 +232,7 @@ export def "access-requests-reject reject" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($access_request_gid | is-empty) { error make --unspanned { msg: "path parameter 'access_request_gid' must be non-empty" } }
   let full_url = (build-url $base ({access_request_gid: (encode-path-segment $access_request_gid)} | format pattern "/access_requests/{access_request_gid}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,6 +260,7 @@ export def "workspaces-agents get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, resource_subtype: string, name: string>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/agents") $qp)
   let accept_val = "application/json"
@@ -284,6 +288,7 @@ export def "agents get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, resource_subtype: string, name: string, description: string, behavior_guidance: string, workspace: record<gid: string, resource_type: string, name: string>, photo: record<image_21x21: string, image_27x27: string, image_36x36: string, image_60x60: string, image_128x128: string, image_1024x1024: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($agent_gid | is-empty) { error make --unspanned { msg: "path parameter 'agent_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({agent_gid: (encode-path-segment $agent_gid)} | format pattern "/agents/{agent_gid}") $qp)
   let accept_val = "application/json"
@@ -311,6 +316,7 @@ export def "allocations get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, start_date: string, end_date: string, effort: record<type: string, value: float>, assignee: record<gid: string, resource_type: string, name: string>, created_by: record<gid: string, resource_type: string, name: string>, parent: record<gid: string, resource_type: string, name: string>, resource_subtype: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($allocation_gid | is-empty) { error make --unspanned { msg: "path parameter 'allocation_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({allocation_gid: (encode-path-segment $allocation_gid)} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
@@ -340,6 +346,7 @@ export def "allocations update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($allocation_gid | is-empty) { error make --unspanned { msg: "path parameter 'allocation_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({allocation_gid: (encode-path-segment $allocation_gid)} | format pattern "/allocations/{allocation_gid}") $qp)
   let req_body = {"data": $data} | compact
@@ -368,6 +375,7 @@ export def "allocations delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($allocation_gid | is-empty) { error make --unspanned { msg: "path parameter 'allocation_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({allocation_gid: (encode-path-segment $allocation_gid)} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
@@ -455,6 +463,7 @@ export def "attachments get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_at: string, download_url: string, permanent_url: string, host: string, parent: record<gid: string, resource_type: string, name: string, resource_subtype: string, created_by: record>, size: int, view_url: string, connected_to_app: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
@@ -481,6 +490,7 @@ export def "attachments delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($attachment_gid | is-empty) { error make --unspanned { msg: "path parameter 'attachment_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
@@ -579,6 +589,7 @@ export def "workspaces-audit-log-events get" [
 ]: nothing -> record<data: table<gid: string, created_at: string, event_type: string, event_category: string, actor: record, resource: record, details: record, context: record>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($workspace_gid | is-empty) { error make --unspanned { msg: "path parameter 'workspace_gid' must be non-empty" } }
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "actor_type" $actor_type "scalar") (serialize-qp "actor_gid" $actor_gid "scalar") (serialize-qp "resource_gid" $resource_gid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/audit_log_events") $qp)
   let accept_val = "application/json"
@@ -692,6 +703,7 @@ export def "budgets get" [
 ]: nothing -> record<data: record<gid: string, resource_type: string, budget_type: string, estimate: record, actual: record, total: record, parent: record<gid: string, resource_type: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($budget_gid | is-empty) { error make --unspanned { msg: "path parameter 'budget_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({budget_gid: (encode-path-segment $budget_gid)} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
@@ -721,6 +733,7 @@ export def "budgets update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($budget_gid | is-empty) { error make --unspanned { msg: "path parameter 'budget_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({budget_gid: (encode-path-segment $budget_gid)} | format pattern "/budgets/{budget_gid}") $qp)
   let req_body = {"data": $data} | compact
@@ -749,6 +762,7 @@ export def "budgets delete" [
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($budget_gid | is-empty) { error make --unspanned { msg: "path parameter 'budget_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({budget_gid: (encode-path-segment $budget_gid)} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
@@ -778,6 +792,7 @@ export def "projects-custom-field-settings get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, project: record, is_important: bool, parent: record, custom_field: record>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($project_gid | is-empty) { error make --unspanned { msg: "path parameter 'project_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
@@ -807,6 +822,7 @@ export def "portfolios-custom-field-settings get" [
 ]: nothing -> record<data: table<gid: string, resource_type: string, project: record, is_important: bool, parent: record, custom_field: record>, next_page: record<offset: string, path: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($portfolio_gid | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_gid' must be non-empty" } }
   let qp = [(serialize-qp "opt_pretty" $opt_pretty "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "opt_fields" $opt_fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"

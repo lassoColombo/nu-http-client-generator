@@ -669,8 +669,8 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
 }
 
 # Extract body info: has_body, content_type, body_fields, discriminator.
-def extract-body-info [op: record, schemas: record, h: record] {
-  let body_info = (do $h.get-body-info $op $schemas)
+def extract-body-info [op: record, schemas: record, h: record, spec_data: record] {
+  let body_info = (do $h.get-body-info $op $schemas $spec_data)
   let has_body = $body_info.has_body
   let content_type = ($body_info.content_type? | default $spec.CT_JSON)
 
@@ -994,10 +994,16 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         return null
       }
 
+      # Strip OpenAPI path-key fragment (e.g. AWS `#tagKeys`, `#Content-Type`)
+      # used to disambiguate ops sharing method+path. Servers treat `#…` as a
+      # client-side fragment, so it must not leak into the runtime URL, command
+      # name, or doc comment.
+      let clean_path = ($path_entry.path | str replace --regex '#.*$' '')
+
       let params = (classify-params $op $methods $schemas $h)
       # Synthesize path params for undeclared URL template placeholders
       let declared_originals = ($params.path_params | each {|p| $p.original_name? | default $p.name })
-      let template_placeholders = ($path_entry.path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
+      let template_placeholders = ($clean_path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
       let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared_originals) } | each {|ph|
         {name: ($ph | str replace --all '-' '_'), original_name: $ph, type: "any", required: true}
       }
@@ -1009,15 +1015,14 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
       # declares params in a different order (e.g. alphabetical) than the URL
       # template would route calls to the wrong endpoint (e.g. `{namespace}/{name}`
       # called as `(name, namespace)` would swap them).
-      let path_str = $path_entry.path
       let params = $params | update path_params ($params.path_params | sort-by {|p|
         let token = $"{($p.original_name? | default $p.name)}"
-        let idx = ($path_str | str index-of $token)
+        let idx = ($clean_path | str index-of $token)
         if $idx < 0 { 999999 } else { $idx }
       })
-      let body = (extract-body-info $op $schemas $h)
+      let body = (extract-body-info $op $schemas $h $spec_data)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
-      let cmd_name = (derive-command-name $path_entry.path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)
+      let cmd_name = (derive-command-name $clean_path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)
 
       # Build unified field_shapes: collapsed body shape + per-field shapes
       let body_collapsed = ($config.body_threshold > 0) and (($body.body_fields | length) > $config.body_threshold)
@@ -1027,12 +1032,12 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         $body.field_shapes
       }
 
-      let endpoint_line = $"($method | str upcase) ($path_entry.path)"
+      let endpoint_line = $"($method | str upcase) ($clean_path)"
 
       {
         name: $cmd_name
         method: $method
-        path_template: $path_entry.path
+        path_template: $clean_path
         path_params: $params.path_params
         query_params: $params.query_params
         header_params: $params.header_params

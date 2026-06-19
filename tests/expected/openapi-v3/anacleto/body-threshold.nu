@@ -24,8 +24,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -151,6 +152,7 @@ export def "carpet-asset-list-idrs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'IDRS' must be non-empty" } }
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/asset_list/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -176,6 +178,7 @@ export def "carpet-host-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'IDRS' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/host/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,6 +203,7 @@ export def "delivery-apikeys-idrs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'IDRS' must be non-empty" } }
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/apikeys/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,6 +293,7 @@ export def "delivery-asset-tag-delete delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,6 +320,7 @@ export def "delivery-asset-tag-edit update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/edit/{id}/"))
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -345,6 +351,7 @@ export def "delivery-asset-tag-idrs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'IDRS' must be non-empty" } }
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset-tag/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -398,6 +405,7 @@ export def "delivery-asset-deactivate create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/deactivate/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -422,6 +430,7 @@ export def "delivery-asset-delete delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -446,6 +455,7 @@ export def "delivery-asset-details get" [
 ]: nothing -> record<id: int, idrs: string, name: string, is_scannable: bool, is_public: bool, location: string, atlantis_id: int, is_active: bool, type: string, address: list<any>, has_whitelist: string, whitelist: string, scanner_name: string, scanner_id: int, number_of_host: string, error: string, tag: string, tag_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,6 +483,7 @@ export def "delivery-asset-details update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -503,6 +514,7 @@ export def "delivery-asset-idrs list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($idrs | is-empty) { error make --unspanned { msg: "path parameter 'IDRS' must be non-empty" } }
   let qp = [(serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
@@ -531,6 +543,7 @@ export def "delivery-asset-whitelist create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
+  if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/whitelist/{id}/"))
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }

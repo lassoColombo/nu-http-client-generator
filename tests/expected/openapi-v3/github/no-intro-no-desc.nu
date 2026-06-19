@@ -21,8 +21,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -171,6 +172,7 @@ export def "advisories get-security-global-advisory" [
 ]: nothing -> record<ghsa_id: string, cve_id: string, url: string, html_url: string, repository_advisory_url: string, summary: string, description: string, type: string, severity: string, source_code_location: string, identifiers: table<type: string, value: string>, references: list<string>, published_at: string, updated_at: string, github_reviewed_at: string, nvd_published_at: string, withdrawn_at: string, vulnerabilities: table<package: record, vulnerable_version_range: string, first_patched_version: string, vulnerable_functions: list>, cvss: record<vector_string: string, score: float>, cvss_severities: record<cvss_v3: record<vector_string: string, score: float>, cvss_v4: record<vector_string: string, score: float>>, epss: record<percentage: float, percentile: float>, cwes: table<cwe_id: string, name: string>, credits: table<user: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($ghsa_id | is-empty) { error make --unspanned { msg: "path parameter 'ghsa_id' must be non-empty" } }
   let full_url = (build-url $base ({ghsa_id: (encode-path-segment $ghsa_id)} | format pattern "/advisories/{ghsa_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,6 +207,8 @@ export def "agents-repos-tasks list" [
 ]: nothing -> record<tasks: table<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: list, owner: record, repository: record, state: string, session_count: int, artifacts: list, archived_at: string, updated_at: string, created_at: string>, total_active_count: int, total_archived_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "is_archived" $is_archived "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "creator_id" $creator_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/agents/repos/{owner}/{repo}/tasks") $qp)
   let accept_val = "application/json"
@@ -238,6 +242,8 @@ export def "agents-repos-tasks create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo)} | format pattern "/agents/repos/{owner}/{repo}/tasks"))
   let req_body = {"prompt": $prompt, "model": $model, "create_pull_request": $create_pull_request, "base_ref": $base_ref, "head_ref": $head_ref} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -267,6 +273,9 @@ export def "agents-repos-tasks get-by-and" [
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($owner | is-empty) { error make --unspanned { msg: "path parameter 'owner' must be non-empty" } }
+  if ($repo | is-empty) { error make --unspanned { msg: "path parameter 'repo' must be non-empty" } }
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({owner: (encode-path-segment $owner), repo: (encode-path-segment $repo), task_id: (encode-path-segment $task_id)} | format pattern "/agents/repos/{owner}/{repo}/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,6 +333,7 @@ export def "agents-tasks get" [
 ]: nothing -> record<id: string, url: string, html_url: string, name: string, creator: any, creator_type: string, user_collaborators: table<id: int>, owner: record<id: int>, repository: record<id: int>, state: string, session_count: int, artifacts: table<provider: string, type: string, data: any>, archived_at: string, updated_at: string, created_at: string, sessions: table<id: string, name: string, user: record, owner: record, repository: record, task_id: string, state: string, created_at: string, updated_at: string, completed_at: string, prompt: string, head_ref: string, base_ref: string, model: string, error: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
   let full_url = (build-url $base ({task_id: (encode-path-segment $task_id)} | format pattern "/agents/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,6 +383,7 @@ export def "app-manifests-conversions create" [
 ]: nothing -> record<id: int, slug: string, node_id: string, client_id: string, owner: any, name: string, description: string, external_url: string, html_url: string, created_at: string, updated_at: string, permissions: record<issues: string, checks: string, metadata: string, contents: string, deployments: string>, events: list<string>, installations_count: int, client_secret: string, webhook_secret: string, pem: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let full_url = (build-url $base ({code: (encode-path-segment $code)} | format pattern "/app-manifests/{code}/conversions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -481,6 +492,7 @@ export def "app-hook-deliveries get-webhook" [
 ]: nothing -> record<id: int, guid: string, delivered_at: string, redelivery: bool, duration: float, status: string, status_code: int, event: string, action: string, installation_id: int, repository_id: int, throttled_at: string, url: string, request: record<headers: record, payload: record>, response: record<headers: record, payload: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delivery_id | is-empty) { error make --unspanned { msg: "path parameter 'delivery_id' must be non-empty" } }
   let full_url = (build-url $base ({delivery_id: (encode-path-segment $delivery_id)} | format pattern "/app/hook/deliveries/{delivery_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,6 +518,7 @@ export def "app-hook-deliveries-attempts create-redeliver-webhook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delivery_id | is-empty) { error make --unspanned { msg: "path parameter 'delivery_id' must be non-empty" } }
   let full_url = (build-url $base ({delivery_id: (encode-path-segment $delivery_id)} | format pattern "/app/hook/deliveries/{delivery_id}/attempts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -21,8 +21,9 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let n = (encode-path-segment $name)
   let is_list = ($value | describe | str starts-with "list")
+  if $is_list and ($value | is-empty) { return [] }
+  let n = (encode-path-segment $name)
   if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
@@ -119,6 +120,7 @@ export def "absolute-redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/absolute-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -252,6 +254,7 @@ export def "anything delete-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($anything | is-empty) { error make --unspanned { msg: "path parameter 'anything' must be non-empty" } }
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,6 +278,7 @@ export def "anything get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($anything | is-empty) { error make --unspanned { msg: "path parameter 'anything' must be non-empty" } }
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,6 +302,7 @@ export def "anything update-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($anything | is-empty) { error make --unspanned { msg: "path parameter 'anything' must be non-empty" } }
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,6 +326,7 @@ export def "anything create-by-anything" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($anything | is-empty) { error make --unspanned { msg: "path parameter 'anything' must be non-empty" } }
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,6 +350,7 @@ export def "anything update-by-anything-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($anything | is-empty) { error make --unspanned { msg: "path parameter 'anything' must be non-empty" } }
   let full_url = (build-url $base ({anything: (encode-path-segment $anything)} | format pattern "/anything/{anything}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,6 +374,7 @@ export def "base64 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/base64/{value}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,6 +399,8 @@ export def "basic-auth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($passwd | is-empty) { error make --unspanned { msg: "path parameter 'passwd' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,6 +471,7 @@ export def "bytes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,6 +521,7 @@ export def "cache get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({value: (encode-path-segment $value)} | format pattern "/cache/{value}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,6 +616,8 @@ export def "cookies-set get-by-name-value" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
+  if ($value | is-empty) { error make --unspanned { msg: "path parameter 'value' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name), value: (encode-path-segment $value)} | format pattern "/cookies/set/{name}/{value}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,6 +663,7 @@ export def "delay delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -672,6 +687,7 @@ export def "delay get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -695,6 +711,7 @@ export def "delay update-by-delay" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -718,6 +735,7 @@ export def "delay create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,6 +759,7 @@ export def "delay update-by-delay-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($delay | is-empty) { error make --unspanned { msg: "path parameter 'delay' must be non-empty" } }
   let full_url = (build-url $base ({delay: (encode-path-segment $delay)} | format pattern "/delay/{delay}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -810,6 +829,9 @@ export def "digest-auth get-by-qop-user-passwd" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qop | is-empty) { error make --unspanned { msg: "path parameter 'qop' must be non-empty" } }
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($passwd | is-empty) { error make --unspanned { msg: "path parameter 'passwd' must be non-empty" } }
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/digest-auth/{qop}/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -836,6 +858,10 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qop | is-empty) { error make --unspanned { msg: "path parameter 'qop' must be non-empty" } }
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($passwd | is-empty) { error make --unspanned { msg: "path parameter 'passwd' must be non-empty" } }
+  if ($algorithm | is-empty) { error make --unspanned { msg: "path parameter 'algorithm' must be non-empty" } }
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -863,6 +889,11 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale_after" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($qop | is-empty) { error make --unspanned { msg: "path parameter 'qop' must be non-empty" } }
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($passwd | is-empty) { error make --unspanned { msg: "path parameter 'passwd' must be non-empty" } }
+  if ($algorithm | is-empty) { error make --unspanned { msg: "path parameter 'algorithm' must be non-empty" } }
+  if ($stale_after | is-empty) { error make --unspanned { msg: "path parameter 'stale_after' must be non-empty" } }
   let full_url = (build-url $base ({qop: (encode-path-segment $qop), user: (encode-path-segment $user), passwd: (encode-path-segment $passwd), algorithm: (encode-path-segment $algorithm), stale_after: (encode-path-segment $stale_after)} | format pattern "/digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,6 +968,7 @@ export def "etag get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($etag | is-empty) { error make --unspanned { msg: "path parameter 'etag' must be non-empty" } }
   let full_url = (build-url $base ({etag: (encode-path-segment $etag)} | format pattern "/etag/{etag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1029,6 +1061,8 @@ export def "hidden-basic-auth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
+  if ($passwd | is-empty) { error make --unspanned { msg: "path parameter 'passwd' must be non-empty" } }
   let full_url = (build-url $base ({user: (encode-path-segment $user), passwd: (encode-path-segment $passwd)} | format pattern "/hidden-basic-auth/{user}/{passwd}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1230,6 +1264,8 @@ export def "links get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
+  if ($offset | is-empty) { error make --unspanned { msg: "path parameter 'offset' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n), offset: (encode-path-segment $offset)} | format pattern "/links/{n}/{offset}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1319,6 +1355,7 @@ export def "range get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($numbytes | is-empty) { error make --unspanned { msg: "path parameter 'numbytes' must be non-empty" } }
   let full_url = (build-url $base ({numbytes: (encode-path-segment $numbytes)} | format pattern "/range/{numbytes}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1467,6 +1504,7 @@ export def "redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1490,6 +1528,7 @@ export def "relative-redirect get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/relative-redirect/{n}"))
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,6 +1622,7 @@ export def "status delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($codes | is-empty) { error make --unspanned { msg: "path parameter 'codes' must be non-empty" } }
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1606,6 +1646,7 @@ export def "status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($codes | is-empty) { error make --unspanned { msg: "path parameter 'codes' must be non-empty" } }
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1629,6 +1670,7 @@ export def "status update-by-codes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($codes | is-empty) { error make --unspanned { msg: "path parameter 'codes' must be non-empty" } }
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1652,6 +1694,7 @@ export def "status create" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($codes | is-empty) { error make --unspanned { msg: "path parameter 'codes' must be non-empty" } }
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,6 +1718,7 @@ export def "status update-by-codes-1" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($codes | is-empty) { error make --unspanned { msg: "path parameter 'codes' must be non-empty" } }
   let full_url = (build-url $base ({codes: (encode-path-segment $codes)} | format pattern "/status/{codes}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1698,6 +1742,7 @@ export def "stream-bytes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream-bytes/{n}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,6 +1766,7 @@ export def "stream get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($n | is-empty) { error make --unspanned { msg: "path parameter 'n' must be non-empty" } }
   let full_url = (build-url $base ({n: (encode-path-segment $n)} | format pattern "/stream/{n}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

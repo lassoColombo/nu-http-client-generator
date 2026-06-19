@@ -22,8 +22,11 @@ def get-all-urls-impl [spec_data: record] {
   $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }
 }
 
-def get-body-info-impl [op: record, schemas: record] {
-  let params = ($op.parameters? | default [])
+def get-body-info-impl [op: record, schemas: record, spec_data: record] {
+  # Resolve $ref-only param entries (e.g. Kubernetes spec shares body/query
+  # params under #/parameters/...). Without this the body/form filter below
+  # never finds them and the op is silently classified as no-body.
+  let params = ($op.parameters? | default []) | each {|p| spec resolve-ref $p $schemas }
   let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
   if ($form_params | is-not-empty) {
     let has_file = ($form_params | any {|p| ($p.type? | default "") == "file" })
@@ -42,11 +45,27 @@ def get-body-info-impl [op: record, schemas: record] {
     if ($body_param | is-empty) {
       {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
     } else {
+      # Issue 28.A: honour Swagger-2 `consumes` (op-level, then doc-level).
+      # Picker: prefer application/json (since `*/*` accepts it and most specs
+      # list it explicitly), then application/merge-patch+json (safest k8s
+      # PATCH default), then first non-wildcard. Wildcard `*/*` collapses to
+      # application/json because `http patch` rejects `*/*` as a CT header.
+      let consumes_global = ($spec_data.consumes? | default [])
+      let consumes_op = ($op.consumes? | default $consumes_global)
+      let picked_ct = (
+        if ($consumes_op | is-empty) or ($spec.CT_JSON in $consumes_op) or ("*/*" in $consumes_op) {
+          $spec.CT_JSON
+        } else if ("application/merge-patch+json" in $consumes_op) {
+          "application/merge-patch+json"
+        } else {
+          $consumes_op | where {|x| $x != "*/*" } | first | default $spec.CT_JSON
+        }
+      )
       let s = $body_param.schema?
       if ($s | is-not-empty) {
-        {has_body: true, body_schema: (spec resolve-ref $s $schemas), content_type: $spec.CT_JSON}
+        {has_body: true, body_schema: (spec resolve-ref $s $schemas), content_type: $picked_ct}
       } else {
-        {has_body: true, body_schema: {}, content_type: $spec.CT_JSON}
+        {has_body: true, body_schema: {}, content_type: $picked_ct}
       }
     }
   }
@@ -124,7 +143,7 @@ export def helpers [] {
         match $cf { "csv" => "csv", "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
       }
     }
-    get-body-info: {|op, schemas| get-body-info-impl $op $schemas }
+    get-body-info: {|op, schemas, spec| get-body-info-impl $op $schemas $spec }
     get-response-content-types: {|op, spec| get-response-content-types-impl $op $spec }
     get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
