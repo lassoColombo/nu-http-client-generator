@@ -8,7 +8,7 @@ use ../log.nu
 
 def get-base-url-impl [spec_data: record] {
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
-  let base_path = ($spec_data.basePath? | default "")
+  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let raw_schemes = ($spec_data.schemes? | default [])
   let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
   {scheme: $scheme, host: $host, path: $base_path} | url join | str trim --right --char '/'
@@ -16,10 +16,22 @@ def get-base-url-impl [spec_data: record] {
 
 def get-all-urls-impl [spec_data: record] {
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
-  let base_path = ($spec_data.basePath? | default "")
+  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let raw_schemes = ($spec_data.schemes? | default [])
   let schemes = (if ($raw_schemes | is-empty) { ["https"] } else { $raw_schemes })
   $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }
+}
+
+# Issue 33.B: Swagger-2 `basePath` may contain `{name}` template variables
+# (e.g. `/v2.0/{apikey}`) that are never declared as path parameters. Leaving
+# them in the path means `url parse` percent-encodes the braces (`%7B…%7D`),
+# producing guaranteed-404 URLs. Drop unresolved templates entirely; the user
+# must override via `--base-url` to substitute the missing value.
+def strip-base-path-template [base_path: string]: nothing -> string {
+  if not ($base_path =~ '\{[^}]+\}') { return $base_path }
+  let cleaned = ($base_path | str replace --all --regex '/\{[^}]+\}' '' | str replace --all --regex '\{[^}]+\}' '')
+  log warn $"basePath contains undeclared template variable\(s\); stripped to '($cleaned)'. Pass --base-url at call time to substitute."
+  $cleaned
 }
 
 def get-body-info-impl [op: record, schemas: record, spec_data: record] {

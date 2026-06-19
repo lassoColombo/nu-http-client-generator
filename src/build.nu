@@ -523,8 +523,14 @@ def pick-action [classified: list, method: string] {
       # Keep if the NEXT non-dropped token is OTHER or VERB.
       let upcoming = ($classified | skip ($i + 1) | where {|p| $p.label not-in ["STRUCTURAL" "PARAM" "RESOURCE" "ARTICLE"] })
       ($upcoming | is-not-empty) and (($upcoming | first | get label) in ["OTHER" "VERB" "PREPOSITION"])
+    } else if $label == "VERB" {
+      # Issue 33.A: drop a secondary VERB whose canonical form equals the
+      # primary verb. Suppresses verb-verb stutter like `create-create-tags`
+      # (POST + Create), `get-get-bundle-info` (GET + Info→get),
+      # `list-list-of-unsubscribed-addresses` (GET + Query→list).
+      (canonical-verb $tok) != $primary_verb
     } else {
-      true   # OTHER or secondary VERB
+      true   # OTHER
     }
     if $keep {
       if $label == "VERB" { canonical-verb $tok } else { $tok }
@@ -883,13 +889,17 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     } | flatten | append ["id"] | uniq
   )
 
-  # For dotted operationIds (Google `cloudkms.projects...macSign`, Flickr
-  # `flickr.favorites.getList`, Yandex, etc.), only the LAST dot-segment
-  # carries verb info — earlier segments are namespace. Without this, every
+  # For namespaced operationIds, only the LAST namespace-segment carries
+  # verb info — earlier segments are namespace. Without this, every
   # namespace token survives as discriminator and produces 12-token verbs.
   # See issue #6.2.
-  let opid_for_verb = if ($operation_id | is-not-empty) and ($operation_id | str contains ".") {
-    $operation_id | split row "." | last
+  #   `.` separator: Google `cloudkms.projects...macSign`, Flickr
+  #     `flickr.favorites.getList`, Yandex, etc.
+  #   `#` separator: Rails-style `controller#action`
+  #     (`Api::V1::Models#search`), AWS-style `path#subresource`
+  #     (`get_files_id#get_shared_link`). Cycle 32.
+  let opid_for_verb = if ($operation_id | is-not-empty) and ($operation_id =~ '[.#]') {
+    $operation_id | split row --regex '[.#]' | last
   } else if ($operation_id | is-not-empty) {
     $operation_id
   } else {

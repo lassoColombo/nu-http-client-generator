@@ -244,7 +244,7 @@ export def "componentstatuses get-component-status" [
 #
 # GET /api/v1/configmaps
 # operationId: listCoreV1ConfigMapForAllNamespaces
-export def "configmaps list-config-map-for-list-namespaces" [
+export def "configmaps list-config-map-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "configmaps list-config-map-for-list-namespaces" [
 #
 # GET /api/v1/endpoints
 # operationId: listCoreV1EndpointsForAllNamespaces
-export def "endpoints list-for-list-namespaces" [
+export def "endpoints list-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "endpoints list-for-list-namespaces" [
 #
 # GET /api/v1/events
 # operationId: listCoreV1EventForAllNamespaces
-export def "events list-for-list-namespaces" [
+export def "events list-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "events list-for-list-namespaces" [
 #
 # GET /api/v1/limitranges
 # operationId: listCoreV1LimitRangeForAllNamespaces
-export def "limitranges list-limit-range-for-list-namespaces" [
+export def "limitranges list-limit-range-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
