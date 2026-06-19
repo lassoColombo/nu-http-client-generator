@@ -6,7 +6,56 @@ use ../log.nu
 
 # ── Private helpers ───────────────────────────────────────────────
 
+# Issue 40.A: Azure data-plane specs use the `x-ms-parameterized-host` vendor
+# extension to template the host (e.g. `{searchServiceName}.{searchDnsSuffix}`)
+# and set `host: "azure.local"` as a sentinel. Honor the extension when present;
+# substitute placeholders whose referenced parameter has a `default:`, and leave
+# unresolved placeholders in place (mirrors cycle 16.A's OAS3 resolve-server-url
+# behavior — `url parse` will then fail loudly on the unsubstituted `{var}`
+# instead of silently dispatching to azure.local).
+def resolve-parameterized-host [spec_data: record]: nothing -> string {
+  let pham = ($spec_data | get -o "x-ms-parameterized-host")
+  if ($pham | is-empty) { return null }
+  let tmpl = ($pham | get -o hostTemplate | default "")
+  if ($tmpl | is-empty) { return null }
+  let use_scheme = ($pham | get -o useSchemePrefix | default true)
+  # Resolve each {var} placeholder by looking up its parameter in the
+  # spec-level `parameters` table and reading the parameter's `default:`.
+  # Parameters without defaults stay as `{var}` so `url parse` errors loudly.
+  let params = ($pham | get -o parameters | default [])
+  let spec_params = ($spec_data | get -o parameters | default {})
+  let defaults = ($params | reduce -f {} {|p, acc|
+    let resolved = if (($p | describe) | str starts-with "record") and ("$ref" in ($p | columns)) {
+      let ref_path = ($p | get "$ref")
+      let parts = ($ref_path | split row '/')
+      let key = ($parts | last)
+      ($spec_params | get -o $key | default {})
+    } else { $p }
+    let name = ($resolved.name? | default null)
+    let def = ($resolved.default? | default null)
+    if ($name != null) and ($def != null) { $acc | upsert $name ($def | into string) } else { $acc }
+  })
+  # Apply substitutions; placeholders not in `defaults` survive unchanged.
+  let placeholders = ($tmpl | parse --regex '\{(?P<n>[A-Za-z0-9_]+)\}' | get n | uniq)
+  let full = ($placeholders | reduce -f $defaults {|n, acc|
+    if ($n in ($acc | columns)) { $acc } else { $acc | upsert $n $"{($n)}" }
+  })
+  let substituted = ($full | format pattern $tmpl)
+  if $use_scheme {
+    let raw_schemes = ($spec_data.schemes? | default [])
+    let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
+    $"($scheme)://($substituted)"
+  } else {
+    $substituted
+  }
+}
+
 def get-base-url-impl [spec_data: record] {
+  let parameterized = (resolve-parameterized-host $spec_data)
+  if ($parameterized != null) {
+    let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
+    return ($"($parameterized)($base_path)" | str trim --right --char '/')
+  }
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
   let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let raw_schemes = ($spec_data.schemes? | default [])
@@ -15,6 +64,11 @@ def get-base-url-impl [spec_data: record] {
 }
 
 def get-all-urls-impl [spec_data: record] {
+  let parameterized = (resolve-parameterized-host $spec_data)
+  if ($parameterized != null) {
+    let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
+    return [($"($parameterized)($base_path)" | str trim --right --char '/')]
+  }
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
   let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let raw_schemes = ($spec_data.schemes? | default [])
