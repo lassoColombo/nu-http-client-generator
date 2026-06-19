@@ -4,15 +4,17 @@
 
 const BASE_URL = "https://app.asana.com/api/1.0"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ASANA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -54,12 +56,32 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
@@ -134,7 +156,7 @@ export def "access-requests get" [
   let full_url = (build-url $base "/access_requests" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"target": $target, "user": $user, "opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Create an access request
@@ -162,7 +184,7 @@ export def "access-requests create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Approve an access request
@@ -187,7 +209,7 @@ export def "access-requests-approve approve" [
   let full_url = (build-url $base ({access_request_gid: (encode-path-segment $access_request_gid)} | format pattern "/access_requests/{access_request_gid}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Reject an access request
@@ -212,7 +234,7 @@ export def "access-requests-reject reject" [
   let full_url = (build-url $base ({access_request_gid: (encode-path-segment $access_request_gid)} | format pattern "/access_requests/{access_request_gid}/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get a list of agents in a workspace
@@ -241,7 +263,7 @@ export def "workspaces-agents get" [
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/agents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get an agent
@@ -269,7 +291,7 @@ export def "agents get" [
   let full_url = (build-url $base ({agent_gid: (encode-path-segment $agent_gid)} | format pattern "/agents/{agent_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get an allocation
@@ -297,7 +319,7 @@ export def "allocations get" [
   let full_url = (build-url $base ({allocation_gid: (encode-path-segment $allocation_gid)} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update an allocation
@@ -329,7 +351,7 @@ export def "allocations update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete an allocation
@@ -356,7 +378,7 @@ export def "allocations delete" [
   let full_url = (build-url $base ({allocation_gid: (encode-path-segment $allocation_gid)} | format pattern "/allocations/{allocation_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty} | compact), body: null}
 }
 
 # Get multiple allocations
@@ -386,7 +408,7 @@ export def "allocations list" [
   let full_url = (build-url $base "/allocations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"parent": $parent, "assignee": $assignee, "workspace": $workspace, "limit": $limit, "offset": $offset, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Create an allocation
@@ -416,7 +438,7 @@ export def "allocations create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get an attachment
@@ -444,7 +466,7 @@ export def "attachments get" [
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Delete an attachment
@@ -471,7 +493,7 @@ export def "attachments delete" [
   let full_url = (build-url $base ({attachment_gid: (encode-path-segment $attachment_gid)} | format pattern "/attachments/{attachment_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty} | compact), body: null}
 }
 
 # Get attachments from an object
@@ -499,7 +521,7 @@ export def "attachments get-for-object" [
   let full_url = (build-url $base "/attachments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"limit": $limit, "offset": $offset, "parent": $parent, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Upload an attachment
@@ -536,7 +558,7 @@ export def "attachments create-for-object" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $mp.content_type $mp.body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get audit log events
@@ -570,7 +592,7 @@ export def "workspaces-audit-log-events get" [
   let full_url = (build-url $base ({workspace_gid: (encode-path-segment $workspace_gid)} | format pattern "/workspaces/{workspace_gid}/audit_log_events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"start_at": $start_at, "end_at": $end_at, "event_type": $event_type, "actor_type": $actor_type, "actor_gid": $actor_gid, "resource_gid": $resource_gid, "limit": $limit, "offset": $offset} | compact), body: null}
 }
 
 # Submit parallel requests
@@ -601,7 +623,7 @@ export def "batch create-request" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Get all budgets
@@ -627,7 +649,7 @@ export def "budgets list" [
   let full_url = (build-url $base "/budgets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "parent": $parent} | compact), body: null}
 }
 
 # Create a budget
@@ -656,7 +678,7 @@ export def "budgets create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty} | compact), body: $req_body}
 }
 
 # Get a budget
@@ -684,7 +706,7 @@ export def "budgets get" [
   let full_url = (build-url $base ({budget_gid: (encode-path-segment $budget_gid)} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Update a budget
@@ -716,7 +738,7 @@ export def "budgets update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"opt_pretty": $opt_pretty, "opt_fields": $opt_fields} | compact), body: $req_body}
 }
 
 # Delete a budget
@@ -743,7 +765,7 @@ export def "budgets delete" [
   let full_url = (build-url $base ({budget_gid: (encode-path-segment $budget_gid)} | format pattern "/budgets/{budget_gid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty} | compact), body: null}
 }
 
 # Get a project's custom fields
@@ -773,7 +795,7 @@ export def "projects-custom-field-settings get" [
   let full_url = (build-url $base ({project_gid: (encode-path-segment $project_gid)} | format pattern "/projects/{project_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "limit": $limit, "offset": $offset, "opt_fields": $opt_fields} | compact), body: null}
 }
 
 # Get a portfolio's custom fields
@@ -803,5 +825,5 @@ export def "portfolios-custom-field-settings get" [
   let full_url = (build-url $base ({portfolio_gid: (encode-path-segment $portfolio_gid)} | format pattern "/portfolios/{portfolio_gid}/custom_field_settings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"opt_pretty": $opt_pretty, "limit": $limit, "offset": $offset, "opt_fields": $opt_fields} | compact), body: null}
 }

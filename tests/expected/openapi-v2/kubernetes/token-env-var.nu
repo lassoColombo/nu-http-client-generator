@@ -4,15 +4,17 @@
 
 const BASE_URL = "https://localhost"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TEST_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -54,12 +56,32 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
@@ -124,7 +146,7 @@ export def "well-known-openid-configuration get-service-account-issuer-open" [
   let full_url = (build-url $base "/.well-known/openid-configuration/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # get available API versions
@@ -148,7 +170,7 @@ export def "core get-versions" [
   let full_url = (build-url $base "/api/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # get available resources
@@ -172,7 +194,7 @@ export def "core-v1 get-resources" [
   let full_url = (build-url $base "/api/v1/")
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # list objects of kind ComponentStatus
@@ -209,7 +231,7 @@ export def "componentstatuses list-component-status" [
   let full_url = (build-url $base "/api/v1/componentstatuses" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "pretty": $pretty, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # read the specified ComponentStatus
@@ -237,7 +259,7 @@ export def "componentstatuses get-component-status" [
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/api/v1/componentstatuses/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pretty": $pretty} | compact), body: null}
 }
 
 # list or watch objects of kind ConfigMap
@@ -274,7 +296,7 @@ export def "configmaps list-config-map-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/configmaps" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "pretty": $pretty, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # list or watch objects of kind Endpoints
@@ -311,7 +333,7 @@ export def "endpoints list-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/endpoints" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "pretty": $pretty, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # list or watch objects of kind Event
@@ -348,7 +370,7 @@ export def "events list-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/events" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "pretty": $pretty, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # list or watch objects of kind LimitRange
@@ -385,7 +407,7 @@ export def "limitranges list-limit-range-for-list-namespaces" [
   let full_url = (build-url $base "/api/v1/limitranges" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "pretty": $pretty, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # list or watch objects of kind Namespace
@@ -421,7 +443,7 @@ export def "namespaces list" [
   let full_url = (build-url $base "/api/v1/namespaces" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # create a Namespace
@@ -460,7 +482,7 @@ export def "namespaces create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation} | compact), body: $req_body}
 }
 
 # create a Binding
@@ -500,7 +522,7 @@ export def "namespaces-bindings create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation, "pretty": $pretty} | compact), body: $req_body}
 }
 
 # delete collection of ConfigMap
@@ -553,7 +575,7 @@ export def "namespaces-configmaps delete-collection-config-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"continue": $qp_continue, "dryRun": $qp_dry_run, "fieldSelector": $field_selector, "gracePeriodSeconds": $grace_period_seconds, "ignoreStoreReadErrorWithClusterBreakingPotential": $ignore_store_read_error_with_cluster_breaking_potential, "labelSelector": $label_selector, "limit": $limit, "orphanDependents": $orphan_dependents, "propagationPolicy": $propagation_policy, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds} | compact), body: $req_body}
 }
 
 # list or watch objects of kind ConfigMap
@@ -591,7 +613,7 @@ export def "namespaces-configmaps list-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/configmaps") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # create a ConfigMap
@@ -631,7 +653,7 @@ export def "namespaces-configmaps create-config-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation} | compact), body: $req_body}
 }
 
 # delete a ConfigMap
@@ -677,7 +699,7 @@ export def "namespaces-configmaps delete-config-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "gracePeriodSeconds": $grace_period_seconds, "ignoreStoreReadErrorWithClusterBreakingPotential": $ignore_store_read_error_with_cluster_breaking_potential, "orphanDependents": $orphan_dependents, "propagationPolicy": $propagation_policy} | compact), body: $req_body}
 }
 
 # read the specified ConfigMap
@@ -707,7 +729,7 @@ export def "namespaces-configmaps get-config-map" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/configmaps/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pretty": $pretty} | compact), body: null}
 }
 
 # partially update the specified ConfigMap
@@ -744,7 +766,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/merge-patch+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/merge-patch+json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation, "force": $force} | compact), body: $req_body}
 }
 
 # replace the specified ConfigMap
@@ -786,7 +808,7 @@ export def "namespaces-configmaps update-config-map-by-namespace-name-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation} | compact), body: $req_body}
 }
 
 # delete collection of Endpoints
@@ -839,7 +861,7 @@ export def "namespaces-endpoints delete-collection" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"continue": $qp_continue, "dryRun": $qp_dry_run, "fieldSelector": $field_selector, "gracePeriodSeconds": $grace_period_seconds, "ignoreStoreReadErrorWithClusterBreakingPotential": $ignore_store_read_error_with_cluster_breaking_potential, "labelSelector": $label_selector, "limit": $limit, "orphanDependents": $orphan_dependents, "propagationPolicy": $propagation_policy, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds} | compact), body: $req_body}
 }
 
 # list or watch objects of kind Endpoints
@@ -877,7 +899,7 @@ export def "namespaces-endpoints list" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace)} | format pattern "/api/v1/namespaces/{namespace}/endpoints") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"allowWatchBookmarks": $allow_watch_bookmarks, "continue": $qp_continue, "fieldSelector": $field_selector, "labelSelector": $label_selector, "limit": $limit, "resourceVersion": $resource_version, "resourceVersionMatch": $resource_version_match, "sendInitialEvents": $send_initial_events, "shardSelector": $shard_selector, "timeoutSeconds": $timeout_seconds, "watch": $watch} | compact), body: null}
 }
 
 # create Endpoints
@@ -916,7 +938,7 @@ export def "namespaces-endpoints create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation} | compact), body: $req_body}
 }
 
 # delete Endpoints
@@ -962,7 +984,7 @@ export def "namespaces-endpoints delete" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "gracePeriodSeconds": $grace_period_seconds, "ignoreStoreReadErrorWithClusterBreakingPotential": $ignore_store_read_error_with_cluster_breaking_potential, "orphanDependents": $orphan_dependents, "propagationPolicy": $propagation_policy} | compact), body: $req_body}
 }
 
 # read the specified Endpoints
@@ -992,7 +1014,7 @@ export def "namespaces-endpoints get" [
   let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/api/v1/namespaces/{namespace}/endpoints/{name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"pretty": $pretty} | compact), body: null}
 }
 
 # partially update the specified Endpoints
@@ -1029,7 +1051,7 @@ export def "namespaces-endpoints update-by-namespace-name" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/merge-patch+json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/merge-patch+json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation, "force": $force} | compact), body: $req_body}
 }
 
 # replace the specified Endpoints
@@ -1070,5 +1092,5 @@ export def "namespaces-endpoints update-by-namespace-name-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: ({"dryRun": $qp_dry_run, "fieldManager": $field_manager, "fieldValidation": $field_validation} | compact), body: $req_body}
 }

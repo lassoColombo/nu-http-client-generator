@@ -4,14 +4,16 @@
 
 const BASE_URL = "http://localhost"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPID_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -53,13 +55,33 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  let auth = {headers: ({"X-Test": "value"} | merge $auth.headers), query: $auth.query}
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let auth = ($auth | update headers ({"X-Test": "value"} | merge $auth.headers))
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
@@ -123,7 +145,7 @@ export def "accounts-bank-accounts delete" [
   let full_url = (build-url $base ({a: (encode-path-segment $a), id: (encode-path-segment $id)} | format pattern "/accounts/{a}/bank_accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /accounts/{a}
@@ -147,7 +169,7 @@ export def "accounts get" [
   let full_url = (build-url $base ({a: (encode-path-segment $a)} | format pattern "/accounts/{a}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # POST /account_links
@@ -173,7 +195,7 @@ export def "account-links create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # POST /chat/completions
@@ -199,7 +221,7 @@ export def "chat-completions create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /blocks/{id}
@@ -223,7 +245,7 @@ export def "blocks get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /repos
@@ -245,5 +267,5 @@ export def "repos list-for-user" [
   let full_url = (build-url $base "/repos")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }

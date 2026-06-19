@@ -4,17 +4,19 @@
 
 const BASE_URL = "https://custom.example.com"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VINNY_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {headers: {Authorization: $"JWT ($token_val)"}, query: ""} }
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "static" => { {headers: {Authorization: $"STATIC ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "static" => { {scheme: $scheme, headers: {Authorization: $"STATIC ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -56,12 +58,32 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
@@ -126,7 +148,7 @@ export def "avcfg-asset get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/asset/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PATCH /avcfg/asset/enable/{id}/
@@ -161,7 +183,7 @@ export def "avcfg-asset-enable update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /avcfg/chart/endpoints/{idrs}/
@@ -188,7 +210,7 @@ export def "avcfg-chart-endpoints list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/chart/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # GET /avcfg/customers/
@@ -214,7 +236,7 @@ export def "avcfg-customers list" [
   let full_url = (build-url $base "/avcfg/customers/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"idrs": $idrs, "page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # PUT /avcfg/cynet/alerts/acknowledge/{id}/
@@ -264,7 +286,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PATCH /avcfg/cynet/alerts/acknowledge/{id}/
@@ -314,7 +336,7 @@ export def "avcfg-cynet-alerts-acknowledge update-by-id-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # GET /avcfg/cynet/alerts/list/{idrs}/
@@ -380,7 +402,7 @@ export def "avcfg-cynet-alerts-list list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/list/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"acknowledged": $acknowledged, "alert_domain": $alert_domain, "alert_ip": $alert_ip, "alert_type": $alert_type, "alert_url": $alert_url, "command_line": $command_line, "created_at": $created_at, "customer": $customer, "date_changed": $date_changed, "date_in": $date_in, "date_in__gte": $date_in_gte, "date_in__lte": $date_in_lte, "endpoint": $endpoint, "endpoint_name": $endpoint_name, "endpoint_type": $endpoint_type, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "file": $file, "incident_name": $incident_name, "last_seen": $last_seen, "last_seen__gte": $last_seen_gte, "last_seen__lte": $last_seen_lte, "notified_cardinalis": $notified_cardinalis, "notified_llama": $notified_llama, "ordering": $ordering, "page": $page, "path": $path, "per_page": $per_page, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "search": $search, "severity": $severity, "solved": $solved, "status": $status, "tenant": $tenant, "type": $type, "uniqueness": $uniqueness, "updated_at": $updated_at, "user": $user, "user_name": $user_name, "username": $username} | compact), body: null}
 }
 
 # List all XDR log for a IDRS
@@ -447,7 +469,7 @@ export def "avcfg-cynet-alerts-list-scangroup list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/list/scangroup/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"acknowledged": $acknowledged, "alert_domain": $alert_domain, "alert_ip": $alert_ip, "alert_type": $alert_type, "alert_url": $alert_url, "command_line": $command_line, "created_at": $created_at, "customer": $customer, "date_changed": $date_changed, "date_in": $date_in, "date_in__gte": $date_in_gte, "date_in__lte": $date_in_lte, "endpoint": $endpoint, "endpoint_name": $endpoint_name, "endpoint_type": $endpoint_type, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "file": $file, "incident_name": $incident_name, "last_seen": $last_seen, "last_seen__gte": $last_seen_gte, "last_seen__lte": $last_seen_lte, "notified_cardinalis": $notified_cardinalis, "notified_llama": $notified_llama, "ordering": $ordering, "page": $page, "path": $path, "per_page": $per_page, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "search": $search, "severity": $severity, "solved": $solved, "status": $status, "tenant": $tenant, "type": $type, "uniqueness": $uniqueness, "updated_at": $updated_at, "user": $user, "user_name": $user_name, "username": $username} | compact), body: null}
 }
 
 # GET /avcfg/cynet/alerts/summary/{idrs}/
@@ -513,7 +535,7 @@ export def "avcfg-cynet-alerts-summary list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"acknowledged": $acknowledged, "alert_domain": $alert_domain, "alert_ip": $alert_ip, "alert_type": $alert_type, "alert_url": $alert_url, "command_line": $command_line, "created_at": $created_at, "customer": $customer, "date_changed": $date_changed, "date_in": $date_in, "date_in__gte": $date_in_gte, "date_in__lte": $date_in_lte, "endpoint": $endpoint, "endpoint_name": $endpoint_name, "endpoint_type": $endpoint_type, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "file": $file, "incident_name": $incident_name, "last_seen": $last_seen, "last_seen__gte": $last_seen_gte, "last_seen__lte": $last_seen_lte, "notified_cardinalis": $notified_cardinalis, "notified_llama": $notified_llama, "ordering": $ordering, "page": $page, "path": $path, "per_page": $per_page, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "search": $search, "severity": $severity, "solved": $solved, "status": $status, "tenant": $tenant, "type": $type, "uniqueness": $uniqueness, "updated_at": $updated_at, "user": $user, "user_name": $user_name, "username": $username} | compact), body: null}
 }
 
 # POST /avcfg/cynet/carpet/active_idrs/
@@ -535,7 +557,7 @@ export def "avcfg-cynet-carpet-active-idrs create" [
   let full_url = (build-url $base "/avcfg/cynet/carpet/active_idrs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /avcfg/cynet/carpet/endpoints/{idrs}/
@@ -562,7 +584,7 @@ export def "avcfg-cynet-carpet-endpoints list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/carpet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page, "per_page": $per_page} | compact), body: null}
 }
 
 # GET /avcfg/cynet/endpoint/ci/{atlantis_id}/
@@ -586,7 +608,7 @@ export def "avcfg-cynet-endpoint-ci get" [
   let full_url = (build-url $base ({atlantis_id: (encode-path-segment $atlantis_id)} | format pattern "/avcfg/cynet/endpoint/ci/{atlantis_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /avcfg/cynet/endpoints/{idrs}/
@@ -620,7 +642,7 @@ export def "avcfg-cynet-endpoints list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/endpoints/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"cynet_info__last_seen_at__gte": $cynet_info_last_seen_at_gte, "cynet_info__last_seen_at__lte": $cynet_info_last_seen_at_lte, "hostname": $hostname, "ordering": $ordering, "page": $page, "per_page": $per_page, "scan_group": $scan_group, "search": $search, "type": $type} | compact), body: null}
 }
 
 # GET /avcfg/cynet/endpoints/alerts/summary/{idrs}/
@@ -686,7 +708,7 @@ export def "avcfg-cynet-endpoints-alerts-summary list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/avcfg/cynet/endpoints/alerts/summary/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"acknowledged": $acknowledged, "alert_domain": $alert_domain, "alert_ip": $alert_ip, "alert_type": $alert_type, "alert_url": $alert_url, "command_line": $command_line, "created_at": $created_at, "customer": $customer, "date_changed": $date_changed, "date_in": $date_in, "date_in__gte": $date_in_gte, "date_in__lte": $date_in_lte, "endpoint": $endpoint, "endpoint_name": $endpoint_name, "endpoint_type": $endpoint_type, "eps_prevention": $eps_prevention, "eps_prevention_success": $eps_prevention_success, "file": $file, "incident_name": $incident_name, "last_seen": $last_seen, "last_seen__gte": $last_seen_gte, "last_seen__lte": $last_seen_lte, "notified_cardinalis": $notified_cardinalis, "notified_llama": $notified_llama, "ordering": $ordering, "page": $page, "path": $path, "per_page": $per_page, "remediation_status": $remediation_status, "scan_group_name": $scan_group_name, "search": $search, "severity": $severity, "solved": $solved, "status": $status, "tenant": $tenant, "type": $type, "uniqueness": $uniqueness, "updated_at": $updated_at, "user": $user, "user_name": $user_name, "username": $username} | compact), body: null}
 }
 
 # GET /avcfg/cynet/tenant/{id}/
@@ -710,7 +732,7 @@ export def "avcfg-cynet-tenant get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/avcfg/cynet/tenant/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # PUT /avcfg/cynet/tenant/{id}/
@@ -744,7 +766,7 @@ export def "avcfg-cynet-tenant update-by-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # PATCH /avcfg/cynet/tenant/{id}/
@@ -778,7 +800,7 @@ export def "avcfg-cynet-tenant update-by-id-1" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # POST /avcfg/cynet/tenant/create/
@@ -810,5 +832,5 @@ export def "avcfg-cynet-tenant-create create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

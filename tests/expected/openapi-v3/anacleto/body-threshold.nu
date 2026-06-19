@@ -4,17 +4,19 @@
 
 const BASE_URL = "http://127.0.0.1:8000"
 
-# Build auth: returns {headers: record, query: string}
+# Build auth: returns {scheme: string, headers: record, query: string, location: string}.
+# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
+# where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ANACLETO_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
-  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "jwt" => { {headers: {Authorization: $"JWT ($token_val)"}, query: ""} }
-    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
-    "static" => { {headers: {Authorization: $"STATIC ($token_val)"}, query: ""} }
-    "none" => { {headers: {}, query: ""} }
-    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "jwt" => { {scheme: $scheme, headers: {Authorization: $"JWT ($token_val)"}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "static" => { {scheme: $scheme, headers: {Authorization: $"STATIC ($token_val)"}, query: "", location: "header"} }
+    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
@@ -56,12 +58,32 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
+# Build the dry-run record returned by --dry-run. Shape:
+#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
+#    auth: {scheme, location}}
+# `meta` carries logical-form data (the query record by spec name, the pre-serialization
+# body) that do-request itself cannot reconstruct from its wire-format args.
+def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
+  let m = ($meta | default {})
+  {
+    dry_run: true
+    method: $method
+    url: $url
+    query: ($m | get -o query | default {})
+    headers: $auth.headers
+    body: ($m | get -o body)
+    content_type: $content_type
+    timeout: $timeout
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+}
+
 # Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
   let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
   let timeout = ($max_time | default 30min)
   let ct = ($content_type | default "application/json")
-  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
   let resp = match $method {
     "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
     "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
@@ -126,7 +148,7 @@ export def "carpet-active-idrs create" [
   let full_url = (build-url $base "/api/carpet/v1/active_idrs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get asset list for customer
@@ -156,7 +178,7 @@ export def "carpet-asset-list-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/asset_list/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering": $ordering, "page": $page, "per_page": $per_page, "search": $search} | compact), body: null}
 }
 
 # Get host vulnerabilities for customer
@@ -181,7 +203,7 @@ export def "carpet-host-idrs get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/carpet/v1/host/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Return customer api key
@@ -206,7 +228,7 @@ export def "delivery-apikeys-idrs get" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/apikeys/idrs/{idrs}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Asset list
@@ -243,7 +265,7 @@ export def "delivery-asset list" [
   let full_url = (build-url $base "/api/delivery/v1/asset/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"address": $address, "idrs": $idrs, "is_active": $is_active, "is_public": $is_public, "is_scannable": $is_scannable, "name": $name, "ordering": $ordering, "page": $page, "per_page": $per_page, "scanner_name": $scanner_name, "search": $search, "tag": $tag, "type": $type} | compact), body: null}
 }
 
 # Add new asset tag
@@ -271,7 +293,7 @@ export def "delivery-asset-tag-create tag" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Delete asset tag
@@ -296,7 +318,7 @@ export def "delivery-asset-tag-delete delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset-tag/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit asset tag
@@ -325,7 +347,7 @@ export def "delivery-asset-tag-edit update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get asset Tag for Customer
@@ -355,7 +377,7 @@ export def "delivery-asset-tag-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset-tag/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering": $ordering, "page": $page, "per_page": $per_page, "search": $search} | compact), body: null}
 }
 
 # Add new asset
@@ -383,7 +405,7 @@ export def "delivery-asset-create create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Deactivate asset
@@ -408,7 +430,7 @@ export def "delivery-asset-deactivate create" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/deactivate/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Delete asset
@@ -433,7 +455,7 @@ export def "delivery-asset-delete delete" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/delete/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Get asset attribute
@@ -458,7 +480,7 @@ export def "delivery-asset-details get" [
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/delivery/v1/asset/details/{id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # Edit asset attribute
@@ -488,7 +510,7 @@ export def "delivery-asset-details update" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }
 
 # Get asset for Customer
@@ -518,7 +540,7 @@ export def "delivery-asset-idrs list" [
   let full_url = (build-url $base ({idrs: (encode-path-segment $idrs)} | format pattern "/api/delivery/v1/asset/idrs/{idrs}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json"
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"ordering": $ordering, "page": $page, "per_page": $per_page, "search": $search} | compact), body: null}
 }
 
 # Add whitelist for the asset
@@ -548,5 +570,5 @@ export def "delivery-asset-whitelist create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
 }

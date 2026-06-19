@@ -474,13 +474,13 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     if not ($s.name in $seen_names) {
       $seen_names = ($seen_names | append $s.name)
       if $s.in == "query" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {}, query: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"} }"))
+        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {}, query: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\", location: \"query\"} }"))
       } else if $s.in == "cookie" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {Cookie: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"}, query: \"\"} }"))
+        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {Cookie: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"}, query: \"\", location: \"cookie\"} }"))
       } else if $s.prefix == "" {
-        $match_arms = ($match_arms | append $"    \"($s.name)\" => { {headers: {($s.header_name): $token_val}, query: \"\"} }")
+        $match_arms = ($match_arms | append $"    \"($s.name)\" => { {scheme: $scheme, headers: {($s.header_name): $token_val}, query: \"\", location: \"header\"} }")
       } else {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {headers: {($s.header_name): $\"($s.prefix) \($token_val\)\"}, query: \"\"} }"))
+        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {($s.header_name): $\"($s.prefix) \($token_val\)\"}, query: \"\", location: \"header\"} }"))
       }
     }
   }
@@ -491,18 +491,20 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
   let has_basic = ($auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" })
   if $has_basic and (not ("basic-credentials" in $seen_names)) {
     $seen_names = ($seen_names | append "basic-credentials")
-    $match_arms = ($match_arms | append '    "basic-credentials" => { {headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: ""} }')
+    $match_arms = ($match_arms | append '    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }')
   }
-  $match_arms = ($match_arms | append '    "none" => { {headers: {}, query: ""} }')
-  $match_arms = ($match_arms | append '    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }')
+  $match_arms = ($match_arms | append '    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }')
+  $match_arms = ($match_arms | append '    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }')
   let match_body = $match_arms | str join "\n"
 
   [
-    '# Build auth: returns {headers: record, query: string}'
+    '# Build auth: returns {scheme: string, headers: record, query: string, location: string}.'
+    '# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers'
+    '# where the token went without inspecting headers/query themselves.'
     'def build-auth [token?: string, auth_scheme?: string]: nothing -> record {'
     $"  let token_val = if \($token != null\) and \($token | is-not-empty\) { $token } else { $env | get -o ($token_env_var) | default \"\" }"
     '  let scheme = ($auth_scheme | default "bearer")'
-    '  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }'
+    '  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }'
     '  match $scheme {'
     $match_body
     '  }'
@@ -546,18 +548,38 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     '  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }'
     '}'
     ''
+    '# Build the dry-run record returned by --dry-run. Shape:'
+    '#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,'
+    '#    auth: {scheme, location}}'
+    '# `meta` carries logical-form data (the query record by spec name, the pre-serialization'
+    '# body) that do-request itself cannot reconstruct from its wire-format args.'
+    'def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {'
+    '  let m = ($meta | default {})'
+    '  {'
+    '    dry_run: true'
+    '    method: $method'
+    '    url: $url'
+    '    query: ($m | get -o query | default {})'
+    '    headers: $auth.headers'
+    '    body: ($m | get -o body)'
+    '    content_type: $content_type'
+    '    timeout: $timeout'
+    '    auth: {scheme: $auth.scheme, location: $auth.location}'
+    '  }'
+    '}'
+    ''
     '# Execute HTTP request with method dispatch'
-    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any]: nothing -> any {'
+    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {'
     '  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }'
     ('  let timeout = ($max_time | default ' + $default_timeout + ')')
     '  let ct = ($content_type | default "application/json")'
   ] | if ($default_headers | is-not-empty) {
     let header_pairs = ($default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
-    $in | append ('  let auth = {headers: ({' + $header_pairs + '} | merge $auth.headers), query: $auth.query}')
+    $in | append ('  let auth = ($auth | update headers ({' + $header_pairs + '} | merge $auth.headers))')
   } else {
     $in
   } | append [
-    '  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }'
+    '  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }'
     '  let resp = match $method {'
     '    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }'
     '    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }'
@@ -818,6 +840,11 @@ export def build-body-code [cmd: record, config: record] {
     $"$($v)"
   } else { null }
 
+  # `$req_body_wire` is the post-serialization body sent on the wire (only bound
+  # when form-urlencoded conversion happens). `$req_body` keeps the logical
+  # record, threaded into the dry-run meta below so callers see what they
+  # expressed instead of `k=v&k=v` strings. Issue 32 (dry-run redesign).
+  let emitted_wire_body = $has_ct_override or ($cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded"))
   if $has_ct_override {
     # Effective content-type for body serialization and the request.
     $lines = ($lines | append ($"  let effective_ct = \(($ct_var) | default \"($cmd.content_type)\"\)"))
@@ -825,19 +852,35 @@ export def build-body-code [cmd: record, config: record] {
     # x-www-form-urlencoded, serialize the body record to `k=v&k=v`. Other
     # content types pass the body through unchanged — JSON is what Nushell's
     # `http post` already does by default.
-    $lines = ($lines | append '  let req_body = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }')
+    $lines = ($lines | append '  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }')
   } else if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
     # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
     # string, not a JSON record. Nushell's `http post --content-type "..."`
     # sets the header but doesn't reshape the body. Spec-conformance with
     # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
     # Nulls are dropped — caller's --field with no value shouldn't appear.
-    $lines = ($lines | append '  let req_body = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)')
+    $lines = ($lines | append '  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)')
   }
 
-  let body_arg = if $is_multipart { ' $mp.body' } else if $cmd.has_body { " $req_body" } else { "" }
+  # body_arg must always be a value (null when no body) so the trailing
+  # `dry_run_meta` arg lands in the right positional slot — without an
+  # explicit body placeholder, the meta record would bind to do-request's
+  # `body?` param.
+  let body_arg = if $is_multipart { ' $mp.body' } else if $emitted_wire_body { ' $req_body_wire' } else if $cmd.has_body { ' $req_body' } else { ' null' }
   let ct_arg = if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
-  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full ($ct_arg)($body_arg)')
+
+  # Dry-run meta record: the logical query (by spec param name) and the logical
+  # body (pre-conversion record), threaded into do-request so the dry-run helper
+  # can return them in the user-facing record. Built unconditionally at emit
+  # time; only consumed when --dry-run fires.
+  let dr_query_expr = if ($qp_decorated.items | is-not-empty) {
+    let entries = ($qp_decorated.items | each {|q| $"($q.name | to nuon): $($q.flag_var)" } | str join ", ")
+    $"\({($entries)} | compact\)"
+  } else { '{}' }
+  let dr_body_expr = if $cmd.has_body { '$req_body' } else { 'null' }
+  let dr_meta = $"{query: ($dr_query_expr), body: ($dr_body_expr)}"
+
+  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full ($ct_arg)($body_arg) ($dr_meta)')
 
   $lines | str join "\n"
 }

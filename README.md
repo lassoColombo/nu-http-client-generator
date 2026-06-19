@@ -159,7 +159,7 @@ Alongside the spec-derived flags, every command also ships with the same set of 
 | `--max-time`      | `-m`  | `duration` | Per-request timeout. Defaults to `--default-timeout` from generation.                            |
 | `--raw`           | `-r`  | switch     | Return the response body as text (no JSON parsing).                                              |
 | `--allow-errors`  | `-e`  | switch     | Return the full HTTP response record instead of erroring on non-2xx.                             |
-| `--dry-run`       | `-n`  | switch     | Return the request that *would* be sent (method, url, headers, body, …) without executing it.    |
+| `--dry-run`       | `-n`  | switch     | Return the request that *would* be sent as a structured record (method, url, query, headers, body, auth, …) without executing it.    |
 | `--accept`        |       | `string`   | Override the `Accept` header. Only present on operations whose spec declares more than one response content type; tab-completes from those types. |
 
 ### Passing inputs
@@ -211,20 +211,36 @@ const BASE_URL = "https://petstore3.swagger.io/api/v3"
 
 `--base-url` completes from the spec's `servers` list plus anything you passed via `--urls` at generation time, and `--auth-scheme` completes from the schemes the spec declared (plus `none` if any operation was marked public). Enum-typed parameters each get their own completer, with identical enum sets deduplicated across the module - one completer per unique enum, not one per parameter.
 
-`--dry-run` is useful when you want to see what a call would do without actually making it. It returns the full request record - method, URL, headers, query string, body, timeout - so you can sanity-check the shape before it hits production:
+`--dry-run` is useful when you want to see what a call would do without actually making it. It returns a structured request record so you can sanity-check the shape before it hits production - or assert against individual fields in tests:
 
 ```nu
 > petstore user createUser --body {username: "alice", email: "alice@example.com"} --dry-run
-╭────────────────┬─────────────────────────────────────────────────────────╮
-│ method         │ post                                                    │
-│ url            │ https://petstore3.swagger.io/api/v3/user                │
-│ headers        │ {Authorization: "Bearer …", Accept: "application/json"} │
-│ query_string   │                                                         │
-│ content_type   │ application/json                                        │
-│ timeout        │ 30min                                                   │
-│ body           │ {username: "alice", email: "alice@example.com"}         │
-╰────────────────┴─────────────────────────────────────────────────────────╯
+╭──────────────┬────────────────────────────────────────────────────────────╮
+│ dry_run      │ true                                                       │
+│ method       │ post                                                       │
+│ url          │ https://petstore3.swagger.io/api/v3/user                   │
+│ query        │ {}                                                         │
+│ headers      │ {Authorization: "Bearer …", Accept: "application/json"}    │
+│ body         │ {username: "alice", email: "alice@example.com"}            │
+│ content_type │ application/json                                           │
+│ timeout      │ 30min                                                      │
+│ auth         │ {scheme: "bearer", location: "header"}                     │
+╰──────────────┴────────────────────────────────────────────────────────────╯
 ```
+
+| Field | Meaning |
+|---|---|
+| `dry_run: true` | Marker — distinguishes a dry-run record from a real response. |
+| `method` | Lowercase HTTP verb. |
+| `url` | The final URL as it would be sent on the wire (including any auth-token query fragment). |
+| `query` | The user-passed query params as a record keyed by spec param name, with nulls dropped. Use this for tests instead of parsing the URL. |
+| `headers` | The final merged headers as they would be sent — including the resolved `Authorization` and `Accept`. |
+| `body` | The **logical** body the caller expressed: a record for JSON/form-urlencoded/multipart, a string for text/xml, or `null` when there's no body. Form-urlencoded and multipart specifically: this is the record **before** wire serialization, so `$r.body.field == "value"` works regardless of content-type. |
+| `content_type` | The effective content-type the real request would use. |
+| `timeout` | The effective timeout (a `duration`). |
+| `auth` | `{scheme, location}` — which scheme actually fired and where the token went: `"header"`, `"query"`, `"cookie"`, or `"none"`. |
+
+Secrets are not redacted — `$r.url` and `$r.headers.Authorization` contain the actual token that would be sent. If you log dry-run records, strip them first: `$r | update headers.Authorization "[REDACTED]"`.
 
 ### Introspecting the client
 
