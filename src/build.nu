@@ -245,6 +245,7 @@ def canonical-verb [prefix: string] {
     "insert" => "create"
     "remove" => "delete"
     "destroy" => "delete"
+    "head" => "head"
     # Extended verb vocabulary — k8s, Docker, Notion, Azure batch, etc.
     "read" => "get"
     "replace" => "update"
@@ -373,7 +374,7 @@ def to-kebab [s: string] {
 # Membership list of canonical verbs. Mirrors `canonical-verb`'s match arms.
 # Used by the classifier for O(1) verb-token detection.
 const KNOWN_VERBS = [
-  get post put patch delete list create update retrieve fetch insert remove destroy
+  get post put patch delete list create update retrieve fetch insert remove destroy head
   read replace watch append query inspect attach prune exec commit build ping cancel
   enable disable wait restart start stop clone copy move add
   unsubscribe subscribe unregister register unarchive archive unpublish publish
@@ -902,6 +903,12 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     $operation_id | split row --regex '[.#]' | last
   } else if ($operation_id | is-not-empty) {
     $operation_id
+  } else if $method == "options" {
+    # Issue 35.B: avoid `options-options` stutter when method-fallback
+    # re-tokenizes. `options` stays out of KNOWN_VERBS (3 leftmost-noun
+    # `<X>Options_Verb` opIds rely on its OTHER classification), so the
+    # empty-opid case needs a separate bypass.
+    ""
   } else {
     $method
   }
