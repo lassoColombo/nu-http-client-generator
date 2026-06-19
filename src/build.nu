@@ -598,9 +598,14 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   let deprecated = ($op.deprecated? | default false)
   let external_docs = ($op.externalDocs? | default null)
 
-  # per-operation security override
+  # per-operation security override.
+  # OAS3 §4.8.30: `security: []` (empty array) removes the top-level security
+  # declaration for this operation. Use `!= null` (not `is-not-empty`) so
+  # an empty array enters the override branch and yields "none". The legacy
+  # `[{}]` form (one empty record meaning "no auth required") also yields
+  # "none". 42.A.
   let op_security = ($op.security?)
-  let default_auth = if ($op_security | is-not-empty) {
+  let default_auth = if ($op_security != null) {
     if ($op_security | is-empty) {
       "none"
     } else {
@@ -610,7 +615,7 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
         let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
         if ($matched | is-not-empty) { $matched | first | get name } else { $root_default_auth }
       } else {
-        $root_default_auth
+        "none"
       }
     }
   } else {
