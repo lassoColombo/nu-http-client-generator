@@ -540,6 +540,17 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     '  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"'
     '}'
     ''
+    '# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`'
+    '# (the default for path params) and Swagger 2 `collectionFormat: csv` both join'
+    '# the elements with a literal comma WITHIN the single path segment, each element'
+    '# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without'
+    '# this a `list` positional would render as the Nushell debug form `[a, b]`,'
+    '# producing a guaranteed-404 URL. The else-branch keeps scalar values on the'
+    '# historical encode-path-segment path (defensive against a bare string).'
+    'def encode-path-array [v: any]: nothing -> string {'
+    '  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }'
+    '}'
+    ''
     '# Build URL from base, path, and optional query string'
     'def build-url [base: string, path: string, query?: string]: nothing -> string {'
     '  let parsed = ($base | url parse | reject params)'
@@ -669,7 +680,11 @@ export def build-body-code [cmd: record, config: record] {
       # the URL and break routing (issue #10-1). The path-template literal
       # (the `/{x}/{y}/` structure) stays intact; only the substituted values
       # get encoded.
-      $"($pvar): \(encode-path-segment $($pvar)\)"
+      # Issue 49.A: array-typed path params (OA3 style:simple / Swagger2
+      # collectionFormat:csv) comma-join their elements within the segment via
+      # encode-path-array; scalars keep the historical encode-path-segment path.
+      let encoder = if ($p.type == "array") { "encode-path-array" } else { "encode-path-segment" }
+      $"($pvar): \(($encoder) $($pvar)\)"
     } | str join ", ")
     $"\({($record_fields)} | format pattern ($pattern | to nuon)\)"
   } else {
@@ -852,14 +867,25 @@ export def build-body-code [cmd: record, config: record] {
     # x-www-form-urlencoded, serialize the body record to `k=v&k=v`. Other
     # content types pass the body through unchanged — JSON is what Nushell's
     # `http post` already does by default.
-    $lines = ($lines | append '  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }')
+    # Issue 50.A: same non-record guard as the baked form line below — the
+    # `--body` fallback makes $req_body null/string/list, and `transpose` only
+    # accepts a record/table. record → transpose; null → ""; else → into string.
+    $lines = ($lines | append '  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }')
   } else if $cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded") {
     # application/x-www-form-urlencoded: HTTP body must be a `k1=v1&k2=v2`
     # string, not a JSON record. Nushell's `http post --content-type "..."`
     # sets the header but doesn't reshape the body. Spec-conformance with
     # RFC 6749 (OAuth token endpoints) requires explicit serialization here.
     # Nulls are dropped — caller's --field with no value shouldn't appear.
-    $lines = ($lines | append '  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)')
+    # Issue 50.A: guard $req_body against a non-record (the `--body` fallback
+    # path binds it straight from `--body`, so it is null when omitted and a
+    # string/list for `--body: string|list`). `transpose` only accepts a
+    # record/table — without this guard the most natural invocation (no --body)
+    # crashes with `Input type not supported`, in --dry-run too. Mirrors the
+    # multipart record-shape guard (~:842): record → transpose+build-query
+    # (unchanged); null → "" (empty form body); else (string/list) → passthrough
+    # via `into string` (the caller already supplied the wire form).
+    $lines = ($lines | append '  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })')
   }
 
   # body_arg must always be a value (null when no body) so the trailing
@@ -1046,7 +1072,17 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   $cmd_lines = ($cmd_lines | append $'export def "($cmd.name)" [')
   $cmd_lines = ($cmd_lines | append $sig_result.signature)
   let input_type = if $cmd.has_body { "any" } else { "nothing" }
-  $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($cmd.return_type) {")
+  # 47.A: a scalar-leaf response type (string/int/bool/float/...) is a parse-time
+  # LIE for this command — every command also returns a *record* under --dry-run/--full
+  # (and a *string* under --raw), and Nushell type-checks the downstream pipe against
+  # this declared output at parse time. Scalar outputs make structured ops
+  # (get/select/where/...) on the result a parse error. Loosen scalar leaves to `any`
+  # (the honest type; do-request is already `nothing -> any`). record/table/list/any
+  # outputs keep their rich annotation — they pipe fine. (Doc-preservation = D-10.)
+  let output_type = if ($cmd.return_type in [
+    "string" "int" "bool" "float" "number" "datetime" "binary" "duration"
+  ]) { "any" } else { $cmd.return_type }
+  $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($output_type) {")
 
   let body_code = (build-body-code $cmd $config)
   $cmd_lines = ($cmd_lines | append $body_code)

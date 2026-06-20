@@ -891,6 +891,41 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
   {accept_types: $accept_types, return_type: $return_type, returns_body: $returns_body}
 }
 
+# Build the `-by-<...>` discriminator suffix from a list of path params, kebab-casing
+# each name and collapsing adjacent-duplicate tokens so nested `{thing_id}`/`{id}`
+# (and `{type}`/`{type_id}`, `{scope}`/`{scope_id}`) siblings don't stutter.
+#
+# Two collapse rules, both comparing against the trailing kebab-segment of the
+# previously kept token (`prev_tail`):
+#   - Issue 45.A: drop a param whose ENTIRE kebab form equals `prev_tail`
+#     (`dashboard-id` + `id` -> `dashboard-id`; `target-id` + `id` -> `target-id`).
+#   - Issue 46.A: when the param's LEADING kebab segment equals `prev_tail`, drop
+#     just that leading segment before appending
+#     (`type` + `type-id` -> `type-id`; `scope` + `scope-id` -> `scope-id`),
+#     so `[username,type,type_id,id]` -> `username-type-id` and
+#     `[site_id,scope,scope_id,metric]` -> `site-id-scope-id-metric`.
+# Counter-cases stay untouched: `[user_id,label_id]` (head `label` != tail `id`),
+# `[parent_id,child]` (head `child` != tail `id`), `[org,project,repo]`.
+#
+# Shared by `derive-command-name`'s `_2`-dedup branch and `mod.nu`'s
+# `deduplicate-commands` pass-1 suffix branch — previously two divergent copies.
+export def build-param-suffix [path_params: list]: nothing -> string {
+  $path_params
+  | each {|p| $p.name | str kebab-case }
+  | reduce --fold [] {|tok, acc|
+      let prev_tail = (if ($acc | is-empty) { "" } else { $acc | last | split row '-' | last })
+      let tok_head = ($tok | split row '-' | first)
+      if $tok == $prev_tail {
+        $acc
+      } else if $tok_head == $prev_tail {
+        $acc | append ($tok | split row '-' | skip 1 | str join '-')
+      } else {
+        $acc | append $tok
+      }
+    }
+  | str join '-'
+}
+
 # Derive command name from path, method, operationId, tags, and path params.
 def derive-command-name [url_path: string, method: string, operation_id: string, tags: list, path_params: list, verb_map: record] {
   let path_segments = ($url_path | split row '/' | where {|s|
@@ -1039,21 +1074,9 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   }
 
   if $is_duplicate {
-    # Issue 34.B: kebab-case each path-param name so the suffix stays
-    # internally consistent with the rest of the command (no surviving
-    # camelCase or underscore from the spec).
-    # Issue 45.A: when a path nests `{thing_id}` next to a sibling `{id}`,
-    # the kebab-joined suffix becomes `...-thing-id-id`. Drop a param token
-    # whose entire kebab form matches the trailing kebab-segment of the
-    # previously kept token, collapsing `dashboard-id-id` -> `dashboard-id`,
-    # `target-id-id` -> `target-id`, `type-type-id-id` -> `type-id`, etc.
-    let param_suffix = $path_params
-      | each {|p| $p.name | str kebab-case }
-      | reduce --fold [] {|tok, acc|
-          let prev_tail = (if ($acc | is-empty) { "" } else { $acc | last | split row '-' | last })
-          if $tok == $prev_tail { $acc } else { $acc | append $tok }
-        }
-      | str join '-'
+    # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
+    # adjacent-duplicate tokens (see `build-param-suffix`).
+    let param_suffix = (build-param-suffix $path_params)
     # Issue 34.A: when there are no path params, the `-by-` marker would
     # collapse to a hanging hyphen. Skip it and let pass-2 numeric-suffix
     # dedup handle the collision (matches same-resource same-verb path).
