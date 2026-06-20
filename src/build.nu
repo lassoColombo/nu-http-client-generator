@@ -549,7 +549,25 @@ def pick-action [classified: list, method: string] {
       # primary verb. Suppresses verb-verb stutter like `create-create-tags`
       # (POST + Create), `get-get-bundle-info` (GET + Info→get),
       # `list-list-of-unsubscribed-addresses` (GET + Query→list).
-      (canonical-verb $tok) != $primary_verb
+      #
+      # Issue 44.A: also drop a secondary VERB whose canonical form matches
+      # an earlier-kept secondary VERB's canonical form. Suppresses
+      # canonical-stutter like `list-catalog-get-get` (opId
+      # `catalogProductRenderListV1GetListGet` — two `get`s survive 33.A
+      # because neither equals the primary `list`), `get-list-list`
+      # (`GET_ListAllSettings` — `list` + `all`→`list`), `list-get-get`
+      # (`query_token_info_v1_token_get` — `info`→`get` + `get`).
+      let canon = (canonical-verb $tok)
+      if $canon == $primary_verb {
+        false
+      } else {
+        let prev_canons = ($classified | first $i
+          | enumerate
+          | where {|p| ($p.index != $chosen_idx) and ($p.item.label == "VERB") }
+          | each {|p| canonical-verb $p.item.token }
+          | where { $in != $primary_verb })
+        not ($canon in $prev_canons)
+      }
     } else {
       # OTHER. Issue 41.A: when the primary verb came from method-fallback
       # (no token classified as VERB), also drop OTHER tokens whose word
