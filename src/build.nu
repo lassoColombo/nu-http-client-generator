@@ -404,8 +404,17 @@ const ARTICLES = [a an the]
 #   "readCoreV1NamespacedConfigMap" → [read, core, v1, namespaced, config, map]
 #   ".GetAvailableLocales"          → [get, available, locales]
 def tokenize-opid [s: string] {
+  # Issue 45.B: strip path-template placeholder braces before tokenizing.
+  # Some specs (HubSpot hubapi.com, Ex Libris almaws) declare operationId as
+  # the literal HTTP path, e.g. `delete-/marketing/v3/events/{externalEventId}_archive`.
+  # Without this strip, `{externalEventId}` survives as a single token that
+  # kebabs to `{external-event-id}` in the rendered command name. Replacing
+  # `{name}` with `name` lets the inner identifier go through normal
+  # tokenization and classify correctly (typically as PARAM via the
+  # path_param_token_set check, then dropped from the discriminator).
+  let cleaned = ($s | str replace --all --regex '\{([^}]+)\}' '$1')
   let raw = (
-    $s
+    $cleaned
     | split row --regex '[._/\-\s:]+'
     | where {|p| $p | is-not-empty }
     | each {|p|
@@ -1033,7 +1042,18 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     # Issue 34.B: kebab-case each path-param name so the suffix stays
     # internally consistent with the rest of the command (no surviving
     # camelCase or underscore from the spec).
-    let param_suffix = $path_params | each {|p| $p.name | str kebab-case } | str join '-'
+    # Issue 45.A: when a path nests `{thing_id}` next to a sibling `{id}`,
+    # the kebab-joined suffix becomes `...-thing-id-id`. Drop a param token
+    # whose entire kebab form matches the trailing kebab-segment of the
+    # previously kept token, collapsing `dashboard-id-id` -> `dashboard-id`,
+    # `target-id-id` -> `target-id`, `type-type-id-id` -> `type-id`, etc.
+    let param_suffix = $path_params
+      | each {|p| $p.name | str kebab-case }
+      | reduce --fold [] {|tok, acc|
+          let prev_tail = (if ($acc | is-empty) { "" } else { $acc | last | split row '-' | last })
+          if $tok == $prev_tail { $acc } else { $acc | append $tok }
+        }
+      | str join '-'
     # Issue 34.A: when there are no path params, the `-by-` marker would
     # collapse to a hanging hyphen. Skip it and let pass-2 numeric-suffix
     # dedup handle the collision (matches same-resource same-verb path).

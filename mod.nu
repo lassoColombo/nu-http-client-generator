@@ -68,7 +68,18 @@ def deduplicate-commands [commands: list] {
       # Issue 34.B: kebab-case each path-param name so the suffix stays
       # internally consistent with the rest of the command (no surviving
       # camelCase or underscore from the spec).
-      let suffix = $cmd.path_params | each {|p| $p.name | str kebab-case } | str join '-'
+      # Issue 45.A: when a path nests `{thing_id}` next to a sibling `{id}`,
+      # the kebab-joined suffix becomes `...-thing-id-id`. Drop a param token
+      # whose entire kebab form matches the trailing kebab-segment of the
+      # previously kept token, collapsing `dashboard-id-id` -> `dashboard-id`,
+      # `target-id-id` -> `target-id`, `type-type-id-id` -> `type-id`, etc.
+      let suffix = $cmd.path_params
+        | each {|p| $p.name | str kebab-case }
+        | reduce --fold [] {|tok, acc|
+            let prev_tail = (if ($acc | is-empty) { "" } else { $acc | last | split row '-' | last })
+            if $tok == $prev_tail { $acc } else { $acc | append $tok }
+          }
+        | str join '-'
       $cmd | update name $"($cmd.name)-by-($suffix)"
     } else {
       $cmd
