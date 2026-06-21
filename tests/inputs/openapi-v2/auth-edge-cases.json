@@ -22,6 +22,11 @@
       "in": "query",
       "name": "access_token"
     },
+    "clientIdHeader": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-Client-Id"
+    },
     "oauth2Scheme": {
       "type": "oauth2",
       "flow": "accessCode",
@@ -62,6 +67,13 @@
       "get": {
         "operationId": "getPublic",
         "security": [],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/and-header": {
+      "get": {
+        "operationId": "getAndHeader",
+        "security": [{ "apiKeyHeader": [], "clientIdHeader": [] }],
         "responses": { "200": { "description": "ok" } }
       }
     }

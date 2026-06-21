@@ -340,17 +340,37 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     $parts = ($parts | append $"  ($pname): ($nu_type)")
   }
 
-  $parts = ($parts | append [
-    '  --base-url(-b): string@base-url-completer # API base URL'
-    '  --token(-t): string # Auth token'
-    '  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme'
-    '  --insecure(-k) # Skip TLS verification'
-    '  --max-time(-m): duration # Timeout'
-    '  --raw(-r) # Fetch as text'
-    '  --allow-errors(-e) # Return full response without error handling'
-    '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
-    '  --dry-run(-n) # Return the request that would be sent without executing it'
-  ])
+  # D-7 (issue 51): AND-form security (>1 scheme in one requirement object)
+  # gets one `--token-<scheme>` flag per required scheme and NO `--auth-scheme`
+  # (there is nothing to choose — all schemes are sent together). Single-scheme
+  # and OR-form ops keep the standard `--token` + `--auth-scheme` pair.
+  let auth_req = ($cmd.auth_required? | default [])
+  if ($auth_req | length) > 1 {
+    $parts = ($parts | append '  --base-url(-b): string@base-url-completer # API base URL')
+    for s in $auth_req {
+      $parts = ($parts | append $"  --token-($s.flag_slug): string # Auth token for ($s.spec_name) \(($s.header_name)\)")
+    }
+    $parts = ($parts | append [
+      '  --insecure(-k) # Skip TLS verification'
+      '  --max-time(-m): duration # Timeout'
+      '  --raw(-r) # Fetch as text'
+      '  --allow-errors(-e) # Return full response without error handling'
+      '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
+      '  --dry-run(-n) # Return the request that would be sent without executing it'
+    ])
+  } else {
+    $parts = ($parts | append [
+      '  --base-url(-b): string@base-url-completer # API base URL'
+      '  --token(-t): string # Auth token'
+      '  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme'
+      '  --insecure(-k) # Skip TLS verification'
+      '  --max-time(-m): duration # Timeout'
+      '  --raw(-r) # Fetch as text'
+      '  --allow-errors(-e) # Return full response without error handling'
+      '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
+      '  --dry-run(-n) # Return the request that would be sent without executing it'
+    ])
+  }
 
   # Accept header flag (only when multiple response content types)
   if ($cmd.accept_types | length) > 1 {
@@ -467,7 +487,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 # `needs_multipart` controls emission of the `build-multipart-body` helper —
 # only generated when at least one operation uses `multipart/form-data` so
 # clients that never upload files stay slim.
-export def render-helpers [token_env_var: string, auth_schemes: list, default_timeout: string, default_headers: record, needs_multipart: bool = false] {
+export def render-helpers [token_env_var: string, auth_schemes: list, default_timeout: string, default_headers: record, needs_multipart: bool = false, needs_and_auth: bool = false] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -497,6 +517,24 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
   $match_arms = ($match_arms | append '    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }')
   let match_body = $match_arms | str join "\n"
 
+  # D-7 (issue 51): emitted only for clients with at least one AND-form op.
+  # Merges N per-scheme auth records (each built by `build-auth`) into one:
+  # headers union (right-biased), query strings joined with '&', distinct
+  # non-"none" locations joined with '+'. Schemes whose token was absent return
+  # location "none" from build-auth and contribute nothing.
+  let merge_auth_block = if $needs_and_auth { [
+    ''
+    '# Merge multiple auth records (AND-form security: every scheme must be sent).'
+    'def merge-auth [parts: list]: nothing -> record {'
+    '  let active = ($parts | where {|p| $p.location != "none" })'
+    '  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })'
+    '  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")'
+    '  let locs = ($active | each {|p| $p.location } | uniq)'
+    '  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }'
+    '  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}'
+    '}'
+  ] } else { [] }
+
   [
     '# Build auth: returns {scheme: string, headers: record, query: string, location: string}.'
     '# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers'
@@ -509,6 +547,7 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     $match_body
     '  }'
     '}'
+    ...$merge_auth_block
     ''
     '# Serialize a single query parameter based on collection style'
     '# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars'
@@ -643,7 +682,18 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append '  let input = $in')
   }
 
-  $lines = ($lines | append ($"  let auth = \(build-auth $token \($auth_scheme | default \"($cmd.default_auth)\"\)\)"))
+  # D-7 (issue 51): AND-form ops merge every required scheme's auth. Each
+  # per-scheme token comes from its `--token-<scheme>` flag, falling back to the
+  # per-scheme env-var, then build-auth's own shared fallback.
+  let auth_req = ($cmd.auth_required? | default [])
+  if ($auth_req | length) > 1 {
+    let auth_parts = ($auth_req | each {|s|
+      $"\(build-auth \($token_($s.flag_slug) | default \($env | get -o ($s.env_var) | default \"\"\)\) \"($s.name)\"\)"
+    } | str join " ")
+    $lines = ($lines | append $"  let auth = \(merge-auth [($auth_parts)]\)")
+  } else {
+    $lines = ($lines | append ($"  let auth = \(build-auth $token \($auth_scheme | default \"($cmd.default_auth)\"\)\)"))
+  }
   if ($cmd.base_url | is-not-empty) {
     $lines = ($lines | append ($"  let base = \($base_url | default \"($cmd.base_url)\"\)"))
   } else {
@@ -1072,16 +1122,26 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   $cmd_lines = ($cmd_lines | append $'export def "($cmd.name)" [')
   $cmd_lines = ($cmd_lines | append $sig_result.signature)
   let input_type = if $cmd.has_body { "any" } else { "nothing" }
-  # 47.A: a scalar-leaf response type (string/int/bool/float/...) is a parse-time
-  # LIE for this command — every command also returns a *record* under --dry-run/--full
-  # (and a *string* under --raw), and Nushell type-checks the downstream pipe against
-  # this declared output at parse time. Scalar outputs make structured ops
-  # (get/select/where/...) on the result a parse error. Loosen scalar leaves to `any`
-  # (the honest type; do-request is already `nothing -> any`). record/table/list/any
-  # outputs keep their rich annotation — they pipe fine. (Doc-preservation = D-10.)
-  let output_type = if ($cmd.return_type in [
-    "string" "int" "bool" "float" "number" "datetime" "binary" "duration"
-  ]) { "any" } else { $cmd.return_type }
+  # 47.A / issue 52 (D-10): a scalar-leaf response type (string/int/bool/...) is
+  # a parse-time LIE — the command is polymorphic over its flags: it returns a
+  # *record* under --dry-run/--full, a *string* under --raw, *nothing* on 204,
+  # and the response type on a normal call. Nushell type-checks the downstream
+  # pipe against the declared output at parse time, so a scalar leaf makes
+  # `cmd | get/select/where` a parse error. 47.A loosened these to `any`, which
+  # fixed the parse error but erased the response type from `help` and the
+  # `commands` introspection table (= D-10). Instead emit a `oneof<...>` of the
+  # real flag-driven shapes: the `record` member makes structured piping parse,
+  # `string` keeps `--raw | str-op` parsing (no regression vs `any`), `nothing`
+  # covers 204, and the scalar member preserves the documented response type.
+  # do-request is `nothing -> any`, so the richer annotation is NEVER runtime-
+  # checked against the actual body — purely a parse-time + doc improvement.
+  # Requires a Nushell with `oneof<...>` (>= the project's pinned 0.113.1).
+  # record/table/list/any outputs already pipe fine and keep their annotation.
+  let scalar_leaves = ["string" "int" "bool" "float" "number" "datetime" "binary" "duration"]
+  let output_type = if ($cmd.return_type in $scalar_leaves) {
+    let members = ([$cmd.return_type "string" "record" "nothing"] | uniq)
+    $"oneof<($members | str join ', ')>"
+  } else { $cmd.return_type }
   $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($output_type) {")
 
   let body_code = (build-body-code $cmd $config)
@@ -1105,6 +1165,22 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
   let base_url = if ($config.default_base_url != null) and ($config.default_base_url | is-not-empty) { $config.default_base_url } else { $base_url }
   let all_urls = ([$base_url] | append $extra_urls | uniq)
 
+  # D-7 (issue 51): enrich AND-form auth requirements with the per-scheme flag
+  # slug (derived from the scheme's spec_name) and the per-scheme env-var
+  # fallback name (derived from the module token env-var base). Done here, not
+  # in `build`, because the env-var base is only known at render time.
+  let and_env_base = ($token_env_var | str replace --regex '_TOKEN$' '')
+  let commands = ($commands | each {|c|
+    let ar = ($c.auth_required? | default [])
+    if ($ar | length) > 1 {
+      $c | update auth_required ($ar | each {|s|
+        let slug = ($s.spec_name | str downcase | str replace --all --regex '[^a-z0-9]' '')
+        $s | insert flag_slug $slug | insert env_var $"($and_env_base)_($slug | str upcase)_TOKEN"
+      })
+    } else { $c }
+  })
+  let needs_and_auth = ($commands | any {|c| (($c.auth_required? | default []) | length) > 1 })
+
   let completer_data = (collect-completers $commands)
   let completers = $completer_data.completers
   let mapping = $completer_data.mapping
@@ -1119,7 +1195,7 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
     ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false)
   })
 
-  let helpers_code = render-helpers $token_env_var $auth_schemes $config.default_timeout $config.default_headers $needs_multipart
+  let helpers_code = render-helpers $token_env_var $auth_schemes $config.default_timeout $config.default_headers $needs_multipart $needs_and_auth
 
   let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $all_urls $commands $auth_schemes $completers $helpers_code $config
 

@@ -137,8 +137,18 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
       let resp = ($responses | get -o $code)
       if ($resp | is-not-empty) {
         let content = ($resp.content? | default {})
-        let json_media = ($content | get -o "application/json" | default {})
-        let s = ($json_media | get -o schema | default null)
+        # Prefer application/json's schema; if this response has no JSON media
+        # (e.g. text/plain, application/xml, a vendor +json variant), fall back
+        # to the first media type that declares a schema. Issue 52 follow-up:
+        # without this, a non-JSON scalar response (`text/plain` `{type: string}`)
+        # derived `any` and lost the typed `oneof<…>` output annotation.
+        let json_schema = ($content | get -o "application/json" | default {} | get -o schema | default null)
+        let s = if ($json_schema | is-not-empty) {
+          $json_schema
+        } else {
+          let with_schema = ($content | values | each {|m| $m | get -o schema | default null } | compact)
+          if ($with_schema | is-not-empty) { $with_schema | first } else { null }
+        }
         if ($s | is-not-empty) { $found_schema = $s }
       }
     }

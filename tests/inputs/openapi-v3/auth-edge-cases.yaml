@@ -38,6 +38,16 @@ components:
       type: apiKey
       in: query
       name: api_key
+    # Two apiKey-in-header schemes used together in an AND-form requirement
+    # (the apisetu/VTEX shape). Both headers must be sent on the same request.
+    apiKeyA:
+      type: apiKey
+      in: header
+      name: X-Api-Key-A
+    apiKeyB:
+      type: apiKey
+      in: header
+      name: X-Api-Key-B
     # apiKey in cookie -> scheme name prefixed "cookie-"; dotted cookie name
     cookieKey:
       type: apiKey
@@ -121,5 +131,25 @@ paths:
     get:
       operationId: getPublic
       security: []
+      responses:
+        '200': {description: ok}
+  # AND-form: ONE requirement object listing TWO schemes -> BOTH headers must be
+  # sent together (D-7 / issue 51). Distinct from OR-form `[{A:[]},{B:[]}]`.
+  /and-header:
+    get:
+      operationId: getAndHeader
+      security:
+        - apiKeyA: []
+          apiKeyB: []
+      responses:
+        '200': {description: ok}
+  # AND-form mixing a header scheme with a query scheme -> exercises merge of
+  # distinct auth locations (header + query) into one request.
+  /and-mixed:
+    get:
+      operationId: getAndMixed
+      security:
+        - apiKeyA: []
+          queryKey: []
       responses:
         '200': {description: ok}

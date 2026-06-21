@@ -631,7 +631,7 @@ def resolve-path-item [path_entry: record, schemas: record] {
 }
 
 # Extract operation-level metadata: description, auth, server override, etc.
-def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: string, methods: record, h: record] {
+def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, methods: record, h: record] {
   let operation_id = ($op.operationId? | default "")
   let summary = ($op.summary? | default "")
   let description_text = ($op.description? | default "")
@@ -663,6 +663,33 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     $root_default_auth
   }
 
+  # D-7 (issue 51): AND-form security. A SINGLE requirement object listing
+  # MULTIPLE schemes means ALL of them must be sent together on every request
+  # (OA3 §4.8.30 / Swagger 2.0). The `default_auth` above keeps only the first
+  # scheme — correct for the OR-form OUTER array (where each object is an
+  # alternative), but wrong for the inner AND-set. Detect AND-form as the first
+  # requirement object having >1 column and resolve EVERY named scheme to its
+  # record. Downstream render emits one `--token-<scheme>` flag per scheme and
+  # merges all their headers/query. A single-column object (including the
+  # `basic` -> `basic-credentials` render-time expansion, which is still ONE
+  # column at the requirement level) stays on the single-scheme path with an
+  # empty list here. An op with NO `security` override inherits the GLOBAL
+  # AND-set (`root_auth_required`) — this is the VTEX shape, where the AND-form
+  # lives at the top level. `security: []` (public) overrides to no auth.
+  let auth_required = if ($op_security == null) {
+    $root_auth_required
+  } else if ($op_security | is-empty) {
+    []
+  } else {
+    let first_req = ($op_security | first)
+    if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
+      let cols = ($first_req | columns)
+      if ($cols | length) > 1 {
+        $cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact
+      } else { [] }
+    } else { [] }
+  }
+
   # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
   let chosen_server = ($op.servers?.0? | default ($methods.servers?.0? | default null))
   let base_url = if ($chosen_server == null) { null } else { do $h.resolve-server-url $chosen_server }
@@ -673,6 +700,7 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     deprecated: $deprecated
     external_docs: $external_docs
     default_auth: $default_auth
+    auth_required: $auth_required
     base_url: $base_url
   }
 }
@@ -1091,7 +1119,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 }
 
 # Build the command model list from a parsed+resolved REST spec.
-export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, config: record] {
+export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
   ($spec_data.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {
@@ -1121,7 +1149,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         if not $has_match { return null }
       }
 
-      let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $methods $h)
+      let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $root_auth_required $methods $h)
 
       # DEPRECATED FILTER
       if $config.exclude_deprecated and $meta.deprecated {
@@ -1190,6 +1218,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         deprecation_reason: null
         external_docs: $meta.external_docs
         default_auth: $meta.default_auth
+        auth_required: $meta.auth_required
         base_url: $meta.base_url
         accept_types: $resp.accept_types
         discriminator: $body.discriminator

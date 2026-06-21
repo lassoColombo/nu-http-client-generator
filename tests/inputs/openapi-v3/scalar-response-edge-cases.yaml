@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: Scalar Response Edge Cases
+  version: 1.0.0
+  description: >-
+    Operations whose 200 response body is a SCALAR leaf (string / integer /
+    boolean / number). A scalar response annotation is a parse-time lie because
+    every generated command is polymorphic over its flags — record under
+    --dry-run/--full, string under --raw, nothing on 204 — so the output type is
+    emitted as `oneof<scalar, string, record, nothing>` (issue 52, resolving
+    D-10). Before issue 52 these were loosened to bare `any` (47.A), which fixed
+    the parse error but erased the response type from `help`/`commands`. This
+    spec is the golden coverage for that whole path. Also includes a
+    record-response op (must keep its rich annotation, NOT become oneof) and a
+    no-schema op (genuinely `any`) as negative controls.
+servers:
+  - url: https://api.example.com
+paths:
+  # string response -> oneof<string, record, nothing>
+  /token:
+    get:
+      operationId: getToken
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: string}
+  # integer response -> oneof<int, string, record, nothing>
+  /count:
+    get:
+      operationId: getCount
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: integer}
+  # boolean response -> oneof<bool, string, record, nothing>
+  /healthy:
+    get:
+      operationId: getHealthy
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: boolean}
+  # NEGATIVE CONTROL: record response keeps its rich annotation (not a oneof).
+  /profile:
+    get:
+      operationId: getProfile
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+                  name: {type: string}
+  # NEGATIVE CONTROL: no response schema -> genuinely `any`, unchanged.
+  /ping:
+    get:
+      operationId: getPing
+      responses:
+        '200': {description: ok}
+  # text/plain scalar response (no application/json media) -> must still derive
+  # the typed oneof<string, record, nothing>, via the non-JSON media fallback.
+  /etag:
+    get:
+      operationId: getEtag
+      responses:
+        '200':
+          description: ok
+          content:
+            text/plain:
+              schema: {type: string}

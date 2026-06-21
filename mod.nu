@@ -135,7 +135,8 @@ def process-spec [spec_data: record, config: record] {
   let schemas = ((spec build-resolved-schemas $raw_schemas) | upsert __spec__ $spec_data)
   let auth_schemes = (do $h.get-auth-schemes $spec_data)
   let default_auth = (spec get-default-auth $spec_data $auth_schemes)
-  let commands = (build build-command-list $spec_data $schemas $h $auth_schemes $default_auth $config)
+  let default_auth_required = (spec get-default-auth-required $spec_data $auth_schemes)
+  let commands = (build build-command-list $spec_data $schemas $h $auth_schemes $default_auth $default_auth_required $config)
   {
     commands: (deduplicate-commands $commands)
     auth_schemes: $auth_schemes

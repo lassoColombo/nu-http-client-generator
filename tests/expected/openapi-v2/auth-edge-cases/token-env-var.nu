@@ -15,11 +15,22 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
     "x-api-key" => { {scheme: $scheme, headers: {X-Api-Key: $token_val}, query: "", location: "header"} }
     "query-access_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "access_token")=(encode-path-segment $token_val)", location: "query"} }
+    "x-client-id" => { {scheme: $scheme, headers: {X-Client-Id: $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
+}
+
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
 # Serialize a single query parameter based on collection style
@@ -111,7 +122,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.example.com/v1"] }
-def auth-scheme-completer [] { ["basic" "x-api-key" "query-access_token" "bearer" "none" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "x-api-key" "query-access_token" "x-client-id" "bearer" "none" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -242,6 +253,28 @@ export def "public get" [
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/public")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+}
+
+# GET /and-header
+#
+# operationId: getAndHeader
+export def "and-header get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token-apikeyheader: string # Auth token for apiKeyHeader (X-Api-Key)
+  --token-clientidheader: string # Auth token for clientIdHeader (X-Client-Id)
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (merge-auth [(build-auth ($token_apikeyheader | default ($env | get -o TEST_APIKEYHEADER_TOKEN | default "")) "x-api-key") (build-auth ($token_clientidheader | default ($env | get -o TEST_CLIENTIDHEADER_TOKEN | default "")) "x-client-id")])
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/and-header")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}

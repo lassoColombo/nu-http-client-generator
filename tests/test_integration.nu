@@ -73,6 +73,7 @@ def "httpbin headers returns headers record" [] {
 @test
 def "httpbin user-agent returns user-agent" [] {
     let resp = run-cmd $in.httpbin "httpbin user-agent get --max-time 15sec"
+    # return "skip"
     let ua = $resp | get "user-agent"
     assert ($ua | is-not-empty) "user-agent should not be empty"
 }

@@ -259,6 +259,25 @@ export def get-default-auth [spec: record, auth_schemes: list] {
   }
 }
 
+# D-7 (issue 51): the GLOBAL (top-level) AND-form security set, mirroring the
+# per-op detection in `extract-op-metadata`. When the spec's top-level
+# `security` is a single requirement object listing >1 scheme (e.g. VTEX's
+# `[{appKey: [], appToken: []}]`), EVERY op that does not override `security`
+# inherits the requirement to send ALL of them. Returns the resolved scheme
+# records (length >1) or [] when there is no global AND-form.
+export def get-default-auth-required [spec: record, auth_schemes: list] {
+  let security = ($spec.security? | default [])
+  if ($security | is-empty) { return [] }
+  let first_req = ($security | first)
+  if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
+    let cols = ($first_req | columns)
+    if ($cols | length) > 1 {
+      return ($cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact)
+    }
+  }
+  []
+}
+
 # Convert an OpenAPI schema to a nushell type string.
 # Recursively builds typed records/tables. Depth-limited to avoid huge types.
 export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {

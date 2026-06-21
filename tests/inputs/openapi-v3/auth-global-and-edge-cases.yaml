@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Auth Global And
+  version: 1.0.0
+  description: >-
+    GLOBAL (top-level) AND-form security — a single requirement object listing
+    multiple schemes, inherited by every operation that does not override
+    `security`. This is the VTEX shape (`[{appKey: [], appToken: []}]`), as
+    opposed to apisetu's per-operation AND-form. Exercises the global-default
+    branch of the AND detection plus the `security: []` public override.
+    D-7 / issue 51.
+servers:
+  - url: https://api.example.com
+# Top-level AND-form: BOTH schemes required on every non-overriding op.
+security:
+  - appKey: []
+    appToken: []
+components:
+  securitySchemes:
+    appKey:
+      type: apiKey
+      in: header
+      name: X-App-Key
+    appToken:
+      type: apiKey
+      in: header
+      name: X-App-Token
+paths:
+  # Inherits the global AND-form -> both --token-appkey and --token-apptoken.
+  /widgets:
+    get:
+      operationId: listWidgets
+      responses:
+        '200': {description: ok}
+  # `security: []` overrides the global default -> PUBLIC, no auth flags.
+  /public:
+    get:
+      operationId: getPublic
+      security: []
+      responses:
+        '200': {description: ok}
