@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Path Encoding Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising path-parameter serialization and URL construction:
+    array path params (csv join, not Nushell debug form), percent-encoding of
+    reserved chars, undeclared placeholder synthesis, fragment stripping, and
+    special path segments (OData function calls, Google :verb actions, $metadata).
+servers:
+  - url: https://api.example.com
+paths:
+  # Array path param (style: simple) -> comma-joined: /lines/a,b ; NOT /lines/[a, b]
+  /lines/{ids}:
+    get:
+      operationId: getLines
+      parameters:
+        - name: ids
+          in: path
+          required: true
+          schema: {type: array, items: {type: string}}
+          style: simple
+      responses:
+        '200': {description: ok}
+  # Scalar path param whose value may contain reserved chars (/, space) -> %XX.
+  /branches/{branch}:
+    get:
+      operationId: getBranch
+      parameters:
+        - name: branch
+          in: path
+          required: true
+          schema: {type: string}
+          description: A branch name like "feature/auth fix".
+      responses:
+        '200': {description: ok}
+  # Undeclared placeholder: {region} appears in the path but is not declared as a
+  # parameter -> must be synthesized as a required positional.
+  /regions/{region}/status:
+    get:
+      operationId: getRegionStatus
+      responses:
+        '200': {description: ok}
+  # Fragment in the path key -> stripped before URL/resource derivation.
+  /reports#section:
+    get:
+      operationId: getReports
+      responses:
+        '200': {description: ok}
+  # Google-style :verb action segment -> preserved in URL, stripped from name.
+  /documents/{documentId}:batchUpdate:
+    post:
+      operationId: batchUpdateDocument
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200': {description: ok}
+  # OData $metadata literal segment.
+  /$metadata:
+    get:
+      operationId: getMetadata
+      responses:
+        '200': {description: ok}

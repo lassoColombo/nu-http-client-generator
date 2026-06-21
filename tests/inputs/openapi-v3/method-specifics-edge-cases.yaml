@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: Method Specifics Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising per-HTTP-method behavior: HEAD/OPTIONS (--full,
+    record return), DELETE with a body (uses --data), DELETE 204 vs 200 body
+    detection, GET with a body, multiple response content-types (Accept flag +
+    completer), and externalDocs / operationId doc comments.
+servers:
+  - url: https://api.example.com
+paths:
+  /resource/{id}:
+    # HEAD: returns headers (record); must honor --full.
+    head:
+      operationId: headResource
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: ok}
+    # DELETE with a request body -> http delete --data.
+    delete:
+      operationId: deleteResource
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {reason: {type: string}}}
+      responses:
+        '200':
+          description: deleted
+          content:
+            application/json:
+              schema: {type: object}
+  # OPTIONS preflight.
+  /resource:
+    options:
+      operationId: optionsResource
+      responses:
+        '200': {description: ok}
+  # DELETE returning 204 No Content -> no body.
+  /resource/{id}/hard:
+    delete:
+      operationId: hardDeleteResource
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: gone}
+  # GET with a request body (rare but valid).
+  /query:
+    get:
+      operationId: queryWithBody
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {filter: {type: string}}}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+  # Multiple response content-types -> --accept flag + completer.
+  /report:
+    get:
+      operationId: getReport
+      externalDocs:
+        url: https://docs.example.com/report
+        description: Report format reference.
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+            text/csv:
+              schema: {type: string}
+            application/xml:
+              schema: {type: string}

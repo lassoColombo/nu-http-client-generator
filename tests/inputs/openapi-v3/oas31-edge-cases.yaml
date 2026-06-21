@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: OAS 3.1 Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic OpenAPI 3.1 spec exercising 3.1-specific shapes: type-as-array
+    (union) including "null" for nullability, and a webhooks block sibling to
+    paths (must be ignored, not crash, since callable paths exist).
+servers:
+  - url: https://api.example.com
+webhooks:
+  newThing:
+    post:
+      operationId: onNewThing
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200': {description: ack}
+paths:
+  /things:
+    post:
+      operationId: createThing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                # 3.1 union type with null -> nullable string (tri-state).
+                name: {type: [string, "null"]}
+                # 3.1 union type without null -> first non-null type wins.
+                amount: {type: [integer, "null"]}
+                tags: {type: array, items: {type: [string, "null"]}}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}
+    get:
+      operationId: listThings
+      parameters:
+        - name: status
+          in: query
+          schema: {type: [string, "null"]}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}

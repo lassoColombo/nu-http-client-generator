@@ -1,0 +1,69 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Auth Edge Cases v2",
+    "version": "1.0.0",
+    "description": "Swagger 2.0 security definitions: basic, apiKey (header/query), oauth2, plus per-op security override. The 2.0 security model differs from OAS3 (securityDefinitions, type: basic)."
+  },
+  "host": "api.example.com",
+  "basePath": "/v1",
+  "schemes": ["https"],
+  "security": [{ "apiKeyHeader": [] }],
+  "securityDefinitions": {
+    "basicAuth": { "type": "basic" },
+    "apiKeyHeader": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-Api-Key",
+      "description": "A static API key."
+    },
+    "apiKeyQuery": {
+      "type": "apiKey",
+      "in": "query",
+      "name": "access_token"
+    },
+    "oauth2Scheme": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "authorizationUrl": "https://api.example.com/oauth/authorize",
+      "tokenUrl": "https://api.example.com/oauth/token",
+      "scopes": {}
+    }
+  },
+  "paths": {
+    "/default-auth": {
+      "get": {
+        "operationId": "getDefaultAuth",
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/basic": {
+      "get": {
+        "operationId": "getBasic",
+        "security": [{ "basicAuth": [] }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/query-key": {
+      "get": {
+        "operationId": "getQueryKey",
+        "security": [{ "apiKeyQuery": [] }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/oauth": {
+      "get": {
+        "operationId": "getOauth",
+        "security": [{ "oauth2Scheme": [] }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/public": {
+      "get": {
+        "operationId": "getPublic",
+        "security": [],
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}

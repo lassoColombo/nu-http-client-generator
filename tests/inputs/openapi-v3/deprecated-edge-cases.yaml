@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: Deprecated Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec with deprecated operations, parameters, and body fields. Makes
+    the `exclude-deprecated` variant meaningful (it is a no-op against specs with
+    no deprecations) and exercises @deprecated annotation emission.
+servers:
+  - url: https://api.example.com
+paths:
+  # Deprecated operation -> dropped under --exclude-deprecated; otherwise carries
+  # a DEPRECATED doc line.
+  /legacy:
+    get:
+      operationId: getLegacy
+      deprecated: true
+      responses:
+        '200': {description: ok}
+  # Live operation with a deprecated parameter and a deprecated body field.
+  /items:
+    post:
+      operationId: createItem
+      parameters:
+        - name: legacyFlag
+          in: query
+          deprecated: true
+          schema: {type: boolean}
+        - name: name
+          in: query
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: {type: string}
+                oldField:
+                  type: string
+                  deprecated: true
+      responses:
+        '200': {description: ok}
+  # A second non-deprecated op so the filtered output is non-empty.
+  /items/{id}:
+    get:
+      operationId: getItem
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}

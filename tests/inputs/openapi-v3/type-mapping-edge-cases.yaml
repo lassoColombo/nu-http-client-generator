@@ -1,0 +1,78 @@
+openapi: 3.0.3
+info:
+  title: Type Mapping Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising schema-to-Nushell type mapping: scalar leaf
+    responses (must widen to `any` so results stay pipeable), list<itemtype>
+    parameterization, arrays of records (bare list + shape comment), nested
+    record depth, primitive formats, and enum union syntax.
+servers:
+  - url: https://api.example.com
+components:
+  schemas:
+    Address:
+      type: object
+      properties:
+        street: {type: string}
+        city: {type: string}
+        zip: {type: string}
+paths:
+  # Scalar response (string) -> output type must widen to `any`, not `string`,
+  # so `op --dry-run | get url` parses.
+  /token:
+    get:
+      operationId: getToken
+      responses:
+        '200':
+          description: ok
+          content:
+            text/plain:
+              schema: {type: string}
+  # Body with a list<string> field and a list<int> field.
+  /tags:
+    post:
+      operationId: createTags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                names: {type: array, items: {type: string}}   # -> list<string>
+                weights: {type: array, items: {type: integer}} # -> list<int>
+                addresses:                                     # -> bare list + shape
+                  type: array
+                  items: {$ref: '#/components/schemas/Address'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Address'}}
+  # Primitive formats + enum union + nested record.
+  /widgets:
+    post:
+      operationId: createWidget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                count: {type: integer, format: int64}
+                ratio: {type: number, format: double}
+                enabled: {type: boolean}
+                kind: {type: string, enum: [small, medium, large]}  # -> union
+                payload: {type: string, format: binary}              # -> path
+                address: {$ref: '#/components/schemas/Address'}       # -> record<...>
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}

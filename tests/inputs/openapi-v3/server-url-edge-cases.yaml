@@ -1,0 +1,34 @@
+openapi: 3.0.3
+info:
+  title: Server URL Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising base-URL derivation: server variable substitution
+    with enum expansion, multiple servers, relative-URL absolutization, trailing
+    slash normalization, and per-operation server overrides.
+servers:
+  # Server variables: {region} has enum variants (expanded for completion),
+  # {port} has only a default. Trailing slash should be normalized away.
+  - url: https://{region}.api.example.com:{port}/
+    variables:
+      region:
+        default: eu
+        enum: [eu, us, ap]
+      port:
+        default: '443'
+  # A second, plain server (collected for URL completion).
+  - url: https://backup.example.com
+paths:
+  /ping:
+    get:
+      operationId: ping
+      responses:
+        '200': {description: ok}
+  # Operation-level server override (relative URL -> absolutized).
+  /op-override:
+    get:
+      operationId: getOpOverride
+      servers:
+        - url: /local-api
+      responses:
+        '200': {description: ok}

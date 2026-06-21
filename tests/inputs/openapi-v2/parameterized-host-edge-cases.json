@@ -1,0 +1,40 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Parameterized Host Edge Cases v2",
+    "version": "1.0.0",
+    "description": "Swagger 2.0 base-URL derivation: Azure x-ms-parameterized-host (with useSchemePrefix and parameter defaults) and basePath template stripping."
+  },
+  "host": "azure.local",
+  "basePath": "/{apiVersion}",
+  "schemes": ["https"],
+  "x-ms-parameterized-host": {
+    "hostTemplate": "{searchServiceName}.search.windows.net",
+    "useSchemePrefix": true,
+    "parameters": [
+      {
+        "name": "searchServiceName",
+        "in": "path",
+        "required": true,
+        "type": "string",
+        "x-ms-skip-url-encoding": true
+      },
+      {
+        "name": "searchDnsSuffix",
+        "in": "path",
+        "required": false,
+        "type": "string",
+        "default": "search.windows.net",
+        "x-ms-skip-url-encoding": true
+      }
+    ]
+  },
+  "paths": {
+    "/indexes": {
+      "get": {
+        "operationId": "listIndexes",
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}

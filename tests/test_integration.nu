@@ -26,7 +26,7 @@ def setup []: nothing -> record {
     let temp = mktemp --directory
 
     # file inputs
-    mod ./tests/inputs/openapi-v2/httpbin.json -o ($temp | path join "httpbin.nu")
+    mod ./tests/fixtures/httpbin.json -o ($temp | path join "httpbin.nu")
 
     # url inputs
     mod $PETSTORE_SPEC_URL -o ($temp | path join "petstore.nu") --default-base-url $PETSTORE_BASE_URL

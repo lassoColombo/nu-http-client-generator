@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Query Style Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising OpenAPI 3 query-parameter serialization styles for
+    array/object params (form+explode, form+no-explode, spaceDelimited,
+    pipeDelimited, deepObject) plus boolean tri-state flags and values that
+    require percent-encoding.
+servers:
+  - url: https://api.example.com
+paths:
+  /search:
+    get:
+      operationId: search
+      parameters:
+        # form + explode (default): tags=a&tags=b
+        - name: tags
+          in: query
+          schema: {type: array, items: {type: string}}
+          style: form
+          explode: true
+        # form + no explode: ids=1,2,3
+        - name: ids
+          in: query
+          schema: {type: array, items: {type: integer}}
+          style: form
+          explode: false
+        # spaceDelimited: fields=a%20b%20c
+        - name: fields
+          in: query
+          schema: {type: array, items: {type: string}}
+          style: spaceDelimited
+          explode: false
+        # pipeDelimited: cols=a|b|c
+        - name: cols
+          in: query
+          schema: {type: array, items: {type: string}}
+          style: pipeDelimited
+          explode: false
+        # deepObject: filter[key]=val
+        - name: filter
+          in: query
+          schema: {type: object, additionalProperties: {type: string}}
+          style: deepObject
+          explode: true
+        # boolean query -> oneof<nothing, bool>
+        - name: verbose
+          in: query
+          schema: {type: boolean}
+        # value needing percent-encoding (key & value)
+        - name: q
+          in: query
+          schema: {type: string}
+          description: A free-text query that may contain reserved chars (&, =, /).
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object}

@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: Ref Resolution Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising $ref resolution: self-referential (circular)
+    schemas must terminate, multi-hop $ref chains collapse, allOf with a $ref
+    base merges, and shared #/components/parameters refs resolve.
+servers:
+  - url: https://api.example.com
+components:
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema: {type: integer}
+      description: Page number (shared parameter ref).
+  schemas:
+    # Self-referential: a tree node references itself.
+    TreeNode:
+      type: object
+      properties:
+        value: {type: string}
+        children:
+          type: array
+          items: {$ref: '#/components/schemas/TreeNode'}
+    # $ref chain: AliasA -> AliasB -> Concrete.
+    AliasA: {$ref: '#/components/schemas/AliasB'}
+    AliasB: {$ref: '#/components/schemas/Concrete'}
+    Concrete:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        count: {type: integer}
+paths:
+  # Body is a self-referential schema -> generation must terminate.
+  /trees:
+    post:
+      operationId: createTree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TreeNode'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TreeNode'}
+  # Body via a multi-hop alias chain; query param via shared component ref.
+  /aliased:
+    get:
+      operationId: getAliased
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AliasA'}
+    post:
+      operationId: createAliased
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AliasA'}
+      responses:
+        '200': {description: ok}

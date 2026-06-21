@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Naming Regression Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec pinning the exact operationId shapes behind recent naming
+    fixes: secondary-verb stutter (get-list-list), method-fallback stutter
+    (options-options), glued verb-prefix short tails (delete-deleteall), glued
+    lowercase split (getairlines) with the noun guard (listings), {placeholder}
+    literals in opIds, dotted/colon namespace opIds, and partial_update.
+servers:
+  - url: https://api.example.com
+paths:
+  # C2: GET_ListAllSettings -> "settings get-list" (all->list canonical; no get-list-list)
+  /settings:
+    get:
+      operationId: GET_ListAllSettings
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # C2 (deep): repeated Get/List tokens must dedupe, not stack.
+  /catalog/products:
+    get:
+      operationId: catalogProductRenderListV1GetListGet
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # C3: OPTIONS with opId "options_events" -> "events options" (no options-options)
+  /events:
+    options:
+      operationId: options_events
+      responses: {'200': {description: ok}}
+
+  # C4 + C5-guard: on /listings, DELETE opId "deleteall" -> "listings delete"
+  # (glued short tail "all" allow-listed); GET opId "listings" must NOT split
+  # into list+ings -> "listings get".
+  /listings:
+    delete:
+      operationId: deleteall
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+    get:
+      operationId: listings
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: array, items: {type: object}}}}}}
+
+  # C4 (variant): camelCase "deleteByNameBulk" keeps its by-name-bulk tail
+  # ("records delete-by-name-bulk") — only glued lowercase short tails collapse.
+  /records:
+    delete:
+      operationId: deleteByNameBulk
+      responses: {'204': {description: gone}}
+
+  # C5: glued lowercase verb prefix "getairlines" -> "airlines get"
+  /airlines:
+    get:
+      operationId: getairlines
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: array, items: {type: object}}}}}}
+
+  # C8: opId is a literal HTTP path with a {placeholder} -> name must not contain { }
+  /marketing/events/{externalEventId}/archive:
+    delete:
+      operationId: "delete-/marketing/events/{externalEventId}_archive"
+      parameters: [{name: externalEventId, in: path, required: true, schema: {type: string}}]
+      responses: {'204': {description: gone}}
+
+  # Dotted + colon namespace opId -> trailing segment drives the action; the
+  # POST method contributes "create" ("keys create-mac-sign"). No dotted noise.
+  /keys/{name}:macSign:
+    post:
+      operationId: cloudkms.projects.locations.keyRings.cryptoKeys.macSign
+      parameters: [{name: name, in: path, required: true, schema: {type: string}}]
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # Django-DRF partial_update -> "profiles update" (partial_update collapses to
+  # patch, and PATCH canonicalizes to update) — not "profiles partial-update".
+  /profiles/{id}:
+    patch:
+      operationId: profiles_partial_update
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # Resource/verb stutter guard: opId "sendgrid" on /sendgrid must not yield
+  # "sendgrid sendgrid" (falls back to method verb).
+  /sendgrid:
+    post:
+      operationId: sendgrid
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok}}

@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Auth Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising every security-scheme shape and the per-operation
+    security override. Drives build-auth, the auth-scheme completer, token
+    env-var derivation, and apiKey location handling (header/query/cookie).
+servers:
+  - url: https://api.example.com
+# Global default applies to every op that does not override `security`.
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    # http bearer -> scheme "bearer", Authorization: Bearer
+    bearerAuth:
+      type: http
+      scheme: bearer
+    # http basic -> scheme "basic" + a "basic-credentials" sibling (base64 user:pass)
+    basicAuth:
+      type: http
+      scheme: basic
+    # apiKey in header; description mentions JWT -> jwt prefix detection
+    jwtHeader:
+      type: apiKey
+      in: header
+      name: X-JWT-Token
+      description: A JWT bearer token issued by the auth server.
+    # apiKey in header named Authorization with a "static" hint -> static prefix
+    staticHeader:
+      type: apiKey
+      in: header
+      name: X-Static-Key
+      description: A static, long-lived API key. Does not expire.
+    # apiKey in query -> scheme name prefixed "query-", value goes in the URL
+    queryKey:
+      type: apiKey
+      in: query
+      name: api_key
+    # apiKey in cookie -> scheme name prefixed "cookie-"; dotted cookie name
+    cookieKey:
+      type: apiKey
+      in: cookie
+      name: brain.sid
+    # oauth2 -> normalized to bearer
+    oauthScheme:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.example.com/oauth/token
+          scopes: {}
+    # openIdConnect -> normalized to bearer
+    oidcScheme:
+      type: openIdConnect
+      openIdConnectUrl: https://api.example.com/.well-known/openid-configuration
+paths:
+  # Inherits the global bearer default.
+  /default-auth:
+    get:
+      operationId: getDefaultAuth
+      responses:
+        '200': {description: ok}
+  # Per-op override to basic auth.
+  /basic:
+    get:
+      operationId: getBasic
+      security:
+        - basicAuth: []
+      responses:
+        '200': {description: ok}
+  # Per-op apiKey-in-header (JWT-hinted).
+  /jwt:
+    get:
+      operationId: getJwt
+      security:
+        - jwtHeader: []
+      responses:
+        '200': {description: ok}
+  # Per-op apiKey-in-header (static-hinted, Authorization-style name).
+  /static:
+    get:
+      operationId: getStatic
+      security:
+        - staticHeader: []
+      responses:
+        '200': {description: ok}
+  # Per-op apiKey-in-query.
+  /query-key:
+    get:
+      operationId: getQueryKey
+      security:
+        - queryKey: []
+      responses:
+        '200': {description: ok}
+  # Per-op apiKey-in-cookie.
+  /cookie-key:
+    get:
+      operationId: getCookieKey
+      security:
+        - cookieKey: []
+      responses:
+        '200': {description: ok}
+  # oauth2 / openIdConnect both collapse to bearer.
+  /oauth:
+    get:
+      operationId: getOauth
+      security:
+        - oauthScheme: []
+      responses:
+        '200': {description: ok}
+  /oidc:
+    get:
+      operationId: getOidc
+      security:
+        - oidcScheme: []
+      responses:
+        '200': {description: ok}
+  # Per-op `security: []` -> PUBLIC: no auth even though a global default exists.
+  /public:
+    get:
+      operationId: getPublic
+      security: []
+      responses:
+        '200': {description: ok}

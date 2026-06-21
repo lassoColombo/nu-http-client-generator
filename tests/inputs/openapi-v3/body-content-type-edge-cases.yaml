@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: Body Content-Type Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising request-body serialization across content-types and
+    schema-composition shapes: JSON record bodies, form-urlencoded (incl. the
+    null-body guard), text/plain scalar bodies, multipart (file + empty schema),
+    allOf/oneOf/anyOf merging, discriminator auto-required, readOnly exclusion,
+    and nullable -> tri-state.
+servers:
+  - url: https://api.example.com
+components:
+  schemas:
+    Base:
+      type: object
+      required: [id]
+      properties:
+        id: {type: string}
+        createdAt: {type: string, format: date-time, readOnly: true}
+    Cat:
+      type: object
+      required: [petType, meow]
+      properties:
+        petType: {type: string}
+        meow: {type: string}
+    Dog:
+      type: object
+      required: [petType, bark]
+      properties:
+        petType: {type: string}
+        bark: {type: string}
+paths:
+  # application/json record body: expands into per-field flags.
+  /json:
+    post:
+      operationId: createJson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string}
+                count: {type: integer}
+                active: {type: boolean}        # -> oneof<nothing, bool>
+                nickname: {type: string, nullable: true}  # -> tri-state
+                createdAt: {type: string, readOnly: true} # excluded from request
+      responses:
+        '200': {description: ok}
+  # form-urlencoded with fields: body serialized via url build-query.
+  /form:
+    post:
+      operationId: createForm
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type: {type: string}
+                scope: {type: string}
+      responses:
+        '200': {description: ok}
+  # form-urlencoded with NO enumerable fields: --body fallback. Exercises the
+  # null-body guard (omitted --body must not crash the transpose).
+  /form-scalar:
+    post:
+      operationId: createFormScalar
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema: {type: string}
+      responses:
+        '200': {description: ok}
+  # text/plain scalar body: must render --body: string, not --body: record.
+  /text:
+    post:
+      operationId: createText
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: {type: string}
+      responses:
+        '200': {description: ok}
+  # multipart with a binary file field.
+  /upload:
+    post:
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: {type: string, format: binary}
+                filename: {type: string}
+      responses:
+        '200': {description: ok}
+  # multipart with an empty schema: the multipart envelope must still be built.
+  /upload-empty:
+    post:
+      operationId: uploadEmpty
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: {type: object}
+      responses:
+        '200': {description: ok}
+  # Content-type priority: json > multipart > form. Should pick application/json.
+  /multi-ct:
+    post:
+      operationId: createMultiCt
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema: {type: object, properties: {a: {type: string}}}
+          multipart/form-data:
+            schema: {type: object, properties: {a: {type: string}}}
+          application/json:
+            schema: {type: object, properties: {a: {type: string}}}
+      responses:
+        '200': {description: ok}
+  # allOf: merge Base properties with inline extras.
+  /allof:
+    post:
+      operationId: createAllof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Base'
+                - type: object
+                  required: [label]
+                  properties:
+                    label: {type: string}
+      responses:
+        '200': {description: ok}
+  # oneOf with a discriminator: discriminator property auto-required.
+  /oneof:
+    post:
+      operationId: createOneof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Cat'
+                - $ref: '#/components/schemas/Dog'
+              discriminator:
+                propertyName: petType
+                mapping:
+                  cat: '#/components/schemas/Cat'
+                  dog: '#/components/schemas/Dog'
+      responses:
+        '200': {description: ok}
+  # oneOf object|array: polymorphic array passthrough (pipeline list input).
+  /poly-array:
+    post:
+      operationId: createPolyArray
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties: {name: {type: string}}
+                - type: array
+                  items: {type: string}
+      responses:
+        '200': {description: ok}

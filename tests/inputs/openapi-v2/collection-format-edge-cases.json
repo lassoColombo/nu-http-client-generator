@@ -1,0 +1,79 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Collection Format Edge Cases v2",
+    "version": "1.0.0",
+    "description": "Swagger 2.0 array-parameter collectionFormat (csv/ssv/tsv/pipes/multi) for query, header, and path; the 2.0 analogue of OAS3 style/explode."
+  },
+  "host": "api.example.com",
+  "basePath": "/v2",
+  "schemes": ["https"],
+  "paths": {
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "csvTags",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "csv"
+          },
+          {
+            "name": "ssvTags",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "ssv"
+          },
+          {
+            "name": "tsvTags",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "tsv"
+          },
+          {
+            "name": "pipesTags",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "pipes"
+          },
+          {
+            "name": "multiTags",
+            "in": "query",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "X-Accept-Langs",
+            "in": "header",
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "csv"
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/items/{ids}": {
+      "get": {
+        "operationId": "getItems",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "path",
+            "required": true,
+            "type": "array",
+            "items": { "type": "string" },
+            "collectionFormat": "csv"
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}

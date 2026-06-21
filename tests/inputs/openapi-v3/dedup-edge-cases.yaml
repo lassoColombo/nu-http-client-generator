@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Dedup Edge Cases
+  version: 1.0.0
+  description: >-
+    Synthetic spec exercising duplicate command-name disambiguation. Collisions
+    are forced with a version prefix (/v1, /v2) which is dropped as a structural
+    segment, so both ops derive the same resource. Covers: GET collection/item
+    rename to `list`, numeric fallback (no path params), distinct `-by-<param>`
+    suffixes, and path-param suffix token collapse (`-id-id` -> `-id`,
+    `-type-type-id` -> `-type-id`).
+servers:
+  - url: https://api.example.com
+paths:
+  # ── GET collection/item collision -> /books renamed to "books list" ──
+  /books:
+    get:
+      operationId: getBooks
+      responses:
+        '200':
+          description: ok
+          content: {application/json: {schema: {type: array, items: {type: object}}}}
+  /books/{bookId}:
+    get:
+      operationId: getBook
+      parameters: [{name: bookId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: ok
+          content: {application/json: {schema: {type: object}}}
+
+  # ── Same resource+action, NO path params -> numeric suffix fallback ──
+  # Both derive "tomes create" (v1 dropped as structural), 0 path params.
+  /tomes:
+    post:
+      operationId: createTome
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok}}
+  /v1/tomes:
+    post:
+      operationId: createTomeV1
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok}}
+
+  # ── Same resource+action, DIFFERENT single path param -> distinct -by- suffixes ──
+  # Both derive "scrolls delete"; suffixes -by-isbn vs -by-position.
+  /scrolls/{isbn}:
+    delete:
+      operationId: removeScroll
+      parameters: [{name: isbn, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+  /v1/scrolls/{position}:
+    delete:
+      operationId: deleteScroll
+      parameters: [{name: position, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # ── Suffix token collapse: {dashboardId}/{id} -> -by-dashboard-id (not -id-id) ──
+  # Both derive "blocks update" with two params -> a -by- suffix is built and the
+  # trailing duplicate "id" token is collapsed.
+  /v1/blocks/{dashboardId}/{id}:
+    put:
+      operationId: replaceBlockV1
+      parameters:
+        - {name: dashboardId, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+  /v2/blocks/{pageId}/{id}:
+    put:
+      operationId: replaceBlockV2
+      parameters:
+        - {name: pageId, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+
+  # ── Leading-segment collapse: {type}/{typeId}/{id} -> -by-type-id ──
+  /v1/catalogs/{type}/{typeId}/{id}:
+    put:
+      operationId: replaceCatalogV1
+      parameters:
+        - {name: type, in: path, required: true, schema: {type: string}}
+        - {name: typeId, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}
+  /v2/catalogs/{kind}/{kindId}/{id}:
+    put:
+      operationId: replaceCatalogV2
+      parameters:
+        - {name: kind, in: path, required: true, schema: {type: string}}
+        - {name: kindId, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody: {content: {application/json: {schema: {type: object}}}}
+      responses: {'200': {description: ok, content: {application/json: {schema: {type: object}}}}}

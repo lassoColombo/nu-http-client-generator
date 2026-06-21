@@ -9,7 +9,7 @@ use std/testing *
 
 use ../mod.nu
 
-const PETSTORE = "tests/inputs/openapi-v3/petstore-v3.yaml"
+const PETSTORE = "tests/fixtures/petstore-v3.yaml"
 
 # ── --tags ───────────────────────────────────────────────────────────
 
