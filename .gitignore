@@ -1,1 +1,5 @@
 tests/failures/
+
+# CI artifacts (JUnit reports, cloned nutest) when running the workflow locally
+report-*.xml
+/nutest

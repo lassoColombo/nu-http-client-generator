@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: '0.113.1'
+
+      - name: Install nutest
+        run: |
+          git clone https://github.com/vyadh/nutest.git nutest
+          git -C nutest checkout d56fdc632b96754153a014c021d65a6633fc5610
+
+      # Golden + filter suites: deterministic, no network. The regression gate.
+      # Run first so codegen breakages fail fast before the slower live step.
+      - name: Run golden & filter tests
+        run: |
+          nu -c "use ./nutest/nutest; nutest run-tests --path tests --match-suites 'test_golden|test_filters' --fail --report { type: 'junit', path: 'report-golden.xml' }"
+
+      # Integration suite: hits live no-auth public APIs (httpbin.org, api.apis.guru).
+      # Both are chosen for reliability — api.apis.guru hosts the whole client
+      # collection — but a transient third-party outage can still fail this step.
+      - name: Run integration tests (live APIs)
+        run: |
+          nu -c "use ./nutest/nutest; nutest run-tests --path tests --match-suites 'test_integration' --fail --report { type: 'junit', path: 'report-integration.xml' }"
+
+      - name: Upload JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: report-*.xml
