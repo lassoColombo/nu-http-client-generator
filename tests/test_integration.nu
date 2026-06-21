@@ -1,15 +1,22 @@
 # Integration tests: generate clients from specs and call real APIs.
-# These tests hit live endpoints (httpbin.org, petstore3.swagger.io).
+# These tests hit live endpoints (httpbin.org, api.apis.guru).
 # They will fail if the APIs are unreachable.
-# Clients are generated from both local files and remote URLs to cover both load paths.
+# Clients are generated from both local files (httpbin) and remote URLs
+# (apis.guru) to cover both spec-load paths.
+#
+# Both targets are no-auth public APIs chosen for reliability: httpbin.org is
+# the canonical HTTP echo service, and api.apis.guru hosts the entire client
+# collection (if it were down, nothing in this project would work anyway).
+# We deliberately avoid petstore3.swagger.io — its demo backend intermittently
+# returns HTTP 500 on real calls, which made these tests flaky.
 
 use std/assert
 use std/testing *
 
 use ../mod.nu
 
-const PETSTORE_SPEC_URL = "https://petstore3.swagger.io/api/v3/openapi.json"
-const PETSTORE_BASE_URL = "https://petstore3.swagger.io/api/v3"
+# apis.guru: no-auth, server baked into the spec (https://api.apis.guru/v2).
+const APISGURU_SPEC_URL = "https://api.apis.guru/v2/specs/apis.guru/2.2.0/openapi.json"
 
 # Run a command using a generated client module and return parsed output.
 # Shells out to a clean nu process to avoid polluting the test environment.
@@ -25,16 +32,16 @@ def run-cmd [client: string, cmd: string]: nothing -> any {
 def setup []: nothing -> record {
     let temp = mktemp --directory
 
-    # file inputs
+    # local-file load path
     mod ./tests/fixtures/httpbin.json -o ($temp | path join "httpbin.nu")
 
-    # url inputs
-    mod $PETSTORE_SPEC_URL -o ($temp | path join "petstore.nu") --default-base-url $PETSTORE_BASE_URL
+    # remote-URL load path
+    mod $APISGURU_SPEC_URL -o ($temp | path join "apisguru.nu")
 
     {
         temp: $temp
         httpbin: ($temp | path join "httpbin.nu")
-        petstore: ($temp | path join "petstore.nu")
+        apisguru: ($temp | path join "apisguru.nu")
     }
 }
 
@@ -82,23 +89,29 @@ def "httpbin anything post echoes method" [] {
     assert equal $resp.method "POST"
 }
 
-# --- petstore REST tests (loaded from URL) ---
+# --- apis.guru REST tests (loaded from URL) ---
 
 @test
-def "petstore find pets by status" [] {
-    let resp = run-cmd $in.petstore "petstore pet-find-by-status find --status available --max-time 15sec"
-    assert (($resp | length) > 0) "should return at least one pet"
+def "apisguru metrics returns counts" [] {
+    # No-param GET returning a flat record of integers.
+    let resp = run-cmd $in.apisguru "apisguru metrics-json get --max-time 15sec"
+    assert (($resp.numAPIs | into int) > 0) "numAPIs should be positive"
+    assert (($resp.numEndpoints | into int) > 0) "numEndpoints should be positive"
 }
 
 @test
-def "petstore get pet by id" [] {
-    # First find an existing pet, then fetch it by ID
-    let pets = run-cmd $in.petstore "petstore pet-find-by-status find --status available --max-time 15sec"
-    assert (($pets | length) > 0) "should find at least one pet to test with"
-    let pet_id = ($pets | first | get id)
-    let resp = run-cmd $in.petstore $"petstore pet get ($pet_id) --max-time 15sec"
-    assert ($resp.id != null) "pet should have an id"
-    assert ($resp.name | is-not-empty) "pet should have a name"
+def "apisguru providers returns list" [] {
+    # No-param GET returning a collection ({data: [provider strings]}).
+    let resp = run-cmd $in.apisguru "apisguru providers-json get --max-time 15sec"
+    assert (($resp.data | length) > 0) "should return at least one provider"
+    assert ($resp.data | all {|p| ($p | describe) == "string" }) "providers should be strings"
+}
+
+@test
+def "apisguru provider lookup by path param" [] {
+    # GET with a single path param returning an object (the provider's APIs).
+    let resp = run-cmd $in.apisguru "apisguru ap-is get 'apis.guru' --max-time 15sec"
+    assert ($resp.apis | is-not-empty) "provider should expose at least one API"
 }
 
 # --- dry-run shape tests ---
@@ -115,10 +128,11 @@ def "dry-run record has dry_run marker" [] {
 
 @test
 def "dry-run query record carries user-passed params by spec name" [] {
-    let r = run-cmd $in.petstore "petstore pet-find-by-status find --status available --dry-run"
-    assert equal $r.query.status "available"
-    # The wire URL should also contain the param (so $r.url and $r.query agree)
-    assert ($r.url | str contains "status=available")
+    let r = run-cmd $in.httpbin "httpbin redirect-to get --url 'http://x.test' --dry-run"
+    assert equal $r.query.url "http://x.test"
+    # The wire URL should also contain the param, percent-encoded (so $r.url and
+    # $r.query agree).
+    assert ($r.url | str contains "url=http%3A%2F%2Fx.test")
 }
 
 @test
@@ -139,12 +153,13 @@ def "dry-run auth metadata surfaces scheme and location" [] {
 }
 
 @test
-def "dry-run body is logical record for json body" [] {
-    let r = run-cmd $in.petstore "petstore pet create fluffy [\"http://x.jpg\"] --id 42 --status sold --dry-run"
+def "dry-run body is logical record" [] {
+    # POST with a body: the logical (pre-serialization) body is a record keyed by
+    # spec field name, regardless of the wire content-type.
+    let r = run-cmd $in.httpbin "httpbin redirect-to create 'http://b.test' --status-code 302 --dry-run"
     assert equal ($r.body | describe | str starts-with "record") true
-    assert equal $r.body.name "fluffy"
-    assert equal $r.body.id 42
-    assert equal $r.body.status "sold"
+    assert equal $r.body.url "http://b.test"
+    assert equal $r.body.status_code 302
 }
 
 @test
