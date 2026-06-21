@@ -112,12 +112,10 @@ def check-spec-generatable [loaded: record] {
   # OpenAPI 3.1 promoted `webhooks` to a top-level Paths-sibling for specs
   # that describe only inbound server-to-client events.
   if $has_webhooks {
-    log warn $"spec at ($loaded.source) defines only webhooks \(server-to-client events\), no callable endpoints — nothing to generate"
-    return "skip"
+    error make --unspanned $"spec at ($loaded.source) defines only webhooks \(server-to-client events\), no callable endpoints — nothing to generate"
   }
   if ($loaded.data.paths? | describe -d | get type) == "record" {
-    log warn $"spec at ($loaded.source) defines no operations \(empty 'paths' object\) — nothing to generate"
-    return "skip"
+    error make --unspanned $"spec at ($loaded.source) defines no operations \(empty 'paths' object\) — nothing to generate"
   }
   error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
 }
