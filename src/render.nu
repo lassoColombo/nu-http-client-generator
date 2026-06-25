@@ -251,7 +251,7 @@ export def collect-completers [commands: list] {
 # Values may contain embedded double-quotes or backslashes (e.g. specs that
 # include `"\"Latency\""` as an enum value). Escape those so the emitted
 # string literal is well-formed.
-export def render-completers [completers: record] {
+def render-completers [completers: record] {
   $completers | items {|name, values|
     let vals = ($values | each {|v| ($v | to nuon) } | str join ' ')
     $'def ($name) [] { [($vals)] }'
@@ -487,7 +487,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 # `needs_multipart` controls emission of the `build-multipart-body` helper —
 # only generated when at least one operation uses `multipart/form-data` so
 # clients that never upload files stay slim.
-export def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = []] {
+def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = []] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -1226,8 +1226,8 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   $cmd_lines | str join "\n"
 }
 
-# Render the full module file
-export def render-module [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, config: record] {
+# Render the full client module file
+export def client [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, config: record] {
   let title = ($spec_data.info?.title? | default $module_name)
   let version_str = ($spec_data.info?.version? | default "0.0.0")
   let token_env_var = if ($config.token_env_var != null) and ($config.token_env_var | is-not-empty) {

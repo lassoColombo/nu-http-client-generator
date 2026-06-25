@@ -1,56 +1,12 @@
-# build.nu — OpenAPI/Swagger command-model builder.
+# model.nu — OpenAPI/Swagger command-model builder.
 #
 # Extracts operations from an OpenAPI 3.x / Swagger 2.0 spec and produces
-# the command model consumed by render.nu.
+# the command model consumed by render.nu. Spec loading/parsing lives in
+# `src/spec/` (`spec load-spec`).
 
 use spec/spec.nu
 use render.nu
 use log.nu
-
-# ─── Spec loading ──────────────────────────────────────────────────
-#
-# The URL path goes through `spec fetch-text` (raw fetch + UTF-8 decode)
-# instead of `http get`'s auto-parser — see the helper for the rationale.
-
-# Load an OpenAPI/Swagger spec from a local file or a URL.
-# Returns {data: record, source: string}.
-export def load-spec [source: string, headers: record = {}] {
-  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
-    let body = (spec fetch-text $source $headers)
-    {data: (parse-spec-text $body $source), source: $source}
-  } else {
-    let expanded = ($source | path expand | into string)
-    {data: (open $expanded), source: $expanded}
-  }
-}
-
-# Parse a raw spec body, picking JSON or YAML based on the source URL's
-# extension and falling back to "try JSON then YAML" when there's no hint.
-def parse-spec-text [body: string, source: string]: nothing -> any {
-  let parsed = if ($source | str ends-with ".json") {
-    $body | from json
-  } else if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
-    $body | from yaml
-  } else {
-    try {
-      $body | from json
-    } catch {
-      try {
-        $body | from yaml
-      } catch {
-        # YAML accepts bare HTML/text as a scalar string, so a successful parse
-        # here means we got real JSON or structured YAML — anything else is a
-        # server returning an error page (HTML, plain text) with HTTP 200.
-        error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
-      }
-    }
-  }
-  if not (($parsed | describe) | str starts-with "record") {
-    let preview = ($body | str trim | str substring 0..120)
-    error make --unspanned { msg: $"spec at ($source) did not parse to a record \(got ($parsed | describe)\); response begins: ($preview)" }
-  }
-  $parsed
-}
 
 # ── Private helpers ────────────────────────────────────────────────
 
@@ -354,11 +310,6 @@ def naive-singular [word: string] {
   } else {
     $word
   }
-}
-
-# Convert a CamelCase / PascalCase / mixed token to kebab-case.
-def to-kebab [s: string] {
-  $s | str kebab-case
 }
 
 # ── Tokenize-and-classify pipeline ─────────────────────────────────
@@ -941,7 +892,7 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
 #
 # Shared by `derive-command-name`'s `_2`-dedup branch and `mod.nu`'s
 # `deduplicate-commands` pass-1 suffix branch — previously two divergent copies.
-export def build-param-suffix [path_params: list]: nothing -> string {
+export def param-suffix [path_params: list]: nothing -> string {
   $path_params
   | each {|p| $p.name | str kebab-case }
   | reduce --fold [] {|tok, acc|
@@ -1107,8 +1058,8 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 
   if $is_duplicate {
     # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
-    # adjacent-duplicate tokens (see `build-param-suffix`).
-    let param_suffix = (build-param-suffix $path_params)
+    # adjacent-duplicate tokens (see `param-suffix`).
+    let param_suffix = (param-suffix $path_params)
     # Issue 34.A: when there are no path params, the `-by-` marker would
     # collapse to a hanging hyphen. Skip it and let pass-2 numeric-suffix
     # dedup handle the collision (matches same-resource same-verb path).
@@ -1123,7 +1074,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 }
 
 # Build the command model list from a parsed+resolved REST spec.
-export def build-command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
+export def command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
   ($spec_data.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {

@@ -8,12 +8,7 @@
 use src/spec
 use src/render.nu
 use src/log.nu
-use src/build.nu
-
-# Format a list for log output: first 5 + "... (N total)" if longer than 5.
-def truncated-display [items: list]: nothing -> string {
-  if ($items | length) > 5 { $"($items | first 5 | str join ', '), ... \(($items | length) total\)" } else { $items | str join ", " }
-}
+use src/model.nu
 
 # Deduplicate command names.
 def deduplicate-commands [commands: list] {
@@ -46,11 +41,11 @@ def deduplicate-commands [commands: list] {
   let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
 
   if ($list_candidates | length) > 0 {
-    let display = (truncated-display ($list_candidates | each {|n| $n | split row ' ' | first }))
+    let display = ($list_candidates | each {|n| $n | split row ' ' | first } | str join ", ")
     log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
   }
   if ($suffix_candidates | length) > 0 {
-    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: (truncated-display $suffix_candidates)"
+    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($suffix_candidates | str join ', ')"
   }
 
   let pass1 = $commands | each {|cmd|
@@ -66,8 +61,8 @@ def deduplicate-commands [commands: list] {
       }
     } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | length) > 0 {
       # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
-      # adjacent-duplicate tokens (see `build build-param-suffix`).
-      let suffix = (build build-param-suffix $cmd.path_params)
+      # adjacent-duplicate tokens (see `model param-suffix`).
+      let suffix = (model param-suffix $cmd.path_params)
       $cmd | update name $"($cmd.name)-by-($suffix)"
     } else {
       $cmd
@@ -82,7 +77,7 @@ def deduplicate-commands [commands: list] {
     return $pass1
   }
 
-  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: (truncated-display $dup_names2)"
+  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($dup_names2 | str join ', ')"
 
   mut result = []
   mut seen = {}
@@ -132,11 +127,11 @@ def process-spec [spec_data: record, config: record] {
   # Stash the full spec under `__spec__` so cross-path refs (e.g. DigitalOcean's
   # `#/paths/~1v2~1.../get/parameters/0`) can be resolved via generic JSON
   # Pointer traversal — those refs don't name a schemas-table entity.
-  let schemas = ((spec build-resolved-schemas $raw_schemas) | upsert __spec__ $spec_data)
+  let schemas = ((spec resolve-schemas $raw_schemas) | upsert __spec__ $spec_data)
   let auth_schemes = (do $h.get-auth-schemes $spec_data)
   let default_auth = (spec get-default-auth $spec_data $auth_schemes)
   let default_auth_required = (spec get-default-auth-required $spec_data $auth_schemes)
-  let commands = (build build-command-list $spec_data $schemas $h $auth_schemes $default_auth $default_auth_required $config)
+  let commands = (model command-list $spec_data $schemas $h $auth_schemes $default_auth $default_auth_required $config)
   {
     commands: (deduplicate-commands $commands)
     auth_schemes: $auth_schemes
@@ -165,7 +160,7 @@ export def main [
   --default-base-url: string    # Override default base URL from spec
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
-  let loaded = (build load-spec $source ($spec_headers | default {}))
+  let loaded = (spec load-spec $source ($spec_headers | default {}))
   if (check-spec-generatable $loaded) == "skip" { return null }
   let config = {
     filter_tags: ($tags | default [])
@@ -191,7 +186,7 @@ export def main [
     return null
   }
   let extra_urls = (($urls | default []) | append $result.all_urls)
-  let output_content = (render render-module $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $config)
+  let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $config)
   let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
   $output_content | save --force $out_path
 }
@@ -206,7 +201,7 @@ export def preview [
   --verb-map: record            # Naming: override action verbs e.g. {retrieve: "fetch"}
   --spec-headers: record        # Headers for fetching remote specs
 ] {
-  let loaded = (build load-spec $source ($spec_headers | default {}))
+  let loaded = (spec load-spec $source ($spec_headers | default {}))
   if (check-spec-generatable $loaded) == "skip" { return [] }
   let config = {
     filter_tags: ($tags | default [])

@@ -34,6 +34,49 @@ export def fetch-text [url: string, headers: record = {}] {
   if (($raw | describe) | str starts-with "binary") { $raw | decode utf-8 } else { $raw }
 }
 
+# Load an OpenAPI/Swagger spec from a local file or a URL.
+# Returns {data: record, source: string}.
+#
+# The URL path goes through `fetch-text` (raw fetch + UTF-8 decode) instead of
+# `http get`'s auto-parser — see that helper for the rationale.
+export def load-spec [source: string, headers: record = {}] {
+  if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
+    let body = (fetch-text $source $headers)
+    {data: (parse-spec-text $body $source), source: $source}
+  } else {
+    let expanded = ($source | path expand | into string)
+    {data: (open $expanded), source: $expanded}
+  }
+}
+
+# Parse a raw spec body, picking JSON or YAML based on the source URL's
+# extension and falling back to "try JSON then YAML" when there's no hint.
+def parse-spec-text [body: string, source: string]: nothing -> any {
+  let parsed = if ($source | str ends-with ".json") {
+    $body | from json
+  } else if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
+    $body | from yaml
+  } else {
+    try {
+      $body | from json
+    } catch {
+      try {
+        $body | from yaml
+      } catch {
+        # YAML accepts bare HTML/text as a scalar string, so a successful parse
+        # here means we got real JSON or structured YAML — anything else is a
+        # server returning an error page (HTML, plain text) with HTTP 200.
+        error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
+      }
+    }
+  }
+  if not (($parsed | describe) | str starts-with "record") {
+    let preview = ($body | str trim | str substring 0..120)
+    error make --unspanned { msg: $"spec at ($source) did not parse to a record \(got ($parsed | describe)\); response begins: ($preview)" }
+  }
+  $parsed
+}
+
 # Drop OpenAPI/Swagger vendor extensions (`x-*` keys) from a record.
 # Per the spec, vendor extensions are allowed at most object levels and
 # tools that don't understand them must ignore them. Centralized here so
@@ -131,7 +174,7 @@ def ref-lookup [ref_path: string, schemas: record] {
 #
 # Cycles: a {$ref} that points back into its own chain is returned as-is
 # ("first wins" semantics, same as the previous implementation).
-export def build-resolved-schemas [raw_schemas: record] {
+export def resolve-schemas [raw_schemas: record] {
   mut output = {}
   for ns in ($raw_schemas | columns) {
     let sub = ($raw_schemas | get $ns)
@@ -172,7 +215,7 @@ def collapse-ref-chain [val: any, schemas: record, visited: list<string>] {
 #   must re-invoke resolve-ref on any sub-field it wants resolved.
 # - Otherwise return $val unchanged.
 #
-# Combined with `build-resolved-schemas`, ref chains (A → B → C) collapse
+# Combined with `resolve-schemas`, ref chains (A → B → C) collapse
 # to C in a single lookup, and each ref resolution is O(1).
 export def resolve-ref [val: any, schemas: record] {
   let t = ($val | describe)
