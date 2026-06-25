@@ -73,14 +73,17 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
 # body) that do-request itself cannot reconstruct from its wire-format args.
 def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
   let m = ($meta | default {})
+  # GET/HEAD/OPTIONS carry no body on the wire (do-request drops it), so
+  # report null body/content_type instead of advertising a phantom (D-11).
+  let bodyless = ($method in ["get" "head" "options"])
   {
     dry_run: true
     method: $method
     url: $url
     query: ($m | get -o query | default {})
     headers: $auth.headers
-    body: ($m | get -o body)
-    content_type: $content_type
+    body: (if $bodyless { null } else { $m | get -o body })
+    content_type: (if $bodyless { null } else { $content_type })
     timeout: $timeout
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -223,17 +226,13 @@ export def "query list-with-body" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filter: string
-]: any -> record {
-  let input = $in
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/query")
-  let req_body = {"filter": $filter} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" $req_body {query: {}, body: $req_body}
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
 }
 
 # GET /report

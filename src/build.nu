@@ -1204,7 +1204,13 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         query_params: $params.query_params
         header_params: $params.header_params
         cookie_params: $params.cookie_params
-        has_body: $body.has_body
+        # D-11: GET/HEAD/OPTIONS cannot carry a request body — Nushell's
+        # `http get`/`head`/`options` builtins take no body argument, so
+        # do-request silently drops it. Suppress all body plumbing (body
+        # flags, req_body construction, the do-request body arg, and the
+        # dry-run body) for these methods so the client never advertises a
+        # body it cannot send and --dry-run matches what goes on the wire.
+        has_body: ($body.has_body and not ($method in [get head options]))
         content_type: $body.content_type
         body_fields: $body.body_fields
         body_polymorphic_array: $body.body_polymorphic_array
