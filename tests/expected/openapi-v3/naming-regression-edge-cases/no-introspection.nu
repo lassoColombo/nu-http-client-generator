@@ -8,7 +8,7 @@ const BASE_URL = "https://api.example.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NAMING_REGRESSION_EDGE_CASES_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NAMING_REGRESSION_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -58,20 +58,16 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
-}
-
-# Fold the auth-token query fragment into the URL (no-op unless a query-located
-# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
-def apply-auth-query [auth: record]: string -> string {
-  let url = $in
-  if ($auth.query | is-empty) { return $url }
-  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
 # Success policy: did this response succeed? Single source of truth, consulted by
@@ -141,12 +137,12 @@ export def "settings get-list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/settings")
+  let full_url = (build-url $base "/settings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -174,12 +170,12 @@ export def "catalog-products list-render-get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/catalog/products")
+  let full_url = (build-url $base "/catalog/products" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -207,12 +203,12 @@ export def "events options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/events")
+  let full_url = (build-url $base "/events" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "options"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -240,12 +236,12 @@ export def "listings delete" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listings")
+  let full_url = (build-url $base "/listings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -273,12 +269,12 @@ export def "listings get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/listings")
+  let full_url = (build-url $base "/listings" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -306,12 +302,12 @@ export def "records delete-by-name-bulk" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/records")
+  let full_url = (build-url $base "/records" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -339,12 +335,12 @@ export def "airlines get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/airlines")
+  let full_url = (build-url $base "/airlines" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -374,12 +370,12 @@ export def "marketing-events-archive delete-external" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_event_id | is-empty) { error make --unspanned { msg: "path parameter 'externalEventId' must be non-empty" } }
-  let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/events/{external_event_id}/archive"))
+  let full_url = (build-url $base ({external_event_id: (encode-path-segment $external_event_id)} | format pattern "/marketing/events/{external_event_id}/archive") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -411,14 +407,14 @@ export def "keys create-mac-sign" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/keys/{name}:macSign"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/keys/{name}:macSign") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -450,14 +446,14 @@ export def "profiles update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/profiles/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/profiles/{id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "patch"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -487,14 +483,14 @@ export def "sendgrid create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/sendgrid")
+  let full_url = (build-url $base "/sendgrid" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body

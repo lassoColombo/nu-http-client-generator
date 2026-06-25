@@ -8,7 +8,7 @@ const BASE_URL = "https://custom.example.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o NAME_DERIVATION_EDGE_CASES_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o NAME_DERIVATION_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -58,20 +58,16 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
-}
-
-# Fold the auth-token query fragment into the URL (no-op unless a query-located
-# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
-def apply-auth-query [auth: record]: string -> string {
-  let url = $in
-  if ($auth.query | is-empty) { return $url }
-  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
 # Success policy: did this response succeed? Single source of truth, consulted by
@@ -160,12 +156,12 @@ export def "containers delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/containers/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -193,12 +189,12 @@ export def "configs list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/configs")
+  let full_url = (build-url $base "/configs" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -228,14 +224,14 @@ export def "images-build build" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/images/build")
+  let full_url = (build-url $base "/images/build" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -263,12 +259,12 @@ export def "system-ping ping" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/system/ping")
+  let full_url = (build-url $base "/system/ping" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -298,12 +294,12 @@ export def "configmaps get-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -335,14 +331,14 @@ export def "configmaps update-config-map" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}"))
+  let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/configmaps/{name}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "put"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -370,12 +366,12 @@ export def "configmaps watch-config-map" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/configmaps")
+  let full_url = (build-url $base "/configmaps" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -407,14 +403,14 @@ export def "blocks-children create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocks/{id}/children"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocks/{id}/children") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -444,14 +440,14 @@ export def "certificates create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/certificates")
+  let full_url = (build-url $base "/certificates" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -483,12 +479,12 @@ export def "certificates get" [
   let base = ($base_url | default $BASE_URL)
   if ($thumbprint_algorithm | is-empty) { error make --unspanned { msg: "path parameter 'thumbprintAlgorithm' must be non-empty" } }
   if ($thumbprint | is-empty) { error make --unspanned { msg: "path parameter 'thumbprint' must be non-empty" } }
-  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})"))
+  let full_url = (build-url $base ({thumbprint_algorithm: (encode-path-segment $thumbprint_algorithm), thumbprint: (encode-path-segment $thumbprint)} | format pattern "/certificates(thumbprintAlgorithm={thumbprint_algorithm},thumbprint={thumbprint})") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -520,12 +516,12 @@ export def "namespaces-configmaps-status get-config-map" [
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/namespaces/{namespace}/configmaps/{name}/status"))
+  let full_url = (build-url $base ({namespace: (encode-path-segment $namespace), name: (encode-path-segment $name)} | format pattern "/namespaces/{namespace}/configmaps/{name}/status") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null

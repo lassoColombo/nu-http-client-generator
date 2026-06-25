@@ -8,7 +8,7 @@ const BASE_URL = "https://api.example.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BODY_CONTENT_TYPE_EDGE_CASES_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o BODY_CONTENT_TYPE_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -58,20 +58,16 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
-}
-
-# Fold the auth-token query fragment into the URL (no-op unless a query-located
-# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
-def apply-auth-query [auth: record]: string -> string {
-  let url = $in
-  if ($auth.query | is-empty) { return $url }
-  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
 # Success policy: did this response succeed? Single source of truth, consulted by
@@ -174,14 +170,14 @@ export def "json create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/json")
+  let full_url = (build-url $base "/json" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -212,7 +208,7 @@ export def "form create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/form")
+  let full_url = (build-url $base "/form" $auth.query)
   let req_body = {"grant_type": $grant_type, "scope": $scope} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -220,7 +216,7 @@ export def "form create" [
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -250,7 +246,7 @@ export def "form-scalar create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/form-scalar")
+  let full_url = (build-url $base "/form-scalar" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
@@ -258,7 +254,7 @@ export def "form-scalar create" [
   let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -288,14 +284,14 @@ export def "text create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/text")
+  let full_url = (build-url $base "/text" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -326,7 +322,7 @@ export def "upload upload-file" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/upload")
+  let full_url = (build-url $base "/upload" $auth.query)
   let req_body = {"file": $file, "filename": $filename} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -335,7 +331,7 @@ export def "upload upload-file" [
   let mp = (build-multipart-body $req_body ["file"] $dry_run)
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -365,7 +361,7 @@ export def "upload-empty upload" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/upload-empty")
+  let full_url = (build-url $base "/upload-empty" $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
@@ -374,7 +370,7 @@ export def "upload-empty upload" [
   let mp = (build-multipart-body $req_body [] $dry_run)
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -404,14 +400,14 @@ export def "multi-ct create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/multi-ct")
+  let full_url = (build-url $base "/multi-ct" $auth.query)
   let req_body = {"a": $a} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -442,14 +438,14 @@ export def "allof create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/allof")
+  let full_url = (build-url $base "/allof" $auth.query)
   let req_body = {"id": $id, "label": $label} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -482,14 +478,14 @@ export def "oneof create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oneof")
+  let full_url = (build-url $base "/oneof" $auth.query)
   let req_body = {"petType": $pet_type, "meow": $meow, "bark": $bark} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -519,14 +515,14 @@ export def "poly-array create" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/poly-array")
+  let full_url = (build-url $base "/poly-array" $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "post"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body

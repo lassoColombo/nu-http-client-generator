@@ -8,7 +8,7 @@ const BASE_URL = "https://custom.example.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AUTH_EDGE_CASES_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o AUTH_EDGE_CASES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -77,20 +77,16 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
-}
-
-# Fold the auth-token query fragment into the URL (no-op unless a query-located
-# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
-def apply-auth-query [auth: record]: string -> string {
-  let url = $in
-  if ($auth.query | is-empty) { return $url }
-  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
 # Success policy: did this response succeed? Single source of truth, consulted by
@@ -159,12 +155,12 @@ export def "default-auth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/default-auth")
+  let full_url = (build-url $base "/default-auth" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -192,12 +188,12 @@ export def "basic get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/basic")
+  let full_url = (build-url $base "/basic" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -225,12 +221,12 @@ export def "jwt get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-jwt-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/jwt")
+  let full_url = (build-url $base "/jwt" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -258,12 +254,12 @@ export def "static get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-static-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/static")
+  let full_url = (build-url $base "/static" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -291,12 +287,12 @@ export def "query-key get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/query-key")
+  let full_url = (build-url $base "/query-key" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -324,12 +320,12 @@ export def "cookie-key get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/cookie-key")
+  let full_url = (build-url $base "/cookie-key" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -357,12 +353,12 @@ export def "oauth get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oauth")
+  let full_url = (build-url $base "/oauth" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -390,12 +386,12 @@ export def "oidc get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/oidc")
+  let full_url = (build-url $base "/oidc" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -423,12 +419,12 @@ export def "public get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/public")
+  let full_url = (build-url $base "/public" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -456,12 +452,12 @@ export def "and-header get" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_apikeya | default ($env | get -o AUTH_EDGE_CASES_APIKEYA_TOKEN | default "")) "x-api-key-a") (build-auth ($token_apikeyb | default ($env | get -o AUTH_EDGE_CASES_APIKEYB_TOKEN | default "")) "x-api-key-b")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/and-header")
+  let full_url = (build-url $base "/and-header" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -489,12 +485,12 @@ export def "and-mixed get" [
 ]: nothing -> any {
   let auth = (merge-auth [(build-auth ($token_apikeya | default ($env | get -o AUTH_EDGE_CASES_APIKEYA_TOKEN | default "")) "x-api-key-a") (build-auth ($token_querykey | default ($env | get -o AUTH_EDGE_CASES_QUERYKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/and-mixed")
+  let full_url = (build-url $base "/and-mixed" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null

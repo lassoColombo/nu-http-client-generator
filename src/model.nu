@@ -13,7 +13,7 @@ use log.nu
 # Process header or cookie params into a uniform record list.
 def process-simple-params [params: list, location: string, h: record] {
   $params | where {|p| ($p.in? | default "") == $location } | each {|p|
-    let example = ($p.schema?.example? | default ($p.example? | default null))
+    let example = ($p.schema?.example? | default $p.example?)
     let desc_base = ($p.description? | default "")
     let deprecated = ($p.deprecated? | default false)
     {
@@ -75,12 +75,12 @@ def merge-body-props [schema: record, schemas: record] {
   })
   let merged_required_pre_disc = $required_after_allof
 
-  let merged_required = if ($disc_prop != null) and ($disc_prop in ($merged_props_pre_disc | columns)) {
+  let merged_required = if ($disc_prop in ($merged_props_pre_disc | columns)) {
     $merged_required_pre_disc | append $disc_prop | uniq
   } else {
     $merged_required_pre_disc
   }
-  let merged_props = if ($disc_prop != null) and ($disc_prop in ($merged_props_pre_disc | columns)) and ($disc_mapping | is-not-empty) {
+  let merged_props = if ($disc_prop in ($merged_props_pre_disc | columns)) and ($disc_mapping | is-not-empty) {
     $merged_props_pre_disc | upsert $disc_prop ($merged_props_pre_disc | get $disc_prop | upsert enum ($disc_mapping | columns))
   } else {
     $merged_props_pre_disc
@@ -547,7 +547,7 @@ def pick-action [classified: list, method: string] {
         false
       } else if ($chosen_idx == -1) and ($tok | str starts-with $primary_verb) and (($tok | str length) > ($primary_verb | str length)) {
         let rem = ($tok | str substring (($primary_verb | str length)..))
-        if $rem in ["all" "bulk" "byid" "byname" "many" "one"] { false } else { true }
+        $rem not-in ["all" "bulk" "byid" "byname" "many" "one"]
       } else {
         true
       }
@@ -642,7 +642,7 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   }
 
   # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
-  let chosen_server = ($op.servers?.0? | default ($methods.servers?.0? | default null))
+  let chosen_server = ($op.servers?.0? | default $methods.servers?.0?)
   let base_url = if ($chosen_server == null) { null } else { do $h.resolve-server-url $chosen_server }
 
   {
@@ -674,7 +674,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
       spec resolve-ref $p $schemas
     } else { $p }
     let s = ($resolved.schema? | default null)
-    if ($s != null) and (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
+    if (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
       $resolved | upsert schema (spec resolve-ref $s $schemas)
     } else {
       $resolved
@@ -692,9 +692,9 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
   }
 
   let query_params = $resolved_params | where {|p| ($p.in? | default "") == "query" } | each {|p|
-    let default_val = ($p.schema?.default? | default ($p.default? | default null))
-    let format = ($p.schema?.format? | default ($p.format? | default null))
-    let example = ($p.schema?.example? | default ($p.example? | default ($p | get -o "x-example" | default null)))
+    let default_val = ($p.schema?.default? | default $p.default?)
+    let format = ($p.schema?.format? | default $p.format?)
+    let example = ($p.schema?.example? | default ($p.example? | default ($p | get -o "x-example")))
     let param_type = (do $h.get-param-type $p)
     let collection_style = (do $h.get-param-collection-style $p)
     let deprecated = ($p.deprecated? | default false)
@@ -791,7 +791,7 @@ def extract-body-info [op: record, schemas: record, h: record, spec_data: record
     } else {
       null
     }
-  } | where { $in != null }
+  } | compact
   let resp_disc = if ($resp_discs | is-not-empty) { $resp_discs | first } else { null }
   let discriminator = if ($body_disc != null) {
     {context: "request", propertyName: $body_disc.propertyName, mapping: $body_disc.mapping}
@@ -1019,7 +1019,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
     ($operation_id | split row '_' | last)
     ($picked | split row '-' | first)
   ]
-  let matches = ($verb_map_keys | each {|k| $verb_map | get -o $k } | where {|v| $v != null })
+  let matches = ($verb_map_keys | each {|k| $verb_map | get -o $k } | compact)
   let action_picked = if ($matches | is-not-empty) { $matches | first } else { $picked }
 
   # Stutter case: if the picked verb is literally the resource word

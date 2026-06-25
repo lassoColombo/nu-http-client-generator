@@ -107,7 +107,7 @@ def get-body-info-impl [op: record, schemas: record, spec_data: record] {
     }
     {has_body: true, body_schema: {type: "object", properties: $props, required: $required}, content_type: $ct}
   } else {
-    let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first | default null
+    let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first
     if ($body_param | is-empty) {
       {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
     } else {

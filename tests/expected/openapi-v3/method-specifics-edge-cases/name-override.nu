@@ -8,7 +8,7 @@ const BASE_URL = "https://api.example.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TEST_CLIENT_TOKEN | default "" }
+  let token_val = if ($token | is-not-empty) { $token } else { $env | get -o TEST_CLIENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -58,20 +58,16 @@ def encode-path-array [v: any]: nothing -> string {
   if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
 }
 
-# Build URL from base, path, and optional query string
-def build-url [base: string, path: string, query?: string]: nothing -> string {
+# Build the request URL from base, path, and any number of pre-encoded query
+# fragments (param serializer output and/or the auth query). Each fragment is an
+# `&`-joinable `key=value` string already percent-encoded by its producer; empty
+# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
+# delimiters are hand-spliced — and any query already on the base URL is merged in.
+def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
   let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
-  let result = ($parsed | upsert path $full_path)
-  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
-}
-
-# Fold the auth-token query fragment into the URL (no-op unless a query-located
-# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
-def apply-auth-query [auth: record]: string -> string {
-  let url = $in
-  if ($auth.query | is-empty) { return $url }
-  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
+  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
+  $parsed | upsert path $full_path | upsert query $query | url join
 }
 
 # Success policy: did this response succeed? Single source of truth, consulted by
@@ -162,12 +158,12 @@ export def "resource head" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "head"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -199,14 +195,14 @@ export def "resource delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}") $auth.query)
   let req_body = {"reason": $reason} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: $req_body
@@ -234,12 +230,12 @@ export def "resource options" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/resource")
+  let full_url = (build-url $base "/resource" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "options"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -269,12 +265,12 @@ export def "resource-hard delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}/hard"))
+  let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/resource/{id}/hard") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -302,12 +298,12 @@ export def "query list-with-body" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/query")
+  let full_url = (build-url $base "/query" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null
@@ -337,12 +333,12 @@ export def "report get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/report")
+  let full_url = (build-url $base "/report" $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
-    url: ($full_url | apply-auth-query $auth)
+    url: $full_url
     query: {}
     headers: $auth.headers
     body: null

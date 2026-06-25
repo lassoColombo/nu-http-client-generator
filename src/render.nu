@@ -601,7 +601,7 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '# `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers'
     '# where the token went without inspecting headers/query themselves.'
     'def build-auth [token?: string, auth_scheme?: string]: nothing -> record {'
-    $"  let token_val = if \($token != null\) and \($token | is-not-empty\) { $token } else { $env | get -o ($token_env_var) | default \"\" }"
+    $"  let token_val = if \($token | is-not-empty\) { $token } else { $env | get -o ($token_env_var) | default \"\" }"
     '  let scheme = ($auth_scheme | default "bearer")'
     '  if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }'
     '  match $scheme {'
@@ -651,20 +651,16 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }'
     '}'
     ''
-    '# Build URL from base, path, and optional query string'
-    'def build-url [base: string, path: string, query?: string]: nothing -> string {'
+    '# Build the request URL from base, path, and any number of pre-encoded query'
+    '# fragments (param serializer output and/or the auth query). Each fragment is an'
+    '# `&`-joinable `key=value` string already percent-encoded by its producer; empty'
+    '# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no'
+    '# delimiters are hand-spliced — and any query already on the base URL is merged in.'
+    'def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {'
     '  let parsed = ($base | url parse | reject params)'
     "  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join \"/\" | str replace --all --regex '/+' '/' }"
-    '  let result = ($parsed | upsert path $full_path)'
-    '  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }'
-    '}'
-    ''
-    '# Fold the auth-token query fragment into the URL (no-op unless a query-located'
-    '# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.'
-    'def apply-auth-query [auth: record]: string -> string {'
-    '  let url = $in'
-    '  if ($auth.query | is-empty) { return $url }'
-    '  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }'
+    '  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")'
+    '  $parsed | upsert path $full_path | upsert query $query | url join'
     '}'
     ''
     '# Success policy: did this response succeed? Single source of truth, consulted by'
@@ -798,9 +794,9 @@ export def build-body-code [cmd: record, config: record] {
       $"\(serialize-qp \"($q.name)\" ($var_name) \"($q.collection_style)\"\)"
     } | str join " "
     $lines = ($lines | append ($"  let qp = [($calls)] | flatten | str join \"&\""))
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr) $qp\)"))
+    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr) $qp $auth.query\)"))
   } else {
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)\)"))
+    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr) $auth.query\)"))
   }
 
   # Build the initial $req_body before the input-merge line. Two paths:
@@ -999,7 +995,7 @@ export def build-body-code [cmd: record, config: record] {
   # Final request headers: $auth.headers already carries auth token + Accept +
   # header/cookie params; fold any static default-headers UNDER them so an
   # op-set value wins on collision (matches the old do-request merge order).
-  let req_headers_expr = if ($config.default_headers? | default {} | is-not-empty) {
+  let req_headers_expr = if ($config.default_headers? | is-not-empty) {
     let pairs = ($config.default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
     $"\({($pairs)} | merge $auth.headers\)"
   } else { '$auth.headers' }
@@ -1009,7 +1005,7 @@ export def build-body-code [cmd: record, config: record] {
 
   $lines = ($lines | append '  let req = {')
   $lines = ($lines | append $'    method: "($cmd.method)"')
-  $lines = ($lines | append $"    url: \($full_url | apply-auth-query $auth\)")
+  $lines = ($lines | append '    url: $full_url')
   $lines = ($lines | append $'    query: ($dr_query_expr)')
   $lines = ($lines | append $'    headers: ($req_headers_expr)')
   $lines = ($lines | append $'    body: ($req_body_expr)')
@@ -1179,7 +1175,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   mut annotations = []
   if $cmd.deprecated {
     let reason = ($cmd.deprecation_reason? | default null)
-    if ($reason != null) and ($reason | is-not-empty) {
+    if ($reason | is-not-empty) {
       let flat = ($reason | str replace --all "\n" " ")
       $annotations = ($annotations | append $"@deprecated ($flat | to nuon)")
     } else {
@@ -1230,13 +1226,13 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
 export def client [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, extra_urls: list<string>, auth_schemes: list, config: record] {
   let title = ($spec_data.info?.title? | default $module_name)
   let version_str = ($spec_data.info?.version? | default "0.0.0")
-  let token_env_var = if ($config.token_env_var != null) and ($config.token_env_var | is-not-empty) {
+  let token_env_var = if ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {
     $"($module_name | str upcase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --all --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
   }
 
-  let base_url = if ($config.default_base_url != null) and ($config.default_base_url | is-not-empty) { $config.default_base_url } else { $base_url }
+  let base_url = if ($config.default_base_url | is-not-empty) { $config.default_base_url } else { $base_url }
   let all_urls = ([$base_url] | append $extra_urls | uniq)
 
   # D-7 (issue 51): enrich AND-form auth requirements with the per-scheme flag

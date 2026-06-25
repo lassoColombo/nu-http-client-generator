@@ -136,7 +136,7 @@ def ref-lookup [ref_path: string, schemas: record] {
   } else {
     null
   }
-  if ($ns != null) and ($ns in ($schemas | columns)) {
+  if ($ns in ($schemas | columns)) {
     let sub = ($schemas | get $ns)
     if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
       return ($sub | get $name)
@@ -266,7 +266,7 @@ export def normalize-type [type_val: any] {
 export def is-nullable [schema: record] {
   if ($schema.nullable? | default false) { return true }
   let t = ($schema.type? | default null)
-  if ($t != null) and ($t | describe | str starts-with "list") { "null" in $t } else { false }
+  if ($t | describe | str starts-with "list") { "null" in $t } else { false }
 }
 
 # Detect schema type and major version from a parsed spec.
@@ -490,7 +490,7 @@ export def normalize-description [text: string]: nothing -> string {
 # through unchanged.
 export def build-description [desc_base: string, extras: list] {
   let normalized = (normalize-description $desc_base)
-  let extra = $extras | where { $in != null } | str join ", "
+  let extra = $extras | compact | str join ", "
   if ($extra | is-not-empty) and ($normalized | is-not-empty) {
     $"($normalized) \(($extra)\)"
   } else if ($extra | is-not-empty) {

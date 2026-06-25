@@ -19,7 +19,7 @@ def deduplicate-commands [commands: list] {
   # Identify GET collection/item pairs: all dupes are GET, exactly 2 members,
   # and one has exactly 1 more path param than the other.  Rename the member
   # with fewer params to "list" — cleaner than suffixing both with -by-{param}.
-  let list_candidates = if ($dup_names | length) > 0 {
+  let list_candidates = if ($dup_names | is-not-empty) {
     $dup_names | where {|name|
       let group = ($commands | where { $in.name == $name })
       if (($group | length) != 2) or (not ($group | all {|c| $c.method == "get" })) { return false }
@@ -30,7 +30,7 @@ def deduplicate-commands [commands: list] {
 
   # For each list-candidate pair, record the min param count so we know which
   # member is the collection endpoint.
-  let list_min_params = if ($list_candidates | length) > 0 {
+  let list_min_params = if ($list_candidates | is-not-empty) {
     $list_candidates | each {|name|
       let group = ($commands | where { $in.name == $name })
       let min_count = ($group | each {|c| $c.path_params | length } | math min)
@@ -40,11 +40,11 @@ def deduplicate-commands [commands: list] {
 
   let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
 
-  if ($list_candidates | length) > 0 {
+  if ($list_candidates | is-not-empty) {
     let display = ($list_candidates | each {|n| $n | split row ' ' | first } | str join ", ")
     log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
   }
-  if ($suffix_candidates | length) > 0 {
+  if ($suffix_candidates | is-not-empty) {
     log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($suffix_candidates | str join ', ')"
   }
 
@@ -59,7 +59,7 @@ def deduplicate-commands [commands: list] {
         # Item GET (more params): keep original name
         $cmd
       }
-    } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | length) > 0 {
+    } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | is-not-empty) {
       # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
       # adjacent-duplicate tokens (see `model param-suffix`).
       let suffix = (model param-suffix $cmd.path_params)
@@ -73,7 +73,7 @@ def deduplicate-commands [commands: list] {
   let dup_names2 = $pass1 | group-by name | transpose name entries
     | where { ($in.entries | length) > 1 } | get name
 
-  if ($dup_names2 | length) == 0 {
+  if ($dup_names2 | is-empty) {
     return $pass1
   }
 
@@ -168,13 +168,13 @@ export def main [
     filter_methods: ($methods | default [] | each { $in | str downcase })
     exclude_deprecated: $exclude_deprecated
     verb_map: ($verb_map | default {})
-    token_env_var: (if ($token_env_var | default "" | is-empty) { null } else { $token_env_var })
+    token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
     default_timeout: $default_timeout
     default_headers: ($default_headers | default {})
     body_threshold: $body_threshold
     no_introspection: $no_introspection
     no_descriptions: $no_descriptions
-    default_base_url: (if ($default_base_url | default "" | is-empty) { null } else { $default_base_url })
+    default_base_url: (if ($default_base_url | is-empty) { null } else { $default_base_url })
   }
 
   let title = if ($name | is-not-empty) { $name } else {
