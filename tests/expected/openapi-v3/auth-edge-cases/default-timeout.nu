@@ -85,46 +85,35 @@ def build-url [base: string, path: string, query?: string]: nothing -> string {
   if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
 }
 
-# Build the dry-run record returned by --dry-run. Shape:
-#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,
-#    auth: {scheme, location}}
-# `meta` carries logical-form data (the query record by spec name, the pre-serialization
-# body) that do-request itself cannot reconstruct from its wire-format args.
-def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {
-  let m = ($meta | default {})
-  # GET/HEAD/OPTIONS carry no body on the wire (do-request drops it), so
-  # report null body/content_type instead of advertising a phantom (D-11).
-  let bodyless = ($method in ["get" "head" "options"])
-  {
-    dry_run: true
-    method: $method
-    url: $url
-    query: ($m | get -o query | default {})
-    headers: $auth.headers
-    body: (if $bodyless { null } else { $m | get -o body })
-    content_type: (if $bodyless { null } else { $content_type })
-    timeout: $timeout
-    auth: {scheme: $auth.scheme, location: $auth.location}
-  }
+# Fold the auth-token query fragment into the URL (no-op unless a query-located
+# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.
+def apply-auth-query [auth: record]: string -> string {
+  let url = $in
+  if ($auth.query | is-empty) { return $url }
+  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }
 }
 
-# Execute HTTP request with method dispatch
-def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {
-  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
-  let timeout = ($max_time | default 5min)
-  let ct = ($content_type | default "application/json")
-  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }
-  let resp = match $method {
-    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
-    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }
-    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }
-    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
-  }
-  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }
-  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
+# Success policy: did this response succeed? Single source of truth, consulted by
+# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed
+# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.
+def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {
+  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }
+}
+
+# Unwrap a `--full` HTTP response into the user-facing value. Response arrives
+# via pipeline; ok_codes gates the error throw (see status-ok).
+def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {
+  let resp = $in
+  if $allow_errors { return $resp }
+  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }
+  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }
+  if $resp.status == 204 { return null }
+  $resp.body
+}
+
+# GET — bodyless, honours --raw
+def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.example.com"] }
@@ -173,7 +162,18 @@ export def "default-auth get" [
   let full_url = (build-url $base "/default-auth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /basic
@@ -195,7 +195,18 @@ export def "basic get" [
   let full_url = (build-url $base "/basic")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /jwt
@@ -217,7 +228,18 @@ export def "jwt get" [
   let full_url = (build-url $base "/jwt")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /static
@@ -239,7 +261,18 @@ export def "static get" [
   let full_url = (build-url $base "/static")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /query-key
@@ -261,7 +294,18 @@ export def "query-key get" [
   let full_url = (build-url $base "/query-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /cookie-key
@@ -283,7 +327,18 @@ export def "cookie-key get" [
   let full_url = (build-url $base "/cookie-key")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /oauth
@@ -305,7 +360,18 @@ export def "oauth get" [
   let full_url = (build-url $base "/oauth")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /oidc
@@ -327,7 +393,18 @@ export def "oidc get" [
   let full_url = (build-url $base "/oidc")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /public
@@ -349,7 +426,18 @@ export def "public get" [
   let full_url = (build-url $base "/public")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /and-header
@@ -371,7 +459,18 @@ export def "and-header get" [
   let full_url = (build-url $base "/and-header")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }
 
 # GET /and-mixed
@@ -393,5 +492,16 @@ export def "and-mixed get" [
   let full_url = (build-url $base "/and-mixed")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
+  let req = {
+    method: "get"
+    url: ($full_url | apply-auth-query $auth)
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
 }

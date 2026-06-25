@@ -129,6 +129,16 @@ def get-response-content-types-impl [op: record] {
   } | flatten | uniq | if ($in | is-empty) { [$spec.CT_JSON] } else { $in }
 }
 
+# Explicit success status codes (2xx/3xx numerics) declared by the operation.
+# Ignores `default`, `2XX`-style wildcards, and documented error codes — none
+# enumerate a concrete acceptable set, so those fall callers back to `< 400`.
+def get-success-codes-impl [op: record]: nothing -> list<int> {
+  $op.responses? | default {} | columns
+    | where {|c| $c =~ '^[23][0-9][0-9]$' }
+    | each {|c| $c | into int }
+    | sort
+}
+
 def get-response-type-impl [op: record, spec_data: record, schemas: record] {
   let responses = ($op.responses? | default {})
   mut found_schema = null
@@ -231,6 +241,7 @@ export def helpers [] {
     }
     get-body-info: {|op, schemas, _spec| get-body-info-impl $op $schemas }
     get-response-content-types: {|op, _spec| get-response-content-types-impl $op }
+    get-success-codes: {|op| get-success-codes-impl $op }
     get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }

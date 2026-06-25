@@ -487,7 +487,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 # `needs_multipart` controls emission of the `build-multipart-body` helper —
 # only generated when at least one operation uses `multipart/form-data` so
 # clients that never upload files stay slim.
-export def render-helpers [token_env_var: string, auth_schemes: list, default_timeout: string, default_headers: record, needs_multipart: bool = false, needs_and_auth: bool = false] {
+export def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = []] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -534,6 +534,67 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     '  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}'
     '}'
   ] } else { [] }
+
+  # Per-verb send helpers — emitted only for the HTTP methods this client uses.
+  # Each builds the request from the $req record the op assembled, then unwraps
+  # via handle-response. No `match $method`, no arms for verbs this client never
+  # calls. This is the composition core: an op invokes exactly one sender.
+  let send_get = if ("get" in $methods_used) { [
+    ''
+    '# GET — bodyless, honours --raw'
+    'def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_head = if ("head" in $methods_used) { [
+    ''
+    '# HEAD — bodyless; default surfaces just the headers on success'
+    'def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)'
+    '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }'
+    '  $resp | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_options = if ("options" in $methods_used) { [
+    ''
+    '# OPTIONS — bodyless'
+    'def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_post = if ("post" in $methods_used) { [
+    ''
+    '# POST — body + content-type'
+    'def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
+    '  $resp | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_put = if ("put" in $methods_used) { [
+    ''
+    '# PUT — body + content-type'
+    'def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
+    '  $resp | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_patch = if ("patch" in $methods_used) { [
+    ''
+    '# PATCH — body + content-type'
+    'def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
+    '  $resp | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let send_delete = if ("delete" in $methods_used) { [
+    ''
+    '# DELETE — body via --data'
+    'def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
+    '  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }'
+    '  $resp | handle-response $allow_errors $full $ok_codes'
+    '}'
+  ] } else { [] }
+  let sender_block = ($send_get ++ $send_head ++ $send_options ++ $send_post ++ $send_put ++ $send_patch ++ $send_delete)
 
   [
     '# Build auth: returns {scheme: string, headers: record, query: string, location: string}.'
@@ -598,54 +659,32 @@ export def render-helpers [token_env_var: string, auth_schemes: list, default_ti
     '  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }'
     '}'
     ''
-    '# Build the dry-run record returned by --dry-run. Shape:'
-    '#   {dry_run: true, method, url, query: <record>, headers, body, content_type, timeout,'
-    '#    auth: {scheme, location}}'
-    '# `meta` carries logical-form data (the query record by spec name, the pre-serialization'
-    '# body) that do-request itself cannot reconstruct from its wire-format args.'
-    'def build-dry-run-record [method: string, url: string, auth: record, content_type: string, timeout: duration, meta?: record]: nothing -> record {'
-    '  let m = ($meta | default {})'
-    '  # GET/HEAD/OPTIONS carry no body on the wire (do-request drops it), so'
-    '  # report null body/content_type instead of advertising a phantom (D-11).'
-    '  let bodyless = ($method in ["get" "head" "options"])'
-    '  {'
-    '    dry_run: true'
-    '    method: $method'
-    '    url: $url'
-    '    query: ($m | get -o query | default {})'
-    '    headers: $auth.headers'
-    '    body: (if $bodyless { null } else { $m | get -o body })'
-    '    content_type: (if $bodyless { null } else { $content_type })'
-    '    timeout: $timeout'
-    '    auth: {scheme: $auth.scheme, location: $auth.location}'
-    '  }'
+    '# Fold the auth-token query fragment into the URL (no-op unless a query-located'
+    '# scheme fired). Pipeline-shaped: build-url ... | apply-auth-query $auth.'
+    'def apply-auth-query [auth: record]: string -> string {'
+    '  let url = $in'
+    '  if ($auth.query | is-empty) { return $url }'
+    '  if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" }'
     '}'
     ''
-    '# Execute HTTP request with method dispatch'
-    'def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, full?: bool, content_type?: string, body?: any, dry_run_meta?: record]: nothing -> any {'
-    '  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }'
-    ('  let timeout = ($max_time | default ' + $default_timeout + ')')
-    '  let ct = ($content_type | default "application/json")'
-  ] | if ($default_headers | is-not-empty) {
-    let header_pairs = ($default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
-    $in | append ('  let auth = ($auth | update headers ({' + $header_pairs + '} | merge $auth.headers))')
-  } else {
-    $in
-  } | append [
-    '  if $dry_run { return (build-dry-run-record $method $req_url $auth $ct $timeout $dry_run_meta) }'
-    '  let resp = match $method {'
-    '    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }'
-    '    "head" => { http head --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }'
-    '    "options" => { http options --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure $req_url }'
-    '    "post" => { if ($body | is-empty) { http post --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
-    '    "put" => { if ($body | is-empty) { http put --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
-    '    "patch" => { if ($body | is-empty) { http patch --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url "" } else { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url $body } }'
-    '    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }'
-    '  }'
-    '  if ($method == "head") and (not $full) and (not $allow_errors) and $resp.status < 400 { return $resp.headers }'
-    '  if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }'
+    '# Success policy: did this response succeed? Single source of truth, consulted by'
+    '# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed'
+    '# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.'
+    'def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {'
+    '  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }'
     '}'
-  ] | append (if $needs_multipart { [
+    ''
+    '# Unwrap a `--full` HTTP response into the user-facing value. Response arrives'
+    '# via pipeline; ok_codes gates the error throw (see status-ok).'
+    'def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {'
+    '  let resp = $in'
+    '  if $allow_errors { return $resp }'
+    '  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }'
+    '  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }'
+    '  if $resp.status == 204 { return null }'
+    '  $resp.body'
+    '}'
+  ] | append $sender_block | append (if $needs_multipart { [
     ''
     '# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists'
     '# the field names whose value should be read from disk as bytes; every'
@@ -941,25 +980,57 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append '  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })')
   }
 
-  # body_arg must always be a value (null when no body) so the trailing
-  # `dry_run_meta` arg lands in the right positional slot — without an
-  # explicit body placeholder, the meta record would bind to do-request's
-  # `body?` param.
-  let body_arg = if $is_multipart { ' $mp.body' } else if $emitted_wire_body { ' $req_body_wire' } else if $cmd.has_body { ' $req_body' } else { ' null' }
-  let ct_arg = if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
+  # Wire body handed to the sender: multipart envelope, form-urlencoded string,
+  # or the logical record. Bodyless verbs pass null.
+  let wire_body_expr = if $is_multipart { '$mp.body' } else if $emitted_wire_body { '$req_body_wire' } else if $cmd.has_body { '$req_body' } else { 'null' }
 
-  # Dry-run meta record: the logical query (by spec param name) and the logical
-  # body (pre-conversion record), threaded into do-request so the dry-run helper
-  # can return them in the user-facing record. Built unconditionally at emit
-  # time; only consumed when --dry-run fires.
+  # The $req record is the fully-resolved request AND the dry-run shape. The op
+  # owns it: under --dry-run it returns $req verbatim; otherwise the same $req
+  # drives the sender, so dry-run and the wire request cannot diverge. GET/HEAD/
+  # OPTIONS carry no body on the wire, so report null body/content_type (D-11)
+  # rather than advertising a phantom.
+  let bodyless = ($cmd.method in ["get" "head" "options"])
+  let req_ct_expr = if $bodyless { 'null' } else if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
+  let req_body_expr = if $bodyless { 'null' } else if $cmd.has_body { '$req_body' } else { 'null' }
   let dr_query_expr = if ($qp_decorated.items | is-not-empty) {
     let entries = ($qp_decorated.items | each {|q| $"($q.name | to nuon): $($q.flag_var)" } | str join ", ")
     $"\({($entries)} | compact\)"
   } else { '{}' }
-  let dr_body_expr = if $cmd.has_body { '$req_body' } else { 'null' }
-  let dr_meta = $"{query: ($dr_query_expr), body: ($dr_body_expr)}"
+  # Final request headers: $auth.headers already carries auth token + Accept +
+  # header/cookie params; fold any static default-headers UNDER them so an
+  # op-set value wins on collision (matches the old do-request merge order).
+  let req_headers_expr = if ($config.default_headers? | default {} | is-not-empty) {
+    let pairs = ($config.default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
+    $"\({($pairs)} | merge $auth.headers\)"
+  } else { '$auth.headers' }
+  # ok_codes: the spec's declared success codes; [] falls back to < 400 at runtime.
+  let ok_codes_expr = $"[($cmd.success_codes? | default [] | each {|c| $c | into string } | str join ' ')]"
+  let timeout_expr = $"\($max_time | default ($config.default_timeout))"
 
-  $lines = ($lines | append $'  do-request "($cmd.method)" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full ($ct_arg)($body_arg) ($dr_meta)')
+  $lines = ($lines | append '  let req = {')
+  $lines = ($lines | append $'    method: "($cmd.method)"')
+  $lines = ($lines | append $"    url: \($full_url | apply-auth-query $auth\)")
+  $lines = ($lines | append $'    query: ($dr_query_expr)')
+  $lines = ($lines | append $'    headers: ($req_headers_expr)')
+  $lines = ($lines | append $'    body: ($req_body_expr)')
+  $lines = ($lines | append $'    content_type: ($req_ct_expr)')
+  $lines = ($lines | append $'    timeout: ($timeout_expr)')
+  $lines = ($lines | append '    auth: {scheme: $auth.scheme, location: $auth.location}')
+  $lines = ($lines | append '  }')
+  $lines = ($lines | append '  if $dry_run { return ({dry_run: true} | merge $req) }')
+
+  # One sender, picked at generation time — no runtime `match $method`.
+  let send_line = match $cmd.method {
+    "get" => $'  send-get $req $insecure $raw $allow_errors $full ($ok_codes_expr)'
+    "head" => $'  send-head $req $insecure $allow_errors $full ($ok_codes_expr)'
+    "options" => $'  send-options $req $insecure $allow_errors $full ($ok_codes_expr)'
+    "post" => $'  send-post $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
+    "put" => $'  send-put $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
+    "patch" => $'  send-patch $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
+    "delete" => $'  send-delete $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
+    _ => $'  send-($cmd.method) $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
+  }
+  $lines = ($lines | append $send_line)
 
   $lines | str join "\n"
 }
@@ -1198,7 +1269,11 @@ export def render-module [spec_data: record, commands: table, spec_file: string,
     ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false)
   })
 
-  let helpers_code = render-helpers $token_env_var $auth_schemes $config.default_timeout $config.default_headers $needs_multipart $needs_and_auth
+  # Set of HTTP verbs across this client's operations — gates which per-verb
+  # send-* helpers get emitted. A read-only client never ships post/put/etc.
+  let methods_used = ($commands | each {|c| $c.method } | uniq)
+
+  let helpers_code = render-helpers $token_env_var $auth_schemes $needs_multipart $needs_and_auth $methods_used
 
   let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $all_urls $commands $auth_schemes $completers $helpers_code $config
 

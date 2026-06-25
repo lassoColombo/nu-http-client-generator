@@ -916,7 +916,11 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
     true
   }
 
-  {accept_types: $accept_types, return_type: $return_type, returns_body: $returns_body}
+  # Spec-declared success codes (2xx/3xx) gate handle-response's error throw.
+  # Empty list → spec enumerated none → the client falls back to `< 400`.
+  let success_codes = (do $h.get-success-codes $op)
+
+  {accept_types: $accept_types, return_type: $return_type, returns_body: $returns_body, success_codes: $success_codes}
 }
 
 # Build the `-by-<...>` discriminator suffix from a list of path params, kebab-casing
@@ -1227,6 +1231,7 @@ export def build-command-list [spec_data: record, schemas: record, h: record, au
         auth_required: $meta.auth_required
         base_url: $meta.base_url
         accept_types: $resp.accept_types
+        success_codes: $resp.success_codes
         discriminator: $body.discriminator
         return_type: $resp.return_type
         tags: ($op.tags? | default [])

@@ -160,6 +160,16 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
   spec schema-to-nu-type $found_schema $schemas
 }
 
+# Explicit success status codes (2xx/3xx numerics) declared by the operation.
+# Ignores `default` and documented error codes — neither enumerates a concrete
+# acceptable set, so those fall callers back to `< 400`.
+def get-success-codes-impl [op: record]: nothing -> list<int> {
+  $op.responses? | default {} | columns
+    | where {|c| $c =~ '^[23][0-9][0-9]$' }
+    | each {|c| $c | into int }
+    | sort
+}
+
 def get-auth-schemes-impl [spec_data: record] {
   let schemes = ($spec_data.securityDefinitions? | default {})
   $schemes | items {|spec_name, d|
@@ -211,6 +221,7 @@ export def helpers [] {
     }
     get-body-info: {|op, schemas, spec| get-body-info-impl $op $schemas $spec }
     get-response-content-types: {|op, spec| get-response-content-types-impl $op $spec }
+    get-success-codes: {|op| get-success-codes-impl $op }
     get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }
