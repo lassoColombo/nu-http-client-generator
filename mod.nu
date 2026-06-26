@@ -58,7 +58,7 @@ export def main [
   source: string                # OpenAPI/Swagger spec file path or URL
   --output(-o): path            # Output .nu file (default: ./{title}.nu)
   --name: string                # Override module name
-  --urls(-u): list<string>      # Additional base URLs for autocompletion
+  --autocompletion-base-urls: list<string>  # Extra base URLs for tab-completion (first becomes default if --default-base-url unset)
   --tags: list<string>          # Filter: only operations with these tags
   --prefixes: list<string>      # Filter: only paths matching these prefixes
   --methods: list<string>       # Filter: only these HTTP methods
@@ -71,6 +71,8 @@ export def main [
   --no-introspection            # Omit the commands subcommand
   --no-descriptions             # Omit parameter descriptions
   --default-base-url: string    # Override default base URL from spec
+  --default-unix-socket: string # Talk to the API over this Unix socket by default
+  --autocompletion-unix-sockets: list<string>  # Unix socket paths for tab-completion (first becomes default if --default-unix-socket unset)
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
@@ -88,6 +90,9 @@ export def main [
     no_introspection: $no_introspection
     no_descriptions: $no_descriptions
     default_base_url: (if ($default_base_url | is-empty) { null } else { $default_base_url })
+    autocompletion_base_urls: ($autocompletion_base_urls | default [])
+    default_unix_socket: (if ($default_unix_socket | is-empty) { null } else { $default_unix_socket })
+    autocompletion_unix_sockets: ($autocompletion_unix_sockets | default [])
   }
 
   let title = if ($name | is-not-empty) { $name } else {
@@ -98,7 +103,7 @@ export def main [
     log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to generate"
     return null
   }
-  let extra_urls = (($urls | default []) | append $result.all_urls)
+  let extra_urls = (($autocompletion_base_urls | default []) | append $result.all_urls)
   let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $config)
   let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
   $output_content | save --force $out_path

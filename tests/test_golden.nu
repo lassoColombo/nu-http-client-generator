@@ -116,3 +116,6 @@ def "body-threshold" [] { run-variant "body-threshold" | assert-all-pass }
 
 @test
 def "exclude-deprecated" [] { run-variant "exclude-deprecated" | assert-all-pass }
+
+@test
+def "unix-socket" [] { run-variant "unix-socket" | assert-all-pass }

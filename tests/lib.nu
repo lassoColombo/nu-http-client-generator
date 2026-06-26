@@ -114,5 +114,11 @@ export def variants [] {
                 mod $spec -o $out --exclude-deprecated
             }
         }
+        {
+            name: "unix-socket"
+            gen: {|spec, out|
+                mod $spec -o $out --default-unix-socket "/var/run/docker.sock" --autocompletion-unix-sockets ["/run/user/1000/docker.sock" "/tmp/podman.sock"]
+            }
+        }
     ]
 }

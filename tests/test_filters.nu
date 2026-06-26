@@ -1,5 +1,5 @@
 # Targeted tests for filtering and naming flags:
-# --tags, --prefixes, --methods, --verb-map, --urls
+# --tags, --prefixes, --methods, --verb-map, --autocompletion-base-urls
 #
 # Uses the petstore-v3 OpenAPI schema with assertion-based checks
 # rather than golden files.
@@ -85,14 +85,14 @@ def "verb-map multiple keys" [] {
     assert ("store-order create" in $mapped) "placeOrder should be renamed"
 }
 
-# ── --urls ───────────────────────────────────────────────────────────
+# ── --autocompletion-base-urls ────────────────────────────────────────
 
 @test
 def "urls added to completer" [] {
     let tmp = mktemp --directory
     let out = $tmp | path join "out.nu"
     try {
-        mod $PETSTORE -o $out --urls ["https://extra.example.com" "https://staging.example.com"]
+        mod $PETSTORE -o $out --autocompletion-base-urls ["https://extra.example.com" "https://staging.example.com"]
         let content = open $out --raw
         assert ($content | str contains "https://extra.example.com") "should contain extra URL"
         assert ($content | str contains "https://staging.example.com") "should contain staging URL"

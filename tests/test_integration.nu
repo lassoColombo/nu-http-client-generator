@@ -1,14 +1,17 @@
 # Integration tests: generate clients from specs and call real APIs.
-# These tests hit live endpoints (httpbin.org, api.apis.guru).
+# These tests hit live endpoints (httpbingo.org, api.apis.guru).
 # They will fail if the APIs are unreachable.
 # Clients are generated from both local files (httpbin) and remote URLs
 # (apis.guru) to cover both spec-load paths.
 #
-# Both targets are no-auth public APIs chosen for reliability: httpbin.org is
-# the canonical HTTP echo service, and api.apis.guru hosts the entire client
-# collection (if it were down, nothing in this project would work anyway).
+# Both targets are no-auth public APIs chosen for reliability: httpbingo.org is
+# an HTTP echo service, and api.apis.guru hosts the entire client collection
+# (if it were down, nothing in this project would work anyway).
 # We deliberately avoid petstore3.swagger.io — its demo backend intermittently
-# returns HTTP 500 on real calls, which made these tests flaky.
+# returns HTTP 500 on real calls, which made these tests flaky. We also moved
+# off the original httpbin.org: its hosted instance grew chronically unreliable
+# (503/504), so we target httpbingo.org (the maintained go-httpbin port), which
+# is API-compatible across every endpoint these tests touch.
 
 use std/assert
 use std/testing *
@@ -61,7 +64,7 @@ def "httpbin ip returns origin" [] {
 @test
 def "httpbin get returns request url" [] {
     let resp = run-cmd $in.httpbin "httpbin get get --max-time 15sec"
-    assert equal $resp.url "https://httpbin.org/get"
+    assert equal $resp.url "https://httpbingo.org/get"
 }
 
 @test

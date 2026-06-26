@@ -96,6 +96,15 @@ export def nu-type-string [td: any]: nothing -> string {
   }
 }
 
+# Whether the generated client should carry Unix-socket transport logic. Gated:
+# emitted only when the user baked a default socket (--default-unix-socket) or
+# supplied completion sockets (--autocompletion-unix-sockets) at generation time.
+# When on, the effective default socket is --default-unix-socket, falling back to
+# the first --autocompletion-unix-sockets entry (mirrors the base-url rule).
+def unix-socket-enabled [config: record]: nothing -> bool {
+  (($config.default_unix_socket? | default null) | is-not-empty) or (($config.autocompletion_unix_sockets? | default []) | is-not-empty)
+}
+
 # Nushell reserved names that cannot be standalone command/flag names
 const RESERVED_NAMES = [in nu nothing]
 
@@ -108,7 +117,7 @@ const RESERVED_VARS = [
   let mut const def export use module source overlay
   where each error try catch not do
   # generated signature flags
-  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept
+  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept unix_socket
   # generated body-code internal variables. `body` was renamed to `req_body`
   # to free up spec-side `body` fields (GitHub discussion post body, etc.) —
   # the user-facing `--body` flag no longer collides with anything internal.
@@ -206,7 +215,7 @@ const RESERVED_POSITIONALS = [
   in nu nothing null true false env
   if else match for while loop break continue return
   let mut const def export use module overlay
-  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept
+  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept unix_socket
 ]
 
 # Effective positional path-param variable name. Sanitizes the path param's
@@ -399,6 +408,12 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
     ])
   }
 
+  # Unix-socket transport flag (gated): completes from the baked default plus any
+  # --autocompletion-unix-sockets. Default $UNIX_SOCKET is applied in the body.
+  if (unix-socket-enabled $config) {
+    $parts = ($parts | append '  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP')
+  }
+
   # Accept header flag (only when multiple response content types)
   if ($cmd.accept_types | length) > 1 {
     let cname = resolve-completer {name: "accept", enum: $cmd.accept_types} $mapping
@@ -514,7 +529,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
 # `needs_multipart` controls emission of the `build-multipart-body` helper —
 # only generated when at least one operation uses `multipart/form-data` so
 # clients that never upload files stay slim.
-def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = []] {
+def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = [], needs_unix_socket: bool = false] {
   mut match_arms = []
   mut seen_names = []
   for s in $auth_schemes {
@@ -566,61 +581,74 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
   # Each builds the request from the $req record the op assembled, then unwraps
   # via handle-response. No `match $method`, no arms for verbs this client never
   # calls. This is the composition core: an op invokes exactly one sender.
-  let send_get = if ("get" in $methods_used) { [
-    ''
-    '# GET — bodyless, honours --raw'
-    'def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_head = if ("head" in $methods_used) { [
-    ''
-    '# HEAD — bodyless; default surfaces just the headers on success'
-    'def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)'
-    '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }'
-    '  $resp | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_options = if ("options" in $methods_used) { [
-    ''
-    '# OPTIONS — bodyless'
-    'def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_post = if ("post" in $methods_used) { [
-    ''
-    '# POST — body + content-type'
-    'def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
-    '  $resp | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_put = if ("put" in $methods_used) { [
-    ''
-    '# PUT — body + content-type'
-    'def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  let resp = if ($body | is-empty) { http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
-    '  $resp | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_patch = if ("patch" in $methods_used) { [
-    ''
-    '# PATCH — body + content-type'
-    'def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }'
-    '  $resp | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
-  let send_delete = if ("delete" in $methods_used) { [
-    ''
-    '# DELETE — body via --data'
-    'def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {'
-    '  let resp = if ($body | is-empty) { http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url }'
-    '  $resp | handle-response $allow_errors $full $ok_codes'
-    '}'
-  ] } else { [] }
+  #
+  # When `needs_unix_socket` is set each sender branches at runtime on
+  # `$req.unix_socket`: a non-empty path adds `--unix-socket <path>` to the
+  # `http <verb>` call, an empty one connects over TCP. nushell's --unix-socket
+  # has no "no socket" sentinel (both null and "" error), so the flag must be
+  # physically present-or-absent — hence the branch rather than a passed value.
+  # The non-socket form is byte-identical to the pre-feature output.
+  let f_base = '--headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure'
+  let f_get = $f_base + ' --raw=$raw'
+  let f_body = '--headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw'
+  let f_del_body = '--headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw'
+  # Given a builder {|sock_frag| <http-call string>} and a mode, produce the
+  # response-binding line(s). mode: "pipe" (GET/OPTIONS pipe straight into
+  # handle-response when socket-less), "head" (HEAD's header-unwrap), "resp"
+  # (body verbs bind `let resp`).
+  let wrap_send = {|build: closure, mode: string|
+    let nosock = (do $build '')
+    let sock = (do $build ' --unix-socket $req.unix_socket')
+    if $needs_unix_socket {
+      let resp_line = '  let resp = if ($req.unix_socket | is-empty) { ' + $nosock + ' } else { ' + $sock + ' }'
+      if $mode == 'head' {
+        [$resp_line '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }' '  $resp | handle-response $allow_errors $full $ok_codes']
+      } else {
+        [$resp_line '  $resp | handle-response $allow_errors $full $ok_codes']
+      }
+    } else if $mode == 'pipe' {
+      [('  ' + $nosock + ' | handle-response $allow_errors $full $ok_codes')]
+    } else if $mode == 'head' {
+      [('  let resp = (' + $nosock + ')') '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }' '  $resp | handle-response $allow_errors $full $ok_codes']
+    } else {
+      [('  let resp = ' + $nosock) '  $resp | handle-response $allow_errors $full $ok_codes']
+    }
+  }
+  let send_get = if ("get" in $methods_used) {
+    let hdr = ['' '# GET — bodyless, honours --raw'
+      'def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'http get ' + $f_get + $sf + ' $req.url' } 'pipe') ++ ['}']
+  } else { [] }
+  let send_head = if ("head" in $methods_used) {
+    let hdr = ['' '# HEAD — bodyless; default surfaces just the headers on success'
+      'def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'http head ' + $f_base + $sf + ' $req.url' } 'head') ++ ['}']
+  } else { [] }
+  let send_options = if ("options" in $methods_used) {
+    let hdr = ['' '# OPTIONS — bodyless'
+      'def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'http options ' + $f_base + $sf + ' $req.url' } 'pipe') ++ ['}']
+  } else { [] }
+  let send_post = if ("post" in $methods_used) {
+    let hdr = ['' '# POST — body + content-type'
+      'def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'if ($body | is-empty) { http post ' + $f_get + $sf + ' $req.url "" } else { http post ' + $f_body + $sf + ' $req.url $body }' } 'resp') ++ ['}']
+  } else { [] }
+  let send_put = if ("put" in $methods_used) {
+    let hdr = ['' '# PUT — body + content-type'
+      'def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'if ($body | is-empty) { http put ' + $f_get + $sf + ' $req.url "" } else { http put ' + $f_body + $sf + ' $req.url $body }' } 'resp') ++ ['}']
+  } else { [] }
+  let send_patch = if ("patch" in $methods_used) {
+    let hdr = ['' '# PATCH — body + content-type'
+      'def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'if ($body | is-empty) { http patch ' + $f_get + $sf + ' $req.url "" } else { http patch ' + $f_body + $sf + ' $req.url $body }' } 'resp') ++ ['}']
+  } else { [] }
+  let send_delete = if ("delete" in $methods_used) {
+    let hdr = ['' '# DELETE — body via --data'
+      'def send-delete [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {']
+    $hdr ++ (do $wrap_send {|sf| 'if ($body | is-empty) { http delete ' + $f_get + $sf + ' $req.url } else { http delete ' + $f_del_body + $sf + ' $req.url }' } 'resp') ++ ['}']
+  } else { [] }
   let sender_block = ($send_get ++ $send_head ++ $send_options ++ $send_post ++ $send_put ++ $send_patch ++ $send_delete)
 
   [
@@ -760,6 +788,11 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append ($"  let base = \($base_url | default \"($cmd.base_url)\"\)"))
   } else {
     $lines = ($lines | append '  let base = ($base_url | default $BASE_URL)')
+  }
+  # Effective Unix socket: --unix-socket flag, else the baked-in $UNIX_SOCKET
+  # default. Empty means "no socket" — the senders branch on it at runtime.
+  if (unix-socket-enabled $config) {
+    $lines = ($lines | append '  let sock = ($unix_socket | default $UNIX_SOCKET)')
   }
 
   # Issue 30.A: validate each required path param is non-empty before URL
@@ -1036,6 +1069,9 @@ export def build-body-code [cmd: record, config: record] {
   $lines = ($lines | append $'    content_type: ($req_ct_expr)')
   $lines = ($lines | append $'    timeout: ($timeout_expr)')
   $lines = ($lines | append '    auth: {scheme: $auth.scheme, location: $auth.location}')
+  if (unix-socket-enabled $config) {
+    $lines = ($lines | append '    unix_socket: $sock')
+  }
   $lines = ($lines | append '  }')
   $lines = ($lines | append '  if $dry_run { return ({dry_run: true} | merge $req) }')
 
@@ -1092,13 +1128,29 @@ def render-module-header [
   }
   let auth_completer = $'def auth-scheme-completer [] { [($auth_completer_vals)] }'
 
+  # Unix-socket transport (gated). Effective default = --default-unix-socket,
+  # else the first --autocompletion-unix-sockets entry. The completer offers the
+  # default plus all completion sockets, deduped.
+  let unix_socket_enabled = (unix-socket-enabled $config)
+  let default_sock = if not $unix_socket_enabled { "" } else if (($config.default_unix_socket? | default null) | is-not-empty) {
+    $config.default_unix_socket
+  } else {
+    ($config.autocompletion_unix_sockets? | default []) | first
+  }
+  let unix_socket_const = if $unix_socket_enabled { [$'const UNIX_SOCKET = ($default_sock | to nuon)'] } else { [] }
+  let unix_socket_completer = if $unix_socket_enabled {
+    let socks = ([$default_sock] | append ($config.autocompletion_unix_sockets? | default []) | where {|s| $s | is-not-empty } | uniq)
+    let vals = ($socks | each {|s| $s | to nuon } | str join ' ')
+    [$"def unix-socket-completer [] { [($vals)] }"]
+  } else { [] }
+
   # Only generate introspection command when not disabled
   let introspection_code = if not $config.no_introspection {
     let first_cmd_name = ($commands | first | get name)
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
-      '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]'
+      (if $unix_socket_enabled { '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]' } else { '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]' })
       $"  let mod_name = \(scope modules | where { $in.commands | any { $in.name == \"($first_cmd_name)\" } } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)'
@@ -1130,11 +1182,13 @@ def render-module-header [
     $'# Auth: --token flag or $env.($token_env_var)'
     ""
     $'const BASE_URL = "($base_url)"'
+    ...$unix_socket_const
     ""
     $helpers_code
     ""
     $base_url_completer
     $auth_completer
+    ...$unix_socket_completer
     ""
     $completers_code
     $introspection_code
@@ -1257,7 +1311,14 @@ export def client [spec_data: record, commands: table, spec_file: string, module
     $"($module_name | str upcase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --all --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
   }
 
-  let base_url = if ($config.default_base_url | is-not-empty) { $config.default_base_url } else { $base_url }
+  let base_url = if ($config.default_base_url | is-not-empty) {
+    $config.default_base_url
+  } else if (($config.autocompletion_base_urls? | default []) | is-not-empty) {
+    # No explicit default but completion URLs were given: bake the first as default.
+    $config.autocompletion_base_urls | first
+  } else {
+    $base_url
+  }
   let all_urls = ([$base_url] | append $extra_urls | uniq)
 
   # D-7 (issue 51): enrich AND-form auth requirements with the per-scheme flag
@@ -1294,7 +1355,8 @@ export def client [spec_data: record, commands: table, spec_file: string, module
   # send-* helpers get emitted. A read-only client never ships post/put/etc.
   let methods_used = ($commands | each {|c| $c.method } | uniq)
 
-  let helpers_code = render-helpers $token_env_var $auth_schemes $needs_multipart $needs_and_auth $methods_used
+  let needs_unix_socket = (unix-socket-enabled $config)
+  let helpers_code = render-helpers $token_env_var $auth_schemes $needs_multipart $needs_and_auth $methods_used $needs_unix_socket
 
   let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $all_urls $commands $auth_schemes $completers $helpers_code $config
 

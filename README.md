@@ -94,8 +94,10 @@ nu-http-client-generator --help
 | -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | `-o, --output: path`       | `./{title}.nu`     | Where to write the generated module.                                                                                       |
 | `--name: string`           | spec `info.title`  | Module name. Used as the file stem (when `-o` is not set), as the prefix of the token env var, and as the command namespace. |
-| `-u, --urls: list<string>` | spec servers       | Additional base URLs added to `--base-url`'s tab-completer.                                                                |
+| `--autocompletion-base-urls: list<string>` | spec servers | Extra base URLs in `--base-url`'s tab-completer. First becomes the baked default when `--default-base-url` is unset.         |
 | `--default-base-url: string` | spec / none      | Override the base URL embedded in the module.                                                                              |
+| `--default-unix-socket: string` | none           | Talk to the API over this Unix socket by default. Bakes `UNIX_SOCKET` + a `--unix-socket` flag into every command (the Docker case). |
+| `--autocompletion-unix-sockets: list<string>` | none | Unix socket paths in the `--unix-socket` tab-completer. First becomes the baked default when `--default-unix-socket` is unset. |
 | `--spec-headers: record`   | `{}`               | Headers used when fetching a remote spec (e.g. `{Authorization: "Bearer …"}`). Does not appear in the generated client.    |
 
 ### Filtering
@@ -150,7 +152,7 @@ Alongside the spec-derived flags, every command also ships with the same set of 
 
 | Flag              | Short | Type       | Purpose                                                                                          |
 | ----------------- | ----- | ---------- | ------------------------------------------------------------------------------------------------ |
-| `--base-url`      | `-b`  | `string`   | Override the base URL. Tab-completes from spec servers + `--urls`.                               |
+| `--base-url`      | `-b`  | `string`   | Override the base URL. Tab-completes from spec servers + `--autocompletion-base-urls`.           |
 | `--token`         | `-t`  | `string`   | Auth token. Falls back to `$env.<NAME>_TOKEN`.                                                   |
 | `--auth-scheme`   | `-a`  | `string`   | Override the auth scheme. Tab-completes from schemes the spec declared.                          |
 | `--insecure`      | `-k`  | switch     | Skip TLS certificate verification.                                                               |
@@ -159,6 +161,7 @@ Alongside the spec-derived flags, every command also ships with the same set of 
 | `--allow-errors`  | `-e`  | switch     | Return the full HTTP response record instead of erroring on non-2xx.                             |
 | `--dry-run`       | `-n`  | switch     | Return the request that *would* be sent as a structured record (method, url, query, headers, body, auth, …) without executing it.    |
 | `--accept`        |       | `string`   | Override the `Accept` header. Only present on operations whose spec declares more than one response content type; tab-completes from those types. |
+| `--unix-socket`   | `-U`  | `string`   | Connect over a Unix socket instead of TCP. Only present when the client was generated with `--default-unix-socket` / `--autocompletion-unix-sockets`; defaults to the baked `UNIX_SOCKET`, pass `""` to force TCP. |
 
 ### Passing inputs
 
@@ -207,7 +210,7 @@ const BASE_URL = "https://petstore3.swagger.io/api/v3"
 
 ### Tab completion and dry runs
 
-`--base-url` completes from the spec's `servers` list plus anything you passed via `--urls` at generation time, and `--auth-scheme` completes from the schemes the spec declared (plus `none` if any operation was marked public). Enum-typed parameters each get their own completer, with identical enum sets deduplicated across the module - one completer per unique enum, not one per parameter.
+`--base-url` completes from the spec's `servers` list plus anything you passed via `--autocompletion-base-urls` at generation time, and `--auth-scheme` completes from the schemes the spec declared (plus `none` if any operation was marked public). When the client was generated with `--default-unix-socket` / `--autocompletion-unix-sockets`, `--unix-socket` completes from the baked default plus those paths. Enum-typed parameters each get their own completer, with identical enum sets deduplicated across the module - one completer per unique enum, not one per parameter.
 
 `--dry-run` is useful when you want to see what a call would do without actually making it. It returns a structured request record so you can sanity-check the shape before it hits production - or assert against individual fields in tests:
 
