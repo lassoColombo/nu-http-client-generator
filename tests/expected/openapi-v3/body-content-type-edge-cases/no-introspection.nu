@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
@@ -97,10 +94,10 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 # Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists
 # the field names whose value should be read from disk as bytes; every
 # other field is sent as a text part (records/lists JSON-stringified).
-# Returns {content_type, body} ready to pass to `do-request`.
+# Returns {content_type, body}.
 # When `$dry_run` is true, file fields are NOT read from disk — they emit
 # an empty-bytes placeholder so callers can inspect the request shape
-# without the file existing on disk (issue 11.B).
+# without the file existing on disk.
 def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {
   let boundary = $"----nu-(random chars --length 24)"
   let crlf = "\r\n"

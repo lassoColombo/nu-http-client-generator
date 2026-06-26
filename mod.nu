@@ -10,93 +10,6 @@ use src/render.nu
 use src/log.nu
 use src/model.nu
 
-# Deduplicate command names.
-def deduplicate-commands [commands: list] {
-  # pass 1: resolve collisions via list-rename or path-param suffix
-  let dup_names = $commands | group-by name | transpose name entries
-    | where { ($in.entries | length) > 1 } | get name
-
-  # Identify GET collection/item pairs: all dupes are GET, exactly 2 members,
-  # and one has exactly 1 more path param than the other.  Rename the member
-  # with fewer params to "list" — cleaner than suffixing both with -by-{param}.
-  let list_candidates = if ($dup_names | is-not-empty) {
-    $dup_names | where {|name|
-      let group = ($commands | where { $in.name == $name })
-      if (($group | length) != 2) or (not ($group | all {|c| $c.method == "get" })) { return false }
-      let counts = ($group | each {|c| $c.path_params | length } | sort)
-      ($counts | last) - ($counts | first) == 1
-    }
-  } else { [] }
-
-  # For each list-candidate pair, record the min param count so we know which
-  # member is the collection endpoint.
-  let list_min_params = if ($list_candidates | is-not-empty) {
-    $list_candidates | each {|name|
-      let group = ($commands | where { $in.name == $name })
-      let min_count = ($group | each {|c| $c.path_params | length } | math min)
-      {name: $name, min_params: $min_count}
-    }
-  } else { [] }
-
-  let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
-
-  if ($list_candidates | is-not-empty) {
-    let display = ($list_candidates | each {|n| $n | split row ' ' | first } | str join ", ")
-    log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
-  }
-  if ($suffix_candidates | is-not-empty) {
-    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($suffix_candidates | str join ', ')"
-  }
-
-  let pass1 = $commands | each {|cmd|
-    if ($cmd.name in $list_candidates) {
-      let entry = ($list_min_params | where { $in.name == $cmd.name } | first)
-      if ($cmd.path_params | length) == $entry.min_params {
-        # Collection GET (fewer params): rename action to "list"
-        let resource = ($cmd.name | split row ' ' | first)
-        $cmd | update name $"($resource) list"
-      } else {
-        # Item GET (more params): keep original name
-        $cmd
-      }
-    } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | is-not-empty) {
-      # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
-      # adjacent-duplicate tokens (see `model param-suffix`).
-      let suffix = (model param-suffix $cmd.path_params)
-      $cmd | update name $"($cmd.name)-by-($suffix)"
-    } else {
-      $cmd
-    }
-  }
-
-  # pass 2: numeric suffix for remaining dupes
-  let dup_names2 = $pass1 | group-by name | transpose name entries
-    | where { ($in.entries | length) > 1 } | get name
-
-  if ($dup_names2 | is-empty) {
-    return $pass1
-  }
-
-  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($dup_names2 | str join ', ')"
-
-  mut result = []
-  mut seen = {}
-  for cmd in $pass1 {
-    if ($cmd.name in $dup_names2) {
-      let count = ($seen | get -o $cmd.name | default 0)
-      $seen = ($seen | upsert $cmd.name ($count + 1))
-      if $count > 0 {
-        $result = ($result | append ($cmd | update name $"($cmd.name)-($count)"))
-      } else {
-        $result = ($result | append $cmd)
-      }
-    } else {
-      $result = ($result | append $cmd)
-    }
-  }
-  $result
-}
-
 # Validate that a loaded spec has callable endpoints. Returns "ok" to proceed,
 # or "skip" after logging a warning. Hard-errors only for malformed specs
 # (no `paths` AND no `webhooks` — neither is a valid OpenAPI shape).
@@ -133,7 +46,7 @@ def process-spec [spec_data: record, config: record] {
   let default_auth_required = (spec get-default-auth-required $spec_data $auth_schemes)
   let commands = (model command-list $spec_data $schemas $h $auth_schemes $default_auth $default_auth_required $config)
   {
-    commands: (deduplicate-commands $commands)
+    commands: $commands
     auth_schemes: $auth_schemes
     base_url: (do $h.get-base-url $spec_data)
     all_urls: (do $h.get-all-urls $spec_data)

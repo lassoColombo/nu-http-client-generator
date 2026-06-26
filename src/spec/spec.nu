@@ -321,9 +321,19 @@ export def get-default-auth-required [spec: record, auth_schemes: list] {
   []
 }
 
-# Convert an OpenAPI schema to a nushell type string.
-# Recursively builds typed records/tables. Depth-limited to avoid huge types.
-export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
+# Walk an OpenAPI schema and produce a structured *type descriptor* (NOT a
+# Nushell type string). Recursively builds records/lists. Depth-limited to
+# avoid huge types. render's `nu-type-string` turns a descriptor into emitted
+# Nushell type syntax — keeping all Nushell-syntax production in the render
+# layer (see the layer contracts in CLAUDE.md). The walk needs the schema graph
+# (refs, items, properties), which is spec's domain; the stringification needs
+# Nushell's type grammar, which is render's — so the two are split here.
+#
+# Descriptor grammar:
+#   scalar leaf : "any" | "string" | "int" | "float" | "bool" | "record" | "list"
+#   list        : {list: <descriptor>}
+#   record      : {record: [{name: string, type: <descriptor>}, ...]}
+export def schema-to-type-descriptor [schema: any, schemas: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
   if ($schema == null) or (not (($schema | describe) | str starts-with "record")) { return "any" }
 
   # resolve $ref
@@ -333,7 +343,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
     if ($ref_path in $visited) { return "any" }  # circular ref
     let resolved = (ref-lookup $ref_path $schemas)
     if ($resolved != null) {
-      return (schema-to-nu-type $resolved $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
+      return (schema-to-type-descriptor $resolved $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
     }
     return "any"
   }
@@ -345,7 +355,7 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
   let has_items = ($schema.items? | is-not-empty)
 
   if $depth >= $max_depth {
-    # simplified: no recursion into fields
+    # simplified: no recursion into fields — collapse to a bare leaf
     return (match $t {
       "array" => "list"
       "object" => "record"
@@ -362,18 +372,12 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
   match $t {
     "array" => {
       let items_schema = ($schema.items? | default {})
-      let item_type = (schema-to-nu-type $items_schema $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)
-      if ($item_type | str starts-with "record<") {
-        # table<fields> is nicer than list<record<fields>>
-        $"table<($item_type | str substring 7..-2)>"
-      } else {
-        $"list<($item_type)>"
-      }
+      {list: (schema-to-type-descriptor $items_schema $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)}
     }
     "object" => {
       if $has_props {
-        let fields = (build-record-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
-        if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+        let fields = (build-td-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
+        if ($fields | is-empty) { "record" } else { {record: $fields} }
       } else { "record" }
     }
     "string" => "string"
@@ -392,34 +396,31 @@ export def schema-to-nu-type [schema: any, schemas: record, --depth: int = 0, --
           }
         }
         if ($merged_props | is-not-empty) {
-          let fields = (build-record-fields $merged_props $schemas ($depth + 1) $max_depth $visited)
-          if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+          let fields = (build-td-fields $merged_props $schemas ($depth + 1) $max_depth $visited)
+          if ($fields | is-empty) { "record" } else { {record: $fields} }
         } else { "record" }
       } else if $has_props {
-        let fields = (build-record-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
-        if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+        let fields = (build-td-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
+        if ($fields | is-empty) { "record" } else { {record: $fields} }
       } else if $has_items {
-        let item_type = (schema-to-nu-type ($schema.items? | default {}) $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)
-        $"list<($item_type)>"
+        {list: (schema-to-type-descriptor ($schema.items? | default {}) $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)}
       } else { "any" }
     }
   }
 }
 
-# Build "field1: type1, field2: type2" string from a properties map.
+# Build a list of {name, type: descriptor} field entries from a properties map.
 #
-# Output goes into a `record<...>` TYPE SIGNATURE — must be valid Nushell type
-# syntax. No truncation: a `... (N more fields)` marker would be a parse error.
-# Catastrophic depth is already bounded by `max_depth`; wide records produce
-# long-but-valid signatures, which is the correct tradeoff (terminals wrap,
-# parsers don't fix bad syntax).
-def build-record-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
+# Field names are kept RAW: render's `nu-type-string` sanitizes them to valid
+# Nushell record-type identifiers when it stringifies the descriptor. No
+# truncation here either — depth is already bounded by `max_depth`, and wide
+# records produce long-but-valid signatures (terminals wrap; parsers don't fix
+# bad syntax). Insertion order is preserved so the rendered field order is
+# stable.
+def build-td-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
   $properties | items {|name, prop_schema|
-    let field_type = (schema-to-nu-type $prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)
-    # sanitize field names: nushell doesn't allow special chars in record type keys
-    let safe_name = ($name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
-    $"($safe_name): ($field_type)"
-  } | str join ", "
+    {name: $name, type: (schema-to-type-descriptor $prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)}
+  }
 }
 
 # Build an auth scheme record from a security definition entry.

@@ -69,6 +69,33 @@ export def nu-type-for [t: string, items_t?: string]: nothing -> string {
   }
 }
 
+# Stringify a type descriptor (from spec's `schema-to-type-descriptor`) into
+# Nushell type syntax — the deep counterpart to `nu-type-for`. Both live here
+# because producing Nushell type text is the render layer's job. Owns the two
+# syntax decisions the descriptor deliberately leaves out: a list-of-record
+# collapses to `table<…>` (nicer than `list<record<…>>`), and record field
+# names are sanitized to valid Nushell type identifiers.
+export def nu-type-string [td: any]: nothing -> string {
+  if not (($td | describe) | str starts-with "record") { return $td }
+  let cols = ($td | columns)
+  if ("list" in $cols) {
+    let inner = (nu-type-string $td.list)
+    if ($inner | str starts-with "record<") {
+      $"table<($inner | str substring 7..-2)>"
+    } else {
+      $"list<($inner)>"
+    }
+  } else if ("record" in $cols) {
+    let fields = ($td.record | each {|f|
+      let safe_name = ($f.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
+      $"($safe_name): (nu-type-string $f.type)"
+    } | str join ", ")
+    if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
+  } else {
+    "any"
+  }
+}
+
 # Nushell reserved names that cannot be standalone command/flag names
 const RESERVED_NAMES = [in nu nothing]
 
@@ -323,7 +350,7 @@ def lookup-shape [flag: string, shapes: list] {
   if ($matched | is-empty) { null } else {
     let s = ($matched | first)
     let label = if ($s.is_item? | default false) { "item shape" } else { "shape" }
-    $"($label): ($s.shape)"
+    $"($label): (build-shape-doc $s.fields)"
   }
 }
 
@@ -405,7 +432,7 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
   $dep_flags = ($dep_flags | append $ck_result.dep_flags)
 
   if $cmd.has_body {
-    let use_collapsed = ($config.body_threshold > 0) and (($cmd.body_fields | length) > $config.body_threshold)
+    let use_collapsed = $cmd.body_collapsed
     if $use_collapsed {
       let body_shape = (lookup-shape "body" $shapes)
       let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
@@ -633,14 +660,11 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     ''
     '# Percent-encode a path-segment value per RFC 3986.'
     '# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
-    '# Trick: `url encode --all` over-encodes, then we decode the four unreserved'
-    '# punctuation chars back. Pre-existing %XX sequences in the input survive'
-    '# because `url encode --all` first turns their % into %25.'
     'def encode-path-segment [v: any]: nothing -> string {'
     '  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"'
     '}'
     ''
-    '# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`'
+    '# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`'
     '# (the default for path params) and Swagger 2 `collectionFormat: csv` both join'
     '# the elements with a literal comma WITHIN the single path segment, each element'
     '# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without'
@@ -685,10 +709,10 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists'
     '# the field names whose value should be read from disk as bytes; every'
     '# other field is sent as a text part (records/lists JSON-stringified).'
-    '# Returns {content_type, body} ready to pass to `do-request`.'
+    '# Returns {content_type, body}.'
     '# When `$dry_run` is true, file fields are NOT read from disk — they emit'
     '# an empty-bytes placeholder so callers can inspect the request shape'
-    '# without the file existing on disk (issue 11.B).'
+    '# without the file existing on disk.'
     'def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {'
     '  let boundary = $"----nu-(random chars --length 24)"'
     '  let crlf = "\r\n"'
@@ -808,7 +832,7 @@ export def build-body-code [cmd: record, config: record] {
   # Without the seed in the collapsed branch, $req_body would be undefined
   # when the merge line tries to read it (regression #9-B).
   if $cmd.has_body {
-    let use_collapsed = ($config.body_threshold > 0) and (($cmd.body_fields | length) > $config.body_threshold)
+    let use_collapsed = $cmd.body_collapsed
     let has_per_field = ($cmd.body_fields | is-not-empty) and (not $use_collapsed)
     if $has_per_field {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
@@ -1161,7 +1185,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   if not $config.no_descriptions {
     for shape in ($cmd.field_shapes? | default []) {
       let label = if ($shape.is_item? | default false) { "item shape" } else { "shape" }
-      $extra = ($extra | append $"# --($shape.flag) ($label): ($shape.shape)")
+      $extra = ($extra | append $"# --($shape.flag) ($label): (build-shape-doc $shape.fields)")
     }
   }
   if ($extra | is-not-empty) {
@@ -1207,11 +1231,12 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   # checked against the actual body — purely a parse-time + doc improvement.
   # Requires a Nushell with `oneof<...>` (>= the project's pinned 0.113.1).
   # record/table/list/any outputs already pipe fine and keep their annotation.
+  let return_str = (nu-type-string $cmd.return_type)
   let scalar_leaves = ["string" "int" "bool" "float" "number" "datetime" "binary" "duration"]
-  let output_type = if ($cmd.return_type in $scalar_leaves) {
-    let members = ([$cmd.return_type "string" "record" "nothing"] | uniq)
+  let output_type = if ($return_str in $scalar_leaves) {
+    let members = ([$return_str "string" "record" "nothing"] | uniq)
     $"oneof<($members | str join ', ')>"
-  } else { $cmd.return_type }
+  } else { $return_str }
   $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($output_type) {")
 
   let body_code = (build-body-code $cmd $config)

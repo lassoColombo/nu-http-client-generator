@@ -164,7 +164,7 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
     }
   }
   if ($found_schema == null) { return "any" }
-  spec schema-to-nu-type $found_schema $schemas
+  spec schema-to-type-descriptor $found_schema $schemas
 }
 
 def get-auth-schemes-impl [spec_data: record] {

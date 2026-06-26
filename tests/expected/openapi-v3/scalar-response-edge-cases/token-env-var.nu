@@ -40,14 +40,11 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
-# Trick: `url encode --all` over-encodes, then we decode the four unreserved
-# punctuation chars back. Pre-existing %XX sequences in the input survive
-# because `url encode --all` first turns their % into %25.
 def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
-# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
 # (the default for path params) and Swagger 2 `collectionFormat: csv` both join
 # the elements with a literal comma WITHIN the single path segment, each element
 # RFC-3986-encoded individually (so a comma inside an element stays %2C). Without

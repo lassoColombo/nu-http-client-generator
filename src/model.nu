@@ -5,7 +5,6 @@
 # `src/spec/` (`spec load-spec`).
 
 use spec/spec.nu
-use render.nu
 use log.nu
 
 # ── Private helpers ────────────────────────────────────────────────
@@ -169,7 +168,7 @@ def build-field-shapes [schema: record, schemas: record] {
       if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
         let sub_fields = (extract-body-fields $fs $schemas)
         if ($sub_fields | is-empty) { null } else {
-          {flag: $name, shape: (render build-shape-doc $sub_fields), is_item: false}
+          {flag: $name, fields: $sub_fields, is_item: false}
         }
       } else if $ft == "array" {
         let items = ($fs.items? | default {})
@@ -177,7 +176,7 @@ def build-field-shapes [schema: record, schemas: record] {
         if ($resolved_items.properties? | is-not-empty) or ($resolved_items.allOf? | is-not-empty) {
           let sub_fields = (extract-body-fields $resolved_items $schemas)
           if ($sub_fields | is-empty) { null } else {
-            {flag: $name, shape: (render build-shape-doc $sub_fields), is_item: true}
+            {flag: $name, fields: $sub_fields, is_item: true}
           }
         } else { null }
       } else { null }
@@ -890,9 +889,9 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
 # Counter-cases stay untouched: `[user_id,label_id]` (head `label` != tail `id`),
 # `[parent_id,child]` (head `child` != tail `id`), `[org,project,repo]`.
 #
-# Shared by `derive-command-name`'s `_2`-dedup branch and `mod.nu`'s
-# `deduplicate-commands` pass-1 suffix branch — previously two divergent copies.
-export def param-suffix [path_params: list]: nothing -> string {
+# Shared by `derive-command-name`'s `_2`-dedup branch and `deduplicate-commands`'s
+# pass-1 suffix branch (both in this module) — previously two divergent copies.
+def param-suffix [path_params: list]: nothing -> string {
   $path_params
   | each {|p| $p.name | str kebab-case }
   | reduce --fold [] {|tok, acc|
@@ -1073,6 +1072,97 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   }
 }
 
+# Deduplicate command names — the final pass of `command-list`. Resolves name
+# collisions first by a GET collection/item `list` rename or a path-param suffix
+# (`-by-<param>`, see `param-suffix`), then by a numeric suffix for any that
+# still collide.
+def deduplicate-commands []: list -> list {
+  let commands = $in
+  # pass 1: resolve collisions via list-rename or path-param suffix
+  let dup_names = $commands | group-by name | transpose name entries
+    | where { ($in.entries | length) > 1 } | get name
+
+  # Identify GET collection/item pairs: all dupes are GET, exactly 2 members,
+  # and one has exactly 1 more path param than the other.  Rename the member
+  # with fewer params to "list" — cleaner than suffixing both with -by-{param}.
+  let list_candidates = if ($dup_names | is-not-empty) {
+    $dup_names | where {|name|
+      let group = ($commands | where { $in.name == $name })
+      if (($group | length) != 2) or (not ($group | all {|c| $c.method == "get" })) { return false }
+      let counts = ($group | each {|c| $c.path_params | length } | sort)
+      ($counts | last) - ($counts | first) == 1
+    }
+  } else { [] }
+
+  # For each list-candidate pair, record the min param count so we know which
+  # member is the collection endpoint.
+  let list_min_params = if ($list_candidates | is-not-empty) {
+    $list_candidates | each {|name|
+      let group = ($commands | where { $in.name == $name })
+      let min_count = ($group | each {|c| $c.path_params | length } | math min)
+      {name: $name, min_params: $min_count}
+    }
+  } else { [] }
+
+  let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
+
+  if ($list_candidates | is-not-empty) {
+    let display = ($list_candidates | each {|n| $n | split row ' ' | first } | str join ", ")
+    log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
+  }
+  if ($suffix_candidates | is-not-empty) {
+    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($suffix_candidates | str join ', ')"
+  }
+
+  let pass1 = $commands | each {|cmd|
+    if ($cmd.name in $list_candidates) {
+      let entry = ($list_min_params | where { $in.name == $cmd.name } | first)
+      if ($cmd.path_params | length) == $entry.min_params {
+        # Collection GET (fewer params): rename action to "list"
+        let resource = ($cmd.name | split row ' ' | first)
+        $cmd | update name $"($resource) list"
+      } else {
+        # Item GET (more params): keep original name
+        $cmd
+      }
+    } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | is-not-empty) {
+      # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
+      # adjacent-duplicate tokens (see `param-suffix`).
+      let suffix = (param-suffix $cmd.path_params)
+      $cmd | update name $"($cmd.name)-by-($suffix)"
+    } else {
+      $cmd
+    }
+  }
+
+  # pass 2: numeric suffix for remaining dupes
+  let dup_names2 = $pass1 | group-by name | transpose name entries
+    | where { ($in.entries | length) > 1 } | get name
+
+  if ($dup_names2 | is-empty) {
+    return $pass1
+  }
+
+  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($dup_names2 | str join ', ')"
+
+  mut result = []
+  mut seen = {}
+  for cmd in $pass1 {
+    if ($cmd.name in $dup_names2) {
+      let count = ($seen | get -o $cmd.name | default 0)
+      $seen = ($seen | upsert $cmd.name ($count + 1))
+      if $count > 0 {
+        $result = ($result | append ($cmd | update name $"($cmd.name)-($count)"))
+      } else {
+        $result = ($result | append $cmd)
+      }
+    } else {
+      $result = ($result | append $cmd)
+    }
+  }
+  $result
+}
+
 # Build the command model list from a parsed+resolved REST spec.
 export def command-list [spec_data: record, schemas: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
   ($spec_data.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
@@ -1141,10 +1231,15 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
       let cmd_name = (derive-command-name $clean_path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)
 
-      # Build unified field_shapes: collapsed body shape + per-field shapes
+      # Build unified field_shapes: collapsed body shape + per-field shapes.
+      # field_shapes carry STRUCTURED fields; render's build-shape-doc renders
+      # them to the NUON-like doc string at emit time, so model no longer
+      # depends on render. `body_collapsed` is the single source of truth for
+      # the --body-threshold collapse decision — render's signature and
+      # body-code emitters read it verbatim instead of recomputing it.
       let body_collapsed = ($config.body_threshold > 0) and (($body.body_fields | length) > $config.body_threshold)
       let field_shapes = if $body_collapsed {
-        [{flag: "body", shape: (render build-shape-doc $body.body_fields), is_item: false}]
+        [{flag: "body", fields: $body.body_fields, is_item: false}]
       } else {
         $body.field_shapes
       }
@@ -1171,6 +1266,7 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         body_polymorphic_array: $body.body_polymorphic_array
         body_scalar_type: $body.body_scalar_type
         field_shapes: $field_shapes
+        body_collapsed: $body_collapsed
         returns_body: $resp.returns_body
         description: $meta.description
         extra_doc_lines: (if ($meta.description | is-not-empty) { [$"# ($endpoint_line)"] } else { [] })
@@ -1188,5 +1284,5 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         tags: ($op.tags? | default [])
       }
     }
-  } | flatten | compact
+  } | flatten | compact | deduplicate-commands
 }
