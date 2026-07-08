@@ -97,7 +97,7 @@ def get-body-info-impl [op: record, schemas: record] {
     let rb = (spec resolve-ref $request_body $schemas)
     let content = ($rb.content? | default {})
     let ct_order = $spec.CT_PRIORITY
-    mut found_ct = null
+    mut found_ct: any = null
     mut found_schema = {}
     for ct in $ct_order {
       if ($found_ct == null) {
@@ -141,7 +141,7 @@ def get-success-codes-impl [op: record]: nothing -> list<int> {
 
 def get-response-type-impl [op: record, spec_data: record, schemas: record] {
   let responses = ($op.responses? | default {})
-  mut found_schema = null
+  mut found_schema: any = null
   for code in $spec.RESPONSE_CODE_PRIORITY {
     if ($found_schema == null) {
       let resp = ($responses | get -o $code)
@@ -171,7 +171,7 @@ def get-auth-schemes-impl [spec_data: record] {
   let schemes = ($spec_data.components?.securitySchemes? | default {})
   $schemes | items {|spec_name, d|
     if ($d.type? == "http") {
-      let s = ($d.scheme? | default "bearer") | str downcase
+      let s = ($d.scheme? | default "bearer") | str lowercase
       {spec_name: $spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
     } else {
       let shared = (spec build-auth-scheme {spec_name: $spec_name, def: $d})

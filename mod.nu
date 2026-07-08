@@ -6,6 +6,11 @@
 #   http-gen preview ./spec.yaml
 
 use src/spec
+# nu 0.114 stopped exposing a directory module's submodules through the parent
+# namespace (`spec oa3 ...` no longer resolves after `use src/spec`), so import
+# the version-specific helper submodules directly.
+use src/spec/oa3.nu
+use src/spec/swagger2.nu
 use src/render.nu
 use src/log.nu
 use src/model.nu
@@ -33,8 +38,8 @@ def check-spec-generatable [loaded: record] {
 def process-spec [spec_data: record, config: record] {
   let info = (spec detect $spec_data)
   let h = match $info.schema {
-    "openapi" => (spec oa3 helpers)
-    "swagger" => (spec swagger2 helpers)
+    "openapi" => (oa3 helpers)
+    "swagger" => (swagger2 helpers)
   }
   let raw_schemas = (do $h.get-schemas $spec_data)
   # Stash the full spec under `__spec__` so cross-path refs (e.g. DigitalOcean's
@@ -80,7 +85,7 @@ export def main [
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])
-    filter_methods: ($methods | default [] | each { $in | str downcase })
+    filter_methods: ($methods | default [] | each { $in | str lowercase })
     exclude_deprecated: $exclude_deprecated
     verb_map: ($verb_map | default {})
     token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
@@ -124,7 +129,7 @@ export def preview [
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])
-    filter_methods: ($methods | default [] | each { $in | str downcase })
+    filter_methods: ($methods | default [] | each { $in | str lowercase })
     exclude_deprecated: $exclude_deprecated
     verb_map: ($verb_map | default {})
     body_threshold: 0

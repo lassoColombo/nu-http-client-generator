@@ -13,7 +13,7 @@ use ../log.nu
 # unresolved placeholders in place (mirrors cycle 16.A's OAS3 resolve-server-url
 # behavior — `url parse` will then fail loudly on the unsubstituted `{var}`
 # instead of silently dispatching to azure.local).
-def resolve-parameterized-host [spec_data: record]: nothing -> string {
+def resolve-parameterized-host [spec_data: record] {
   let pham = ($spec_data | get -o "x-ms-parameterized-host")
   if ($pham | is-empty) { return null }
   let tmpl = ($pham | get -o hostTemplate | default "")
@@ -146,7 +146,7 @@ def get-response-content-types-impl [op: record, spec_data: record] {
 
 def get-response-type-impl [op: record, spec_data: record, schemas: record] {
   let responses = ($op.responses? | default {})
-  mut found_schema = null
+  mut found_schema: any = null
   for code in $spec.RESPONSE_CODE_PRIORITY {
     if ($found_schema == null) {
       let resp = ($responses | get -o $code)

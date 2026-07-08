@@ -437,12 +437,12 @@ export def build-auth-scheme [entry: record] {
       {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
     } else if $loc == "cookie" {
       {spec_name: $entry.spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
-    } else if ($hdr | str downcase) == "authorization" {
+    } else if ($hdr | str lowercase) == "authorization" {
       let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
-      let scheme_name = ($pfx | str downcase)
+      let scheme_name = ($pfx | str lowercase)
       {spec_name: $entry.spec_name, name: $scheme_name, header_name: "Authorization", prefix: $pfx, in: "header"}
     } else {
-      let scheme_name = ($hdr | str downcase)
+      let scheme_name = ($hdr | str lowercase)
       {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
     }
   } else if ($d.type? == "oauth2") or ($d.type? == "openIdConnect") {

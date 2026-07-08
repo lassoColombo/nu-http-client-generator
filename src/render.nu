@@ -993,7 +993,7 @@ export def build-body-code [cmd: record, config: record] {
   # OAuth token endpoint is the canonical case). When that flag exists, the
   # user can override the spec's default at runtime — but the body still
   # needs to be serialized to match. Issue #11-8.
-  let ct_matches = ($hdr_decorated.items | where {|p| ($p.name | str downcase) == "content-type" })
+  let ct_matches = ($hdr_decorated.items | where {|p| ($p.name | str lowercase) == "content-type" })
   let has_ct_override = ($ct_matches | is-not-empty) and $cmd.has_body
   let ct_var = if $has_ct_override {
     let v = ($ct_matches | first | get flag_var)
@@ -1199,7 +1199,7 @@ def render-module-header [
 def render-command [cmd: record, completers: record, mapping: record, config: record] {
   mut cmd_lines = []
 
-  let endpoint_line = $"($cmd.method | str upcase) ($cmd.path_template)"
+  let endpoint_line = $"($cmd.method | str uppercase) ($cmd.path_template)"
   let summary = if ($cmd.description | is-not-empty) {
     $cmd.description | lines | str join " "
   } else {
@@ -1308,7 +1308,7 @@ export def client [spec_data: record, commands: table, spec_file: string, module
   let token_env_var = if ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {
-    $"($module_name | str upcase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --all --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
+    $"($module_name | str uppercase | str replace --all --regex '[^A-Z0-9]' '_' | str replace --all --regex '_{2,}' '_' | str trim --char '_')_TOKEN"
   }
 
   let base_url = if ($config.default_base_url | is-not-empty) {
@@ -1330,8 +1330,8 @@ export def client [spec_data: record, commands: table, spec_file: string, module
     let ar = ($c.auth_required? | default [])
     if ($ar | length) > 1 {
       $c | update auth_required ($ar | each {|s|
-        let slug = ($s.spec_name | str downcase | str replace --all --regex '[^a-z0-9]' '')
-        $s | insert flag_slug $slug | insert env_var $"($and_env_base)_($slug | str upcase)_TOKEN"
+        let slug = ($s.spec_name | str lowercase | str replace --all --regex '[^a-z0-9]' '')
+        $s | insert flag_slug $slug | insert env_var $"($and_env_base)_($slug | str uppercase)_TOKEN"
       })
     } else { $c }
   })

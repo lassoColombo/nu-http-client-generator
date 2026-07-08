@@ -186,7 +186,7 @@ def build-field-shapes [schema: record, schemas: record] {
 
 # Canonical verb mapping for HTTP-verb-prefixed operationIds.
 def canonical-verb [prefix: string] {
-  match ($prefix | str downcase) {
+  match ($prefix | str lowercase) {
     "get" => "get"
     "post" => "create"
     "put" => "update"
@@ -375,7 +375,7 @@ def tokenize-opid [s: string] {
       }
     | flatten
     | where {|t| $t | is-not-empty }
-    | each {|t| $t | str downcase }
+    | each {|t| $t | str lowercase }
     # Issue 36.A: split lowercase-glued verb-prefix tokens like `getairlines`
     # -> [`get`, `airlines`]. Only applies to tokens that survived the case-
     # boundary sweeps unchanged (i.e. all-lowercase, separator-less). Uses
@@ -955,7 +955,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   # old chain of parse-verb-prefix / parse-trailing-verb / parse-single-verb
   # / normalized_opid splitter / leading-non-alpha strip / recursive un-/bulk-
   # handlers / trailing-token dedup. See CLASSIFIER-DESIGN.md.
-  let resource_lower = ($resource | str downcase)
+  let resource_lower = ($resource | str lowercase)
   # Build resource_token_set from RAW path segments (pre-cleaning, pre-join),
   # tokenized through the same alphabet as opIds. Without this, segments like
   # `storage.k8s.io` or `account.cart.add.json` get glued into one token and
@@ -975,7 +975,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
   }
   let path_param_token_set = (
     $path_params | each {|p|
-      let n = ($p.name | str downcase)
+      let n = ($p.name | str lowercase)
       [(naive-singular $n)] | append (tokenize-resource $n)
     } | flatten | append ["id"] | uniq
   )
@@ -1023,7 +1023,7 @@ def derive-command-name [url_path: string, method: string, operation_id: string,
 
   # Stutter case: if the picked verb is literally the resource word
   # (sendgrid: `alerts alerts`), fall back to canonical method.
-  let action_picked = if (($action_picked | str downcase) == $resource_lower) {
+  let action_picked = if (($action_picked | str lowercase) == $resource_lower) {
     canonical-verb $method
   } else {
     $action_picked
@@ -1244,7 +1244,7 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         $body.field_shapes
       }
 
-      let endpoint_line = $"($method | str upcase) ($clean_path)"
+      let endpoint_line = $"($method | str uppercase) ($clean_path)"
 
       {
         name: $cmd_name
