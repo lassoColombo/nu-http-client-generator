@@ -324,7 +324,11 @@ This document defines the requirements for a complete, production-ready OpenAPI/
 ### 9.2 Command naming
 
 - Names are derived mechanically as `<path-resource> <method-verb>` (see §3.2).
-  The `operationId` is not consulted; there is no verb-remapping flag.
+  The `operationId` is not consulted by the default.
+- `--name-fn: closure` overrides the name per operation. The closure receives
+  `{raw, params, derived}` context and returns a replacement name (or null to
+  keep the default). The generator still sanitizes the result and guarantees
+  global uniqueness.
 
 ### 9.3 Description control
 

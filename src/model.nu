@@ -189,7 +189,9 @@ def build-field-shapes [schema: record, schemas: record] {
 # Names are derived structurally, with no operationId semantics: the
 # namespace comes from the URL path, the command from the HTTP method.
 # Collisions are resolved downstream by `deduplicate-commands` (path-param
-# suffix, then numeric).
+# suffix, then numeric). A user `--name-fn` closure can override the name per
+# operation (see `apply-name-fn`); the generator still enforces valid def-names
+# and uniqueness.
 
 # Map an HTTP method to its command word. Distinct words per method so two
 # methods on the same resource can never collide by construction
@@ -582,6 +584,67 @@ def derive-command-name [url_path: string, method: string, tags: list]: nothing 
   $"($resource) ($command)"
 }
 
+# Strip chars that would break a `def "<name>"` and collapse whitespace runs.
+# Falls back to `fallback` when the result is empty. A correctness guard on
+# user `--name-fn` output — the mechanical default never needs it.
+def sanitize-command-name [name: string, fallback: string]: nothing -> string {
+  let cleaned = ($name
+    | str replace --all --regex '[\\$()*\[\]=\x27",.#!@%^&+~`]' ''
+    | str trim
+    | str replace --all --regex '\s+' ' ')
+  if ($cleaned | is-empty) { $fallback } else { $cleaned }
+}
+
+# Apply a user `--name-fn` closure to override the mechanical command name.
+# The closure receives spec-derived context — `raw` (untouched operation
+# fields), `params` (resolved param names per location), and `derived` (the
+# generator's own answer) — and returns a replacement name, or null/"" to keep
+# the default. The result is sanitized to a valid `def` name; global uniqueness
+# is still guaranteed downstream by `deduplicate-commands`.
+def apply-name-fn [
+  name_fn: closure
+  default_name: string
+  op: record
+  method: string
+  raw_path: string
+  clean_path: string
+  params: record
+]: nothing -> string {
+  let ctx = {
+    raw: {
+      operation_id: ($op.operationId? | default "")
+      method: $method
+      path: $raw_path
+      summary: ($op.summary? | default "")
+      description: ($op.description? | default "")
+      tags: ($op.tags? | default [])
+      deprecated: ($op.deprecated? | default false)
+      op: $op
+    }
+    params: {
+      path: ($params.path_params | each {|p| $p.original_name? | default $p.name })
+      query: ($params.query_params | each {|p| $p.name })
+      header: ($params.header_params | each {|p| $p.name })
+      cookie: ($params.cookie_params | each {|p| $p.name })
+    }
+    derived: {
+      path: $clean_path
+      resource: ($default_name | split row ' ' | first)
+      action: ($default_name | split row ' ' | skip 1 | str join ' ')
+      path_params: ($params.path_params | each {|p| $p.original_name? | default $p.name })
+      default_name: $default_name
+    }
+  }
+  let custom = try {
+    do $name_fn $ctx
+  } catch {|e|
+    log warn $"name-fn threw for '($op.operationId? | default '<no opId>')': ($e.msg); using default '($default_name)'"
+    null
+  }
+  let chosen = if (($custom | describe) == "string") and ($custom | is-not-empty) { $custom } else { $default_name }
+  sanitize-command-name $chosen $default_name
+}
+
 # Deduplicate command names — the final pass of `command-list`. Resolves
 # collisions first by a path-param suffix (`-by-<param>`, see `param-suffix`),
 # then by a numeric suffix for any that still collide.
@@ -702,7 +765,12 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
       })
       let body = (extract-body-info $op $schemas $h $spec_data)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
-      let cmd_name = (derive-command-name $clean_path $method ($op.tags? | default []))
+      let default_name = (derive-command-name $clean_path $method ($op.tags? | default []))
+      let cmd_name = if ($config.name_fn? == null) {
+        $default_name
+      } else {
+        apply-name-fn $config.name_fn $default_name $op $method $path_entry.path $clean_path $params
+      }
 
       # Build unified field_shapes: collapsed body shape + per-field shapes.
       # field_shapes carry STRUCTURED fields; render's build-shape-doc renders

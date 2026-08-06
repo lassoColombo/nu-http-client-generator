@@ -111,6 +111,24 @@ Filters apply to both the generation command and `preview`. Combine freely.
 | `--methods: list<string>`       | Only these HTTP methods (e.g. `[get post]`). Case-insensitive.                           |
 | `--exclude-deprecated`          | Skip operations marked deprecated in the spec.                                           |
 
+### Naming
+
+Command names are derived mechanically — the namespace from the URL path, the verb from the HTTP method (`GET`→`get`, `POST`→`create`, `PUT`→`replace`, `PATCH`→`update`, `DELETE`→`delete`). Colliding names get a `-by-<param>` suffix, then a numeric suffix. The `operationId` is not consulted.
+
+| Flag                  | Default | Description                                                                                                                                                          |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name-fn: closure`  | —       | Override the command name per operation. The closure gets `{raw, params, derived}` context and returns a name (or `null` to keep the default). On both `http-gen` and `preview`. |
+
+Example — trust the `operationId` instead of the mechanical default:
+
+```nushell
+http-gen ./spec.yaml -o client.nu --name-fn {|ctx|
+  $ctx.raw.operation_id | default $ctx.derived.default_name | str kebab-case
+}
+```
+
+Whatever the closure returns, the generator sanitizes it to a valid command name and guarantees uniqueness — the closure only decides the logical name.
+
 ### Runtime defaults
 
 These flags control the behaviour of the *generated* commands. They don't affect generation itself - they get embedded as defaults.

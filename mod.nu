@@ -68,6 +68,7 @@ export def main [
   --prefixes: list<string>      # Filter: only paths matching these prefixes
   --methods: list<string>       # Filter: only these HTTP methods
   --exclude-deprecated          # Filter: skip deprecated operations
+  --name-fn: closure            # Naming: override command names (receives raw/params/derived context, returns a name or null)
   --token-env-var: string       # Override auto-derived token env var name
   --default-timeout: string = "30min"  # Override default request timeout
   --default-headers: record     # Static headers added to every request
@@ -86,6 +87,7 @@ export def main [
     filter_prefixes: ($prefixes | default [])
     filter_methods: ($methods | default [] | each { $in | str lowercase })
     exclude_deprecated: $exclude_deprecated
+    name_fn: $name_fn
     token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
     default_timeout: $default_timeout
     default_headers: ($default_headers | default {})
@@ -119,6 +121,7 @@ export def preview [
   --prefixes: list<string>      # Filter: only paths matching these prefixes
   --methods: list<string>       # Filter: only these HTTP methods
   --exclude-deprecated          # Filter: skip deprecated operations
+  --name-fn: closure            # Naming: override command names (receives raw/params/derived context, returns a name or null)
   --spec-headers: record        # Headers for fetching remote specs
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
@@ -128,6 +131,7 @@ export def preview [
     filter_prefixes: ($prefixes | default [])
     filter_methods: ($methods | default [] | each { $in | str lowercase })
     exclude_deprecated: $exclude_deprecated
+    name_fn: $name_fn
     body_threshold: 0
   }
 
