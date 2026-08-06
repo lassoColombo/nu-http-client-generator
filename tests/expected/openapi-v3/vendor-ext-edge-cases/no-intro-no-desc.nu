@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /things
 #
 # operationId: listThings
-export def "things list" [
+export def "things get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "things list" [
 # GET /things/{id}
 #
 # operationId: getThing
-export def "things get" [
+export def "things get-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

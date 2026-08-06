@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /search
 #
 # operationId: searchByEnv
-export def "search list-by-env" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "things get" [
 # GET /envs/{env}
 #
 # operationId: getEnvByName
-export def "envs get-by-name" [
+export def "envs get" [
   env_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

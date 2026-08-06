@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["x-app-key" "x-app-token" "none"] }
 # GET /widgets
 #
 # operationId: listWidgets
-export def "widgets list" [
+export def "widgets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-App-Key)
   --token-apptoken: string # Auth token for appToken (X-App-Token)

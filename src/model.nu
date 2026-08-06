@@ -184,384 +184,49 @@ def build-field-shapes [schema: record, schemas: record] {
   } | compact
 }
 
-# Canonical verb mapping for HTTP-verb-prefixed operationIds.
-def canonical-verb [prefix: string] {
-  match ($prefix | str lowercase) {
+# ── Command naming (mechanical) ────────────────────────────────────
+#
+# Names are derived structurally, with no operationId semantics: the
+# namespace comes from the URL path, the command from the HTTP method.
+# Collisions are resolved downstream by `deduplicate-commands` (path-param
+# suffix, then numeric).
+
+# Map an HTTP method to its command word. Distinct words per method so two
+# methods on the same resource can never collide by construction
+# (PUT = replace, PATCH = update is textbook REST).
+def method-command [method: string]: nothing -> string {
+  match ($method | str lowercase) {
     "get" => "get"
     "post" => "create"
-    "put" => "update"
+    "put" => "replace"
     "patch" => "update"
     "delete" => "delete"
-    "list" => "list"
-    "create" => "create"
-    "update" => "update"
-    "retrieve" => "get"
-    "fetch" => "get"
-    "insert" => "create"
-    "remove" => "delete"
-    "destroy" => "delete"
     "head" => "head"
-    # Extended verb vocabulary — k8s, Docker, Notion, Azure batch, etc.
-    "read" => "get"
-    "replace" => "update"
-    "watch" => "watch"
-    "append" => "create"
-    "query" => "list"
-    "inspect" => "get"
-    "attach" => "attach"
-    "prune" => "prune"
-    "exec" => "exec"
-    "commit" => "commit"
-    "build" => "build"
-    "ping" => "ping"
-    "cancel" => "cancel"
-    "enable" => "enable"
-    "disable" => "disable"
-    "wait" => "wait"
-    "restart" => "restart"
-    "start" => "start"
-    "stop" => "stop"
-    "clone" => "clone"
-    "copy" => "copy"
-    "move" => "move"
-    "add" => "create"
-    # Round-3 expansion: pub/sub, registration, archive/import/export,
-    # Docker (info/version/kill/pause/tag/push/pull/top/changes/stats/logs),
-    # OAuth-ish (revoke/approve/reject), upload/download, send/receive,
-    # sync/refresh/reload, upsert, validate/verify/check/test, lifecycle
-    # (close/open/lock/unlock/finalize/abort), search/submit/trigger/reset.
-    "publish" => "publish"
-    "unpublish" => "delete"
-    "subscribe" => "subscribe"
-    "unsubscribe" => "unsubscribe"
-    "register" => "create"
-    "unregister" => "delete"
-    "request" => "request"
-    "archive" => "archive"
-    "unarchive" => "unarchive"
-    "export" => "export"
-    "import" => "import"
-    "info" => "get"
-    "version" => "version"
-    "kill" => "kill"
-    "pause" => "pause"
-    "unpause" => "unpause"
-    "resize" => "resize"
-    "rename" => "rename"
-    "tag" => "tag"
-    "untag" => "untag"
-    "pull" => "pull"
-    "push" => "push"
-    "search" => "list"
-    "top" => "top"
-    "changes" => "changes"
-    "stats" => "stats"
-    "logs" => "logs"
-    "unwatch" => "unwatch"
-    "revoke" => "delete"
-    "approve" => "approve"
-    "reject" => "reject"
-    "upload" => "upload"
-    "download" => "download"
-    "send" => "send"
-    "receive" => "receive"
-    "sync" => "sync"
-    "refresh" => "refresh"
-    "reload" => "reload"
-    "upsert" => "update"
-    "reset" => "reset"
-    "validate" => "validate"
-    "verify" => "verify"
-    "check" => "check"
-    "test" => "test"
-    "submit" => "submit"
-    "trigger" => "trigger"
-    "close" => "close"
-    "open" => "open"
-    "lock" => "lock"
-    "unlock" => "unlock"
-    "finalize" => "finalize"
-    "abort" => "abort"
-    # Round-4 additions
-    "find" => "find"
-    "confirm" => "confirm"
-    "set" => "update"
-    "all" => "list"
-    "current" => "get"
-    # Round-5 additions (data-driven: see CLASSIFIER-DESIGN.md analysis)
-    "describe" => "get"
-    "del" => "delete"
-    "notify" => "notify"
-    "generate" => "generate"
-    "assign" => "assign"
-    "complete" => "complete"
-    "resend" => "resend"
-    _ => $prefix
+    "options" => "options"
+    _ => ($method | str lowercase)
   }
 }
 
-# Naive singularization: strip trailing "s" if word ends in "s" but not "ss".
-def naive-singular [word: string] {
-  if ($word | str ends-with "ss") {
-    $word
-  } else if ($word | str ends-with "s") and (($word | str length) > 1) {
-    $word | str substring 0..-2
+# Derive the command namespace from a URL path: the non-param, non-`api`,
+# non-`v\d+` segments, stripped of chars that break a `def` name and then
+# kebab-joined. `str kebab-case` handles camelCase / dotted / acronym
+# splitting (`account.cart.add.json` -> `account-cart-add-json`). Falls back
+# to the first tag, then "api".
+def path-resource [url_path: string, tags: list]: nothing -> string {
+  let segments = ($url_path
+    | split row '/'
+    | where {|s| ($s | is-not-empty) and ($s != "api") and (not ($s | str starts-with "{")) and (not ($s =~ '^v\d+$')) and ($s != "-") and ($s != "--") }
+    # Strip OData function-call suffixes: `certificates(a={x})` -> `certificates`.
+    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
+    # Strip chars unsafe in a `def` name; `str kebab-case` handles the rest.
+    | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",$#!@%^&+~`]' '' }
+    | where {|s| $s | is-not-empty })
+  if ($segments | is-not-empty) {
+    $segments | str join '-' | str kebab-case
+  } else if ($tags | is-not-empty) {
+    $tags | first | str kebab-case
   } else {
-    $word
-  }
-}
-
-# ── Tokenize-and-classify pipeline ─────────────────────────────────
-#
-# Verb extraction reformulated as: split the operationId into tokens once,
-# label each token by its role, then pick the verb wherever it lands.
-# Replaces the multi-matcher chain (parse-verb-prefix / parse-trailing-verb /
-# parse-single-verb / normalized_opid splitter / leading-non-alpha strip /
-# recursive un-/bulk- handlers / trailing-token dedup).
-#
-# See CLASSIFIER-DESIGN.md for the data analysis backing this design.
-
-# Membership list of canonical verbs. Mirrors `canonical-verb`'s match arms.
-# Used by the classifier for O(1) verb-token detection.
-const KNOWN_VERBS = [
-  get post put patch delete list create update retrieve fetch insert remove destroy head
-  read replace watch append query inspect attach prune exec commit build ping cancel
-  enable disable wait restart start stop clone copy move add
-  unsubscribe subscribe unregister register unarchive archive unpublish publish
-  unpause pause unwatch unlock lock untag tag upsert
-  request export import info version kill resize rename pull push search top
-  changes stats logs revoke approve reject upload download send receive sync
-  refresh reload reset validate verify check test submit trigger close open
-  finalize abort find confirm current all set
-  describe del notify generate assign complete resend
-]
-
-# Tokens treated as namespace/version noise inside operationIds.
-# `collection` is intentionally NOT here — it carries real meaning for k8s
-# (`delete-collection` ≠ `delete`) so it falls through as OTHER and naturally
-# becomes part of the discriminator suffix.
-const STRUCTURAL_TOKENS = [api apis namespaced cluster scoped core]
-
-# Prepositions kept in the discriminator only when followed by a kept token.
-const PREPOSITIONS = [by for as using from with in on of to]
-
-# Articles dropped wherever they appear.
-const ARTICLES = [a an the]
-
-# Tokenize an operationId. Splits on common separators AND camelCase
-# boundaries, lowercases, and discards empties.
-#   "compute.firewallPolicies.list" → [compute, firewall, policies, list]
-#   "readCoreV1NamespacedConfigMap" → [read, core, v1, namespaced, config, map]
-#   ".GetAvailableLocales"          → [get, available, locales]
-def tokenize-opid [s: string] {
-  # Issue 45.B: strip path-template placeholder braces before tokenizing.
-  # Some specs (HubSpot hubapi.com, Ex Libris almaws) declare operationId as
-  # the literal HTTP path, e.g. `delete-/marketing/v3/events/{externalEventId}_archive`.
-  # Without this strip, `{externalEventId}` survives as a single token that
-  # kebabs to `{external-event-id}` in the rendered command name. Replacing
-  # `{name}` with `name` lets the inner identifier go through normal
-  # tokenization and classify correctly (typically as PARAM via the
-  # path_param_token_set check, then dropped from the discriminator).
-  let cleaned = ($s | str replace --all --regex '\{([^}]+)\}' '$1')
-  let raw = (
-    $cleaned
-    | split row --regex '[._/\-\s:]+'
-    | where {|p| $p | is-not-empty }
-    | each {|p|
-        $p
-        | str replace --all --regex '([a-z0-9])([A-Z])' '$1 $2'
-        | str replace --all --regex '([A-Z]+)([A-Z][a-z])' '$1 $2'
-        | split row ' '
-      }
-    | flatten
-    | where {|t| $t | is-not-empty }
-    | each {|t| $t | str lowercase }
-    # Issue 36.A: split lowercase-glued verb-prefix tokens like `getairlines`
-    # -> [`get`, `airlines`]. Only applies to tokens that survived the case-
-    # boundary sweeps unchanged (i.e. all-lowercase, separator-less). Uses
-    # a small fixed set of HTTP-method-shaped verbs (not the full KNOWN_VERBS
-    # list) to avoid mis-splitting common nouns like `findings`, `deliveries`,
-    # `startup*`. Guard: remainder must be alphabetic and >= 5 chars so
-    # `listings` (`list`+`ings`, 4), `getable` (`get`+`able`, 4), `headers`
-    # (`head`+`ers`, 3), `gets` (1), `lister` (2) all stay unsplit while
-    # `getairlines` (8), `gethotels` (6) split correctly.
-    | each {|t|
-        let pref = ([get post put patch delete list create update retrieve fetch insert remove destroy head]
-          | where {|v| ($t | str starts-with $v) and (($t | str length) - ($v | str length) >= 5) and (($t | str substring (($v | str length)..)) =~ '^[a-z]+$') }
-          | sort-by {|v| 0 - ($v | str length) }
-          | first
-          | default null)
-        if $pref == null { [$t] } else {
-          [$pref ($t | str substring (($pref | str length)..))]
-        }
-      }
-    | flatten
-  )
-  # Collapse Django REST framework's `partial_update` compound verb to `patch`.
-  # Tokens are scanned pairwise; the rest of the list passes through.
-  mut out = []
-  let n = ($raw | length)
-  mut i = 0
-  while $i < $n {
-    let t = ($raw | get $i)
-    let next = if ($i + 1) < $n { ($raw | get ($i + 1)) } else { "" }
-    if ($t == "partial") and ($next == "update") {
-      $out = ($out | append "patch")
-      $i = ($i + 2)
-    } else {
-      $out = ($out | append $t)
-      $i = ($i + 1)
-    }
-  }
-  $out
-}
-
-# Tokenize a path-derived resource (or any string) into atomic tokens for
-# cross-checking with opId tokens. Uses the SAME alphabet as `tokenize-opid`
-# so `storage.k8s.io` in a path symmetrically matches `storage` in an opId —
-# without this, the path-side tokens are glued together and opId tokens that
-# visually appear in the path stay misclassified as OTHER (issue #6.1).
-def tokenize-resource [resource: string] {
-  tokenize-opid $resource
-  | each {|t| naive-singular $t }
-  | where {|t| $t | is-not-empty }
-}
-
-# Classify each tokenized opId token. Returns a list of
-# {token: string, label: string} records preserving order.
-def classify-tokens [
-  tokens: list,
-  resource_tokens: list,   # singularized path resource tokens
-  param_tokens: list,      # singularized path-param name tokens (incl. "id")
-] {
-  $tokens | each {|t|
-    let sing = (naive-singular $t)
-    # Priority: RESOURCE / PARAM / STRUCTURAL beat VERB. Tokens that appear
-    # in the path resource take precedence so `createAccessRequest` on
-    # `/access_requests` classifies `request` as RESOURCE (load-bearing for
-    # the resource name) rather than as a secondary VERB.
-    let label = if ($t in $STRUCTURAL_TOKENS) or ($t =~ '^v\d+$') {
-      "STRUCTURAL"
-    } else if ($sing in $param_tokens) or ($t in $param_tokens) {
-      "PARAM"
-    } else if ($sing in $resource_tokens) or ($t in $resource_tokens) {
-      "RESOURCE"
-    } else if ($t in $KNOWN_VERBS) {
-      "VERB"
-    } else if ($t in $ARTICLES) {
-      "ARTICLE"
-    } else if ($t in $PREPOSITIONS) {
-      "PREPOSITION"
-    } else {
-      "OTHER"
-    }
-    {token: $t, label: $label}
-  }
-}
-
-# Given classified tokens + the HTTP method, pick the primary verb and build
-# the discriminator suffix. Returns the joined action string (e.g. "get",
-# "get-by-status", "delete-collection", "create-or-update").
-def pick-action [classified: list, method: string] {
-  let verb_idxs = ($classified | enumerate | where {|e| $e.item.label == "VERB" } | each {|e| $e.index })
-  # Leftmost wins: data shows it matches the HTTP method 2.4× more often than
-  # rightmost (38.9% vs 16.3%) when there are multiple verb tokens.
-  # When no token classifies as VERB, fall back to any token whose word is
-  # in the verb vocabulary even if it classified as RESOURCE — this rescues
-  # cases like `findPetsByStatus` on path `/pet/findByStatus` where the
-  # verb-word is itself embedded in a path segment.
-  let chosen_idx = if ($verb_idxs | is-not-empty) {
-    $verb_idxs | first
-  } else {
-    # Fallback: no token classified as VERB, but the opId may still contain
-    # a vocab verb that classified as RESOURCE (e.g. `approveAccessRequest`
-    # on `/.../approve`, where every token also appears in the path).
-    # Leftmost wins — matches the dominant verb-at-0 position in the data.
-    let fallback_idxs = ($classified | enumerate | where {|e| $e.item.token in $KNOWN_VERBS } | each {|e| $e.index })
-    if ($fallback_idxs | is-empty) { -1 } else { $fallback_idxs | first }
-  }
-  let primary_verb = if $chosen_idx >= 0 {
-    canonical-verb ($classified | get $chosen_idx | get token)
-  } else {
-    # No verb token anywhere → fall back to HTTP method (71.5% agree with
-    # opId-verb when one exists, so method is a defensible default).
-    canonical-verb $method
-  }
-
-  # Build discriminator: walk tokens, keeping OTHER and secondary VERBs and
-  # PREPOSITIONS (when followed by a kept token).
-  let parts = ($classified | enumerate | each {|e|
-    let i = $e.index
-    let entry = $e.item
-    let label = $entry.label
-    let tok = $entry.token
-    let keep = if $i == $chosen_idx {
-      false
-    } else if $label in ["STRUCTURAL" "PARAM" "RESOURCE" "ARTICLE"] {
-      false
-    } else if $label == "PREPOSITION" {
-      # Keep if the NEXT non-dropped token is OTHER or VERB.
-      let upcoming = ($classified | skip ($i + 1) | where {|p| $p.label not-in ["STRUCTURAL" "PARAM" "RESOURCE" "ARTICLE"] })
-      ($upcoming | is-not-empty) and (($upcoming | first | get label) in ["OTHER" "VERB" "PREPOSITION"])
-    } else if $label == "VERB" {
-      # Issue 33.A: drop a secondary VERB whose canonical form equals the
-      # primary verb. Suppresses verb-verb stutter like `create-create-tags`
-      # (POST + Create), `get-get-bundle-info` (GET + Info→get),
-      # `list-list-of-unsubscribed-addresses` (GET + Query→list).
-      #
-      # Issue 44.A: also drop a secondary VERB whose canonical form matches
-      # an earlier-kept secondary VERB's canonical form. Suppresses
-      # canonical-stutter like `list-catalog-get-get` (opId
-      # `catalogProductRenderListV1GetListGet` — two `get`s survive 33.A
-      # because neither equals the primary `list`), `get-list-list`
-      # (`GET_ListAllSettings` — `list` + `all`→`list`), `list-get-get`
-      # (`query_token_info_v1_token_get` — `info`→`get` + `get`).
-      let canon = (canonical-verb $tok)
-      if $canon == $primary_verb {
-        false
-      } else {
-        let prev_canons = ($classified | first $i
-          | enumerate
-          | where {|p| ($p.index != $chosen_idx) and ($p.item.label == "VERB") }
-          | each {|p| canonical-verb $p.item.token }
-          | where { $in != $primary_verb })
-        not ($canon in $prev_canons)
-      }
-    } else {
-      # OTHER. Issue 41.A: when the primary verb came from method-fallback
-      # (no token classified as VERB), also drop OTHER tokens whose word
-      # matches the fallback method verb itself. Suppresses
-      # `options-options` stutter on OPTIONS opIds like `options_events`,
-      # `optionsProxy` (where `options` stays out of KNOWN_VERBS so that
-      # `<X>Options_Verb` opIds don't mis-classify their trailing real verb).
-      # Mirrors 33.A's secondary-VERB drop for the no-real-VERB-token case.
-      #
-      # Issue 43.A: extend the drop to glued-suffix forms like `deleteall`
-      # (= delete + all) on `deleteAll` opIds where the 36.A tokenizer's
-      # `>= 5` remainder guard rejects the split. Only fires when the
-      # primary verb came from method-fallback AND the remainder is in a
-      # small allow-list of common short noun-stems. Suppresses
-      # `delete-deleteall`, `get-getall`, `delete-deletebulk` etc.
-      if ($chosen_idx == -1) and ($tok == $primary_verb) {
-        false
-      } else if ($chosen_idx == -1) and ($tok | str starts-with $primary_verb) and (($tok | str length) > ($primary_verb | str length)) {
-        let rem = ($tok | str substring (($primary_verb | str length)..))
-        $rem not-in ["all" "bulk" "byid" "byname" "many" "one"]
-      } else {
-        true
-      }
-    }
-    if $keep {
-      if $label == "VERB" { canonical-verb $tok } else { $tok }
-    } else {
-      null
-    }
-  } | compact)
-
-  if ($parts | is-empty) {
-    $primary_verb
-  } else {
-    $"($primary_verb)-($parts | str join '-')"
+    "api"
   }
 }
 
@@ -889,8 +554,8 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
 # Counter-cases stay untouched: `[user_id,label_id]` (head `label` != tail `id`),
 # `[parent_id,child]` (head `child` != tail `id`), `[org,project,repo]`.
 #
-# Shared by `derive-command-name`'s `_2`-dedup branch and `deduplicate-commands`'s
-# pass-1 suffix branch (both in this module) — previously two divergent copies.
+# Used by `deduplicate-commands`'s pass-1 suffix branch to disambiguate
+# same-resource same-method collisions.
 def param-suffix [path_params: list]: nothing -> string {
   $path_params
   | each {|p| $p.name | str kebab-case }
@@ -908,228 +573,36 @@ def param-suffix [path_params: list]: nothing -> string {
   | str join '-'
 }
 
-# Derive command name from path, method, operationId, tags, and path params.
-def derive-command-name [url_path: string, method: string, operation_id: string, tags: list, path_params: list, verb_map: record] {
-  let path_segments = ($url_path | split row '/' | where {|s|
-    ($s | is-not-empty) and ($s != "api") and (not ($s | str starts-with "{")) and (not ($s =~ '^v\d+$'))
-  })
-  let resource = if ($path_segments | is-not-empty) {
-    $path_segments | where {|s| $s != "-" and $s != "--" }
-    # Strip OData function-call suffixes from path segments —
-    # `certificates(thumbprintAlgorithm={a},thumbprint={t})` → `certificates`.
-    # The {placeholders} inside add no useful naming signal and turn the
-    # resource into a mangled string when joined back together.
-    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
-    # Strip garbage chars but PRESERVE separators (`.`, `_`, `:`, space) so
-    # the tokenizer can split on them. Without this, `account.cart.add.json`
-    # would have `.` stripped first and collapse to `accountcartaddjson`.
-    # See issue #7 — the resource-name string must share the alphabet with
-    # the matching token set so users see readable names like
-    # `account-cart-add-json` instead of glued strings.
-    | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",$#!@%^&+~`]' '' }
-    | each {|s| tokenize-opid $s }
-    | flatten
-    | where {|s| $s | is-not-empty }
-    | str join '-' | str kebab-case
-  } else if ($tags | is-not-empty) {
-    $tags.0 | str kebab-case
-  } else {
-    "api"
-  }
-
-  # `normalized_opid` retained ONLY for the `_2` numeric-suffix dedup below.
-  # The verb-extraction itself no longer uses it — see the tokenize-classify
-  # pipeline below.
-  let normalized_opid = if ($operation_id | is-not-empty) and ($operation_id =~ '[/.]') {
-    let segs = ($operation_id | split row --regex '[/.]' | where {|s| $s | is-not-empty })
-    $segs | str join '-'
-  } else {
-    $operation_id
-  }
-
-  # ── Tokenize → classify → pick ─────────────────────────────────
-  # Splits the operationId on every common separator + camelCase boundary,
-  # labels each token by its role (VERB / STRUCTURAL / PARAM / RESOURCE /
-  # PREPOSITION / ARTICLE / OTHER), then picks the leftmost VERB as the
-  # action and joins remaining tokens into the discriminator. Replaces the
-  # old chain of parse-verb-prefix / parse-trailing-verb / parse-single-verb
-  # / normalized_opid splitter / leading-non-alpha strip / recursive un-/bulk-
-  # handlers / trailing-token dedup. See CLASSIFIER-DESIGN.md.
-  let resource_lower = ($resource | str lowercase)
-  # Build resource_token_set from RAW path segments (pre-cleaning, pre-join),
-  # tokenized through the same alphabet as opIds. Without this, segments like
-  # `storage.k8s.io` or `account.cart.add.json` get glued into one token and
-  # opId tokens that visually appear in the path stay as discriminator noise.
-  # See issue #6.1.
-  let resource_token_set = if ($path_segments | is-not-empty) {
-    $path_segments
-    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
-    | each {|s| tokenize-resource $s }
-    | flatten
-    | uniq
-  } else {
-    # Path had no usable segments (e.g. `/` or only `{name}`): the final
-    # resource comes from tags or the "api" fallback. Tokenize it so opId
-    # tokens that overlap with the tag still classify as RESOURCE.
-    tokenize-resource $resource
-  }
-  let path_param_token_set = (
-    $path_params | each {|p|
-      let n = ($p.name | str lowercase)
-      [(naive-singular $n)] | append (tokenize-resource $n)
-    } | flatten | append ["id"] | uniq
-  )
-
-  # For namespaced operationIds, only the LAST namespace-segment carries
-  # verb info — earlier segments are namespace. Without this, every
-  # namespace token survives as discriminator and produces 12-token verbs.
-  # See issue #6.2.
-  #   `.` separator: Google `cloudkms.projects...macSign`, Flickr
-  #     `flickr.favorites.getList`, Yandex, etc.
-  #   `#` separator: Rails-style `controller#action`
-  #     (`Api::V1::Models#search`), AWS-style `path#subresource`
-  #     (`get_files_id#get_shared_link`). Cycle 32.
-  let opid_for_verb = if ($operation_id | is-not-empty) and ($operation_id =~ '[.#]') {
-    $operation_id | split row --regex '[.#]' | last
-  } else if ($operation_id | is-not-empty) {
-    $operation_id
-  } else if $method == "options" {
-    # Issue 35.B: avoid `options-options` stutter when method-fallback
-    # re-tokenizes. `options` stays out of KNOWN_VERBS (3 leftmost-noun
-    # `<X>Options_Verb` opIds rely on its OTHER classification), so the
-    # empty-opid case needs a separate bypass.
-    ""
-  } else {
-    $method
-  }
-  # Strip trailing `_<digit>+` before tokenizing — auto-generated dedup
-  # markers, not part of the action name. The numeric-suffix dedup branch
-  # downstream still uses `normalized_opid` to detect and re-attach the marker.
-  let opid_for_tokens = ($opid_for_verb | str replace --regex '_\d+$' '')
-  let tokens = (tokenize-opid $opid_for_tokens)
-  let classified = (classify-tokens $tokens $resource_token_set $path_param_token_set)
-  let picked = (pick-action $classified $method)
-
-  # Apply --verb-map. The override key is matched against (a) the full
-  # operationId, then (b) the last `_`-segment of the opId (legacy contract),
-  # then (c) the picked verb head. A match REPLACES the entire action.
-  let verb_map_keys = [
-    $operation_id
-    ($operation_id | split row '_' | last)
-    ($picked | split row '-' | first)
-  ]
-  let matches = ($verb_map_keys | each {|k| $verb_map | get -o $k } | compact)
-  let action_picked = if ($matches | is-not-empty) { $matches | first } else { $picked }
-
-  # Stutter case: if the picked verb is literally the resource word
-  # (sendgrid: `alerts alerts`), fall back to canonical method.
-  let action_picked = if (($action_picked | str lowercase) == $resource_lower) {
-    canonical-verb $method
-  } else {
-    $action_picked
-  }
-
-  # Strip chars that break `def "..." [...]` names. Some specs (e.g. Sentry)
-  # use free-text operationIds like "Retrieve Statuses (Alpha)" — without
-  # this, the parens/spaces flow straight into the generated def name.
-  # Only kicks in when the action has unsafe chars — leaves clean camelCase
-  # action names (findPetsByStatus, etc.) untouched.
-  let action = if ($action_picked =~ '[\s\\$()*\[\]=\x27",.#!@%^&+~`]') {
-    let cleaned = (
-      $action_picked
-      | str replace --all --regex '[\\$()*\[\]=\x27",.$#!@%^&+~`]' ''
-      | str trim
-      | str replace --all --regex '\s+' '-'
-    )
-    if ($cleaned | is-empty) { $method } else { $cleaned }
-  } else {
-    $action_picked
-  }
-
-  # detect _2 deduplication pattern
-  let is_duplicate = if ($normalized_opid | is-not-empty) {
-    let parts = ($normalized_opid | split row '_')
-    let last_part = ($parts | last)
-    ($last_part =~ '^\d+$') and ($parts | length) >= 2
-  } else {
-    false
-  }
-
-  if $is_duplicate {
-    # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
-    # adjacent-duplicate tokens (see `param-suffix`).
-    let param_suffix = (param-suffix $path_params)
-    # Issue 34.A: when there are no path params, the `-by-` marker would
-    # collapse to a hanging hyphen. Skip it and let pass-2 numeric-suffix
-    # dedup handle the collision (matches same-resource same-verb path).
-    if ($param_suffix | is-empty) {
-      $"($resource) ($action)"
-    } else {
-      $"($resource) ($action)-by-($param_suffix)"
-    }
-  } else {
-    $"($resource) ($action)"
-  }
+# Derive the command name mechanically as `<path-resource> <method-command>`.
+# No operationId and no verb vocabulary — name collisions are resolved by the
+# downstream `deduplicate-commands` pass.
+def derive-command-name [url_path: string, method: string, tags: list]: nothing -> string {
+  let resource = (path-resource $url_path $tags)
+  let command = (method-command $method)
+  $"($resource) ($command)"
 }
 
-# Deduplicate command names — the final pass of `command-list`. Resolves name
-# collisions first by a GET collection/item `list` rename or a path-param suffix
-# (`-by-<param>`, see `param-suffix`), then by a numeric suffix for any that
-# still collide.
+# Deduplicate command names — the final pass of `command-list`. Resolves
+# collisions first by a path-param suffix (`-by-<param>`, see `param-suffix`),
+# then by a numeric suffix for any that still collide.
 def deduplicate-commands []: list -> list {
   let commands = $in
-  # pass 1: resolve collisions via list-rename or path-param suffix
+  # pass 1: disambiguate collisions by path-param suffix. The colliding member
+  # with no path params (the collection endpoint) keeps the bare name; members
+  # carrying path params get `-by-<param>`.
   let dup_names = $commands | group-by name | transpose name entries
     | where { ($in.entries | length) > 1 } | get name
 
-  # Identify GET collection/item pairs: all dupes are GET, exactly 2 members,
-  # and one has exactly 1 more path param than the other.  Rename the member
-  # with fewer params to "list" — cleaner than suffixing both with -by-{param}.
-  let list_candidates = if ($dup_names | is-not-empty) {
-    $dup_names | where {|name|
-      let group = ($commands | where { $in.name == $name })
-      if (($group | length) != 2) or (not ($group | all {|c| $c.method == "get" })) { return false }
-      let counts = ($group | each {|c| $c.path_params | length } | sort)
-      ($counts | last) - ($counts | first) == 1
-    }
-  } else { [] }
-
-  # For each list-candidate pair, record the min param count so we know which
-  # member is the collection endpoint.
-  let list_min_params = if ($list_candidates | is-not-empty) {
-    $list_candidates | each {|name|
-      let group = ($commands | where { $in.name == $name })
-      let min_count = ($group | each {|c| $c.path_params | length } | math min)
-      {name: $name, min_params: $min_count}
-    }
-  } else { [] }
-
-  let suffix_candidates = $dup_names | where { $in not-in $list_candidates }
-
-  if ($list_candidates | is-not-empty) {
-    let display = ($list_candidates | each {|n| $n | split row ' ' | first } | str join ", ")
-    log info $"($list_candidates | length) GET collection/item collision\(s\) resolved via list rename: ($display)"
-  }
-  if ($suffix_candidates | is-not-empty) {
-    log info $"($suffix_candidates | length) duplicate command name\(s\) disambiguated with path-param suffix: ($suffix_candidates | str join ', ')"
+  if ($dup_names | is-not-empty) {
+    log info $"($dup_names | length) duplicate command name\(s\) disambiguated with path-param suffix: ($dup_names | str join ', ')"
   }
 
   let pass1 = $commands | each {|cmd|
-    if ($cmd.name in $list_candidates) {
-      let entry = ($list_min_params | where { $in.name == $cmd.name } | first)
-      if ($cmd.path_params | length) == $entry.min_params {
-        # Collection GET (fewer params): rename action to "list"
-        let resource = ($cmd.name | split row ' ' | first)
-        $cmd | update name $"($resource) list"
-      } else {
-        # Item GET (more params): keep original name
-        $cmd
-      }
-    } else if ($cmd.name in $suffix_candidates) and ($cmd.path_params | is-not-empty) {
-      # Issue 34.B/45.A/46.A: kebab-case each path-param name and collapse
-      # adjacent-duplicate tokens (see `param-suffix`).
+    if ($cmd.name in $dup_names) and ($cmd.path_params | is-not-empty) {
       let suffix = (param-suffix $cmd.path_params)
-      $cmd | update name $"($cmd.name)-by-($suffix)"
+      if ($suffix | is-empty) { $cmd } else {
+        $cmd | update name $"($cmd.name)-by-($suffix)"
+      }
     } else {
       $cmd
     }
@@ -1229,7 +702,7 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
       })
       let body = (extract-body-info $op $schemas $h $spec_data)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
-      let cmd_name = (derive-command-name $clean_path $method $meta.operation_id ($op.tags? | default []) $params.path_params $config.verb_map)
+      let cmd_name = (derive-command-name $clean_path $method ($op.tags? | default []))
 
       # Build unified field_shapes: collapsed body shape + per-field shapes.
       # field_shapes carry STRUCTURED fields; render's build-shape-doc renders

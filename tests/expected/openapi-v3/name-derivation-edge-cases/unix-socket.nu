@@ -179,7 +179,7 @@ export def "containers delete" [
 # GET /configs
 #
 # operationId: ConfigList
-export def "configs list" [
+export def "configs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "configs list" [
 # POST /images/build
 #
 # operationId: ImageBuild
-export def "images-build build" [
+export def "images-build create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "images-build build" [
 # GET /system/ping
 #
 # operationId: SystemPing
-export def "system-ping ping" [
+export def "system-ping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "system-ping ping" [
 # GET /configmaps/{name}
 #
 # operationId: readNamespacedConfigMap
-export def "configmaps get-config-map" [
+export def "configmaps get-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "configmaps get-config-map" [
 # PUT /configmaps/{name}
 #
 # operationId: replaceNamespacedConfigMap
-export def "configmaps update-config-map" [
+export def "configmaps replace" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "configmaps update-config-map" [
 # GET /configmaps
 #
 # operationId: watchNamespacedConfigMap
-export def "configmaps watch-config-map" [
+export def "configmaps get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,7 +529,7 @@ export def "certificates get" [
 # GET /namespaces/{namespace}/configmaps/{name}/status
 #
 # operationId: readCoreV1NamespacedConfigMapStatus
-export def "namespaces-configmaps-status get-config-map" [
+export def "namespaces-configmaps-status get" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

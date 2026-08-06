@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /indexes
 #
 # operationId: listIndexes
-export def "indexes list" [
+export def "indexes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -124,7 +124,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "settings get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "settings get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # GET /settings
 #
 # operationId: GET_ListAllSettings
-export def "settings get-list" [
+export def "settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "settings get-list" [
 # GET /catalog/products
 #
 # operationId: catalogProductRenderListV1GetListGet
-export def "catalog-products list-render-get" [
+export def "catalog-products get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "listings get" [
 # DELETE /records
 #
 # operationId: deleteByNameBulk
-export def "records delete-by-name-bulk" [
+export def "records delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "airlines get" [
 # DELETE /marketing/events/{externalEventId}/archive
 #
 # operationId: delete-/marketing/events/{externalEventId}_archive
-export def "marketing-events-archive delete-external" [
+export def "marketing-events-archive delete" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "marketing-events-archive delete-external" [
 # POST /keys/{name}:macSign
 #
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.macSign
-export def "keys create-mac-sign" [
+export def "keys create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

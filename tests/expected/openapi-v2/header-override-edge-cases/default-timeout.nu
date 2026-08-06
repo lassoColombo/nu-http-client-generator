@@ -175,7 +175,7 @@ export def "oauth-token create" [
 #
 # GET /widgets
 # operationId: widgets_list
-export def "widgets list" [
+export def "widgets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

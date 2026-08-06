@@ -1,5 +1,5 @@
 # Targeted tests for filtering and naming flags:
-# --tags, --prefixes, --methods, --verb-map, --autocompletion-base-urls
+# --tags, --prefixes, --methods, --autocompletion-base-urls
 #
 # Uses the petstore-v3 OpenAPI schema with assertion-based checks
 # rather than golden files.
@@ -47,7 +47,7 @@ def "prefixes rest" [] {
 def "prefixes rest narrow" [] {
     let names = mod preview $PETSTORE --prefixes ["/store/order"] | get name
     assert equal ($names | length) 3 "expected 3 commands under /store/order"
-    let expected = ["store-order create-place", "store-order get", "store-order delete"]
+    let expected = ["store-order create", "store-order get", "store-order delete"]
     assert equal $names $expected
 }
 
@@ -65,24 +65,6 @@ def "methods get and delete" [] {
     let result = mod preview $PETSTORE --methods [get delete]
     assert ($result | all {|r| $r.method in [get delete]}) "all commands should be GET or DELETE"
     assert equal ($result | length) 11 "expected 11 GET+DELETE commands"
-}
-
-# ── --verb-map ───────────────────────────────────────────────────────
-
-@test
-def "verb-map renames action" [] {
-    let baseline = mod preview $PETSTORE | get name
-    let mapped = mod preview $PETSTORE --verb-map {findPetsByStatus: "search-by-status"} | get name
-    let changed = $baseline | zip $mapped | where {|pair| $pair.0 != $pair.1 }
-    assert equal ($changed | length) 1 "exactly one command should change"
-    assert equal $changed.0.1 "pet-find-by-status search-by-status"
-}
-
-@test
-def "verb-map multiple keys" [] {
-    let mapped = mod preview $PETSTORE --verb-map {findPetsByStatus: "search-by-status", placeOrder: "create"} | get name
-    assert ("pet-find-by-status search-by-status" in $mapped) "findPetsByStatus should be renamed"
-    assert ("store-order create" in $mapped) "placeOrder should be renamed"
 }
 
 # ── --autocompletion-base-urls ────────────────────────────────────────

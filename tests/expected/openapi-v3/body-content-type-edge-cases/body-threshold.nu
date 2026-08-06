@@ -303,7 +303,7 @@ export def "text create" [
 # POST /upload
 #
 # operationId: uploadFile
-export def "upload upload-file" [
+export def "upload create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "upload upload-file" [
 # POST /upload-empty
 #
 # operationId: uploadEmpty
-export def "upload-empty upload" [
+export def "upload-empty create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

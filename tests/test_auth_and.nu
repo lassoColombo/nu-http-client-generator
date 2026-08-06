@@ -104,7 +104,7 @@ def "and-form signature exposes per-scheme token flags and drops auth-scheme" []
 
 @test
 def "global and-form is inherited by non-overriding ops" [] {
-    let r = (run-cmd $in.global_client 'widgets list --token-appkey AK --token-apptoken AT --dry-run')
+    let r = (run-cmd $in.global_client 'widgets get --token-appkey AK --token-apptoken AT --dry-run')
     assert equal ($r.headers | get "X-App-Key") "AK" "inherited first scheme header must be sent"
     assert equal ($r.headers | get "X-App-Token") "AT" "inherited second scheme header must be sent"
 }

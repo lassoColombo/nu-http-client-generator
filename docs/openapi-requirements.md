@@ -73,14 +73,14 @@ This document defines the requirements for a complete, production-ready OpenAPI/
 
 ### 3.2 Verb derivation
 
-- Derive the action verb from the HTTP method and `operationId`:
-  - `GET` (collection) → `list`
-  - `GET` (single, has path param) → `get`
+- Derive the action verb from the HTTP method alone (the `operationId` is **not**
+  consulted for naming):
+  - `GET` → `get` (collection and single item disambiguated by a `-by-<param>` suffix, see §3.4)
   - `POST` → `create`
-  - `PUT` → `update` (full replace)
-  - `PATCH` → `patch` (partial update)
-  - `DELETE` → `delete` (but sanitized — see §3.4)
-- `--verb-map` allows overriding these defaults (e.g. `{list: "ls", create: "new", delete: "rm"}`).
+  - `PUT` → `replace` (full replace)
+  - `PATCH` → `update` (partial update)
+  - `DELETE` → `delete`
+  - `HEAD` → `head`, `OPTIONS` → `options`
 
 ### 3.3 Name sanitization
 
@@ -321,9 +321,10 @@ This document defines the requirements for a complete, production-ready OpenAPI/
 - `--name` overrides the module/namespace name.
 - Default: derive from `info.title`, sanitized to a valid identifier.
 
-### 9.2 Verb mapping
+### 9.2 Command naming
 
-- `--verb-map {retrieve: "fetch", list: "ls", delete: "rm"}` — remap action verbs globally.
+- Names are derived mechanically as `<path-resource> <method-verb>` (see §3.2).
+  The `operationId` is not consulted; there is no verb-remapping flag.
 
 ### 9.3 Description control
 
@@ -481,7 +482,6 @@ This document defines the requirements for a complete, production-ready OpenAPI/
 | `--prefixes` | Filtering | Only paths matching given prefixes |
 | `--methods` | Filtering | Only specified HTTP methods |
 | `--exclude-deprecated` | Filtering | Skip deprecated operations |
-| `--verb-map` | Naming | Override action verb mappings |
 
 ---
 

@@ -111,14 +111,6 @@ Filters apply to both the generation command and `preview`. Combine freely.
 | `--methods: list<string>`       | Only these HTTP methods (e.g. `[get post]`). Case-insensitive.                           |
 | `--exclude-deprecated`          | Skip operations marked deprecated in the spec.                                           |
 
-### Naming
-
-| Flag                  | Default | Description                                                                                                                                                |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--verb-map: record`  | `{}`    | Override the action verb in command names. The key is the original verb (from the `operationId` or HTTP method), the value is the replacement. Example: `{retrieve: "fetch", list: "ls"}`. |
-
-Default action-verb rewrites baked in: `retrieve` → `get`, `destroy` → `delete`, `partial_update` → `patch`.
-
 ### Runtime defaults
 
 These flags control the behaviour of the *generated* commands. They don't affect generation itself - they get embedded as defaults.

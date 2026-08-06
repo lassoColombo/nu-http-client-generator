@@ -279,7 +279,7 @@ export def "reports get" [
 # POST /documents/{documentId}:batchUpdate
 #
 # operationId: batchUpdateDocument
-export def "documents update-batch" [
+export def "documents create" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +321,7 @@ export def "documents update-batch" [
 # GET /$metadata
 #
 # operationId: getMetadata
-export def "metadata get-metadata" [
+export def "metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

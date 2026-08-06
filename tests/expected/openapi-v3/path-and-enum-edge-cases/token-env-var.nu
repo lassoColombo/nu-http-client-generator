@@ -160,7 +160,7 @@ export def "certificates get" [
 # GET /sites
 #
 # operationId: sites_list
-export def "sites list" [
+export def "sites get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "sites list" [
 # GET /sites/active
 #
 # operationId: sites_list_active
-export def "sites-active list" [
+export def "sites-active get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
