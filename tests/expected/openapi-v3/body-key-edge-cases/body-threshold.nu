@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # operationId: things_create
 # --body shape: {harry potter: string, Aux Price: string, Location:: string, osdb:body_data: string, Upload Yaml/Yml File: string, :: string, address?: string}
-export def "things create" [
+export def "things-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "things create" [
 # GET /things/{insight_id:}
 #
 # operationId: insights_get
-export def "things get" [
+export def "insights-get" [
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -54,9 +54,9 @@ Then use it:
 ```nu
 use petstore.nu
 
-petstore pet-find-by-status findPetsByStatus --status available | where status == "available"
-petstore pet get 10
-petstore store-inventory get --token $env.PETSTORE_TOKEN
+petstore find-pets-by-status --status available | where status == "available"
+petstore get-pet-by-id 10
+petstore get-inventory --token $env.PETSTORE_TOKEN
 ```
 
 ---
@@ -113,17 +113,18 @@ Filters apply to both the generation command and `preview`. Combine freely.
 
 ### Naming
 
-Command names are derived mechanically — the namespace from the URL path, the verb from the HTTP method (`GET`→`get`, `POST`→`create`, `PUT`→`replace`, `PATCH`→`update`, `DELETE`→`delete`). Colliding names get a `-by-<param>` suffix, then a numeric suffix. The `operationId` is not consulted.
+Command names come from the spec's `operationId`, kebab-cased. Operations that don't carry a usable one fall back to a mechanical method+path slug. See [How command names get built](#how-command-names-get-built).
 
 | Flag                  | Default | Description                                                                                                                                                          |
 | --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--name-fn: closure`  | —       | Override the command name per operation. The closure gets `{raw, params, derived}` context and returns a name (or `null` to keep the default). On both `http-gen` and `preview`. |
 
-Example — trust the `operationId` instead of the mechanical default:
+Example — group commands under their first tag instead of trusting the `operationId` alone:
 
 ```nushell
 http-gen ./spec.yaml -o client.nu --name-fn {|ctx|
-  $ctx.raw.operation_id | default $ctx.derived.default_name | str kebab-case
+  let tag = ($ctx.raw.tags | get -o 0)
+  if ($tag | is-empty) { null } else { $"($tag) ($ctx.derived.default_name)" }
 }
 ```
 
@@ -154,10 +155,10 @@ These flags control the behaviour of the *generated* commands. They don't affect
 A generated client is a regular Nushell module:
 ```nu
 use petstore.nu
-petstore pet get 10
+petstore get-pet-by-id 10
 ```
 
-Every command follows the same `<resource> <verb>` shape, object first and action second.   
+Command names are whatever the spec's `operationId` says, kebab-cased.   
 Alongside the spec-derived flags, every command also ships with the same set of built-in flags:
 
 | Flag              | Short | Type       | Purpose                                                                                          |
@@ -179,8 +180,8 @@ Required path parameters are positional, in the order they appear in the path.
 Everything else - query strings, headers, cookies - becomes a `--flag`.   
 Enum-typed params get tab-completion automatically, and boolean query params render as plain switches:
 ```nu
-petstore pet get 10
-petstore pet-find-by-status findPetsByStatus --status available
+petstore get-pet-by-id 10
+petstore find-pets-by-status --status available
 ```
 
 ### Request bodies
@@ -266,9 +267,11 @@ petstore commands | get params | first 5
 
 ## How command names get built
 
-Names follow `<resource> <verb>`: the path segments form the resource - with path params and version chunks like `v1`/`v2` stripped - and the verb comes from the operation's `operationId` (its trailing camelCase chunk) or the HTTP method. So `GET /pet/{petId}` becomes `pet get`, and `POST /pet/{petId}/uploadImage` becomes `pet-upload-image uploadFile`.
+**The `operationId` is the name.** It gets sanitized to a valid Nushell command name and nothing else is consulted — no verb vocabulary, no path curation. Placeholders (`{id}`) are dropped, `/ . _ :` and whitespace become `-`, and camelCase splits on the way: `findPetsByStatus` → `find-pets-by-status`, `Databases_Get` → `databases-get`, `repos/get-release` → `repos-get-release`. Word order and phrasing are the spec author's choice, so a spec that names things verb-first gets verb-first commands.
 
-Collisions get resolved in a few specific ways. The most common case is a collection-vs-item pair, where two GET endpoints differ only by a single path parameter (imagine a spec with both `GET /users` and `GET /users/{userId}`); in that case the collection variant is renamed `list` rather than suffixed. Any other collision is disambiguated by appending `-by-<path-param-name>` - you'd end up with `users get-by-userId` - and if even that leaves duplicates, a numeric suffix (`-1`, `-2`) is appended on top. An `operationId` ending in `_<number>` (a common pattern in machine-generated specs) triggers the `-by-<params>` rename pre-emptively so you don't end up with numeric suffixes everywhere. Reserved Nushell identifiers (`get`, `delete`, `in`, `version`, `nothing`) are forbidden as standalone names and get sanitized whenever they'd otherwise appear bare.
+**Operations without a usable `operationId` get a method+path slug.** Roughly one operation in ten across public registries omits it, and a handful name it something Nushell refuses to define (a parser keyword like `export`, or `main`/`commands`, which the generated module already uses). Both cases fall back to the same slug: the method, then the path with its parameter names kept as plain segments. `GET /pet/{petId}` becomes `get-pet-pet-id`. Keeping the parameter names is what makes the slug unique per method+path — dropping them collides about eighty times more often.
+
+**One sweep guarantees uniqueness.** `operationId`s are unique per document by spec, and the slug is unique by construction, so collisions are rare: two distinct `operationId`s that kebab to the same string (`getThingDetail` and `get_thing_detail`), or a `--name-fn` that returns the same name twice. Those get a numeric suffix — `get-thing-detail`, `get-thing-detail-1`, `get-thing-detail-2`. It isn't cosmetic: a repeated `def` makes the whole module fail to parse.
 
 ---
 

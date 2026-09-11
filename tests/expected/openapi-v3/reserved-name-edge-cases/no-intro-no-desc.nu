@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /search
 #
 # operationId: searchByEnv
-export def "search get" [
+export def "search-by-env" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "search get" [
 # GET /things/{in}
 #
 # operationId: getThingByIn
-export def "things get" [
+export def "get-thing-by-in" [
   in_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "things get" [
 # GET /envs/{env}
 #
 # operationId: getEnvByName
-export def "envs get" [
+export def "get-env-by-name" [
   env_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "envs get" [
 # POST /jobs
 #
 # operationId: createJob
-export def "jobs create" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

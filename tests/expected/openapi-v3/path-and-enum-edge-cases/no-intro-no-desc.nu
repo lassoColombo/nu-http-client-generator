@@ -101,7 +101,7 @@ def literal-quoted-completer [] { ["Ashburn, VA" "Latency"] }
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
 # operationId: certificates_get
-export def "certificates get" [
+export def "certificates-get" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -138,7 +138,7 @@ export def "certificates get" [
 # GET /sites
 #
 # operationId: sites_list
-export def "sites get" [
+export def "sites-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "sites get" [
 # GET /sites/active
 #
 # operationId: sites_list_active
-export def "sites-active get" [
+export def "sites-list-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "sites-active get" [
 # GET /quoted-enum
 #
 # operationId: quoted_enum_get
-export def "quoted-enum get" [
+export def "quoted-enum-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

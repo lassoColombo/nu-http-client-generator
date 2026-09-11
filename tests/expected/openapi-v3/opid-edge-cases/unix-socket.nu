@@ -112,7 +112,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-bank-accounts delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-accounts-account-bank-accounts-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # DELETE /accounts/{a}/bank_accounts/{id}
 #
 # operationId: DeleteAccountsAccountBankAccountsId
-export def "accounts-bank-accounts delete" [
+export def "delete-accounts-account-bank-accounts-id" [
   a: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -175,7 +175,7 @@ export def "accounts-bank-accounts delete" [
 # GET /accounts/{a}
 #
 # operationId: GetAccountsAccount
-export def "accounts get" [
+export def "get-accounts-account" [
   a: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "accounts get" [
 # POST /account_links
 #
 # operationId: PostAccountLinks
-export def "account-links create" [
+export def "post-account-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "account-links create" [
 # POST /chat/completions
 #
 # operationId: createChatCompletion
-export def "chat-completions create" [
+export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "chat-completions create" [
 # GET /blocks/{id}
 #
 # operationId: retrieveABlock
-export def "blocks get" [
+export def "retrieve-a-block" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "blocks get" [
 # GET /repos
 #
 # operationId: repos/list-for-user
-export def "repos get" [
+export def "repos-list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -114,7 +114,7 @@ def auth-scheme-completer [] { ["basic" "x-api-key" "query-access_token" "x-clie
 # GET /default-auth
 #
 # operationId: getDefaultAuth
-export def "default-auth get" [
+export def "get-default-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +147,7 @@ export def "default-auth get" [
 # GET /basic
 #
 # operationId: getBasic
-export def "basic get" [
+export def "get-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "basic get" [
 # GET /query-key
 #
 # operationId: getQueryKey
-export def "query-key get" [
+export def "get-query-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "query-key get" [
 # GET /oauth
 #
 # operationId: getOauth
-export def "oauth get" [
+export def "get-oauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "oauth get" [
 # GET /public
 #
 # operationId: getPublic
-export def "public get" [
+export def "get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "public get" [
 # GET /and-header
 #
 # operationId: getAndHeader
-export def "and-header get" [
+export def "get-and-header" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheader: string # Auth token for apiKeyHeader (X-Api-Key)
   --token-clientidheader: string # Auth token for clientIdHeader (X-Client-Id)

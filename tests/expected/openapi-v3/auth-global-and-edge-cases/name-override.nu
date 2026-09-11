@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["x-app-key" "x-app-token" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "widgets get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-widgets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # GET /widgets
 #
 # operationId: listWidgets
-export def "widgets get" [
+export def "list-widgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-App-Key)
   --token-apptoken: string # Auth token for appToken (X-App-Token)
@@ -165,7 +165,7 @@ export def "widgets get" [
 # GET /public
 #
 # operationId: getPublic
-export def "public get" [
+export def "get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

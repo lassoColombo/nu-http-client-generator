@@ -128,7 +128,7 @@ def pet-type-completer [] { ["cat" "dog"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "json create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # POST /json
 #
 # operationId: createJson
-export def "json create" [
+export def "create-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "json create" [
 # POST /form
 #
 # operationId: createForm
-export def "form create" [
+export def "create-form" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "form create" [
 # POST /form-scalar
 #
 # operationId: createFormScalar
-export def "form-scalar create" [
+export def "create-form-scalar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "form-scalar create" [
 # POST /text
 #
 # operationId: createText
-export def "text create" [
+export def "create-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "text create" [
 # POST /upload
 #
 # operationId: uploadFile
-export def "upload create" [
+export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "upload create" [
 # POST /upload-empty
 #
 # operationId: uploadEmpty
-export def "upload-empty create" [
+export def "upload-empty" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "upload-empty create" [
 # POST /multi-ct
 #
 # operationId: createMultiCt
-export def "multi-ct create" [
+export def "create-multi-ct" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "multi-ct create" [
 # POST /allof
 #
 # operationId: createAllof
-export def "allof create" [
+export def "create-allof" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "allof create" [
 #
 # Discriminator (request): petType = cat, dog
 # operationId: createOneof
-export def "oneof create" [
+export def "create-oneof" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "oneof create" [
 # POST /poly-array
 #
 # operationId: createPolyArray
-export def "poly-array create" [
+export def "create-poly-array" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

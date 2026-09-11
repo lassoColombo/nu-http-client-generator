@@ -1,0 +1,115 @@
+openapi: 3.0.3
+info:
+  title: OpId Naming Edge Cases
+  version: 1.0.0
+  description: >
+    Exercises the operationId-driven naming rules: the operationId IS the
+    command name, with a mechanical method+path slug as the fallback for
+    operations that have no usable one, and a single numeric sweep for the
+    residue.
+servers:
+  - url: https://opid.example.com
+paths:
+  # 1. plain camelCase operationId -> kebab, verbatim
+  /widgets:
+    get:
+      operationId: getWidget
+      summary: Plain camelCase operationId
+      responses:
+        "200": { description: ok }
+  # 2. separators: `_`, `/`, `.` and `:` all collapse to `-`
+  /separators/underscore:
+    get:
+      operationId: Widgets_ListByOwner
+      responses:
+        "200": { description: ok }
+  /separators/slash:
+    get:
+      operationId: widgets/list-archived
+      responses:
+        "200": { description: ok }
+  /separators/dotted:
+    get:
+      operationId: catalog.widgets.listAll
+      responses:
+        "200": { description: ok }
+  /separators/colon:
+    get:
+      operationId: widgets:batchGet
+      responses:
+        "200": { description: ok }
+  # 3. acronym run — `str kebab-case` keeps it as one token
+  /acronyms:
+    get:
+      operationId: getWidgetOIDCConfig
+      responses:
+        "200": { description: ok }
+  # 4. operationId with the whole path baked in, placeholders and all.
+  #    `{...}` groups are dropped; everything else survives.
+  /baked/{widgetId}/history:
+    get:
+      operationId: get-/baked/{widgetId}/history_fetchHistoryById
+      responses:
+        "200": { description: ok }
+  # 5. no operationId at all -> method+path slug, path params kept as segments
+  /fallback/{widgetId}/parts:
+    get:
+      responses:
+        "200": { description: ok }
+    delete:
+      responses:
+        "204": { description: gone }
+  # 6. two operations, no operationId, same path shape but different param
+  #    names — the slug keeps them distinct without a dedup pass
+  /siblings/{id}:
+    get:
+      responses:
+        "200": { description: ok }
+  /siblings/{name}/detail:
+    get:
+      responses:
+        "200": { description: ok }
+  # 7. operationIds Nushell refuses as a `def` name -> slug rescue
+  /keyword/export:
+    post:
+      operationId: export
+      responses:
+        "200": { description: ok }
+  /keyword/match:
+    post:
+      operationId: match
+      responses:
+        "200": { description: ok }
+  # 8. collides with a command the generated module defines itself
+  /keyword/main:
+    get:
+      operationId: main
+      responses:
+        "200": { description: ok }
+  /keyword/commands:
+    get:
+      operationId: commands
+      responses:
+        "200": { description: ok }
+  # 9. distinct operationIds that kebab to the SAME string -> numeric sweep
+  /collision/camel:
+    get:
+      operationId: getThingDetail
+      responses:
+        "200": { description: ok }
+  /collision/snake:
+    get:
+      operationId: get_thing_detail
+      responses:
+        "200": { description: ok }
+  /collision/kebab:
+    get:
+      operationId: get-thing-detail
+      responses:
+        "200": { description: ok }
+  # 10. operationId that sanitizes to nothing -> slug rescue
+  /empty-opid:
+    get:
+      operationId: "***"
+      responses:
+        "200": { description: ok }

@@ -57,25 +57,25 @@ def cleanup [] {
 
 @test
 def "httpbin ip returns origin" [] {
-    let resp = run-cmd $in.httpbin "httpbin ip get --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin get-ip --max-time 15sec"
     assert ($resp.origin | is-not-empty) "origin should not be empty"
 }
 
 @test
 def "httpbin get returns request url" [] {
-    let resp = run-cmd $in.httpbin "httpbin get get --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin get-get --max-time 15sec"
     assert equal $resp.url "https://httpbingo.org/get"
 }
 
 @test
 def "httpbin headers returns headers record" [] {
-    let resp = run-cmd $in.httpbin "httpbin headers get --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin get-headers --max-time 15sec"
     assert ($resp.headers | describe | str starts-with "record") "headers should be a record"
 }
 
 @test
 def "httpbin user-agent returns user-agent" [] {
-    let resp = run-cmd $in.httpbin "httpbin user-agent get --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin get-user-agent --max-time 15sec"
     # return "skip"
     let ua = $resp | get "user-agent"
     assert ($ua | is-not-empty) "user-agent should not be empty"
@@ -83,13 +83,13 @@ def "httpbin user-agent returns user-agent" [] {
 
 @test
 def "httpbin uuid returns valid uuid" [] {
-    let resp = run-cmd $in.httpbin "httpbin uuid get --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin get-uuid --max-time 15sec"
     assert ($resp.uuid =~ '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}') "should be a valid UUID"
 }
 
 @test
 def "httpbin anything post echoes method" [] {
-    let resp = run-cmd $in.httpbin "httpbin anything create --max-time 15sec"
+    let resp = run-cmd $in.httpbin "httpbin post-anything --max-time 15sec"
     assert equal $resp.method "POST"
 }
 
@@ -98,7 +98,7 @@ def "httpbin anything post echoes method" [] {
 @test
 def "apisguru metrics returns counts" [] {
     # No-param GET returning a flat record of integers.
-    let resp = run-cmd $in.apisguru "apisguru metrics-json get --max-time 15sec"
+    let resp = run-cmd $in.apisguru "apisguru get-metrics --max-time 15sec"
     assert (($resp.numAPIs | into int) > 0) "numAPIs should be positive"
     assert (($resp.numEndpoints | into int) > 0) "numEndpoints should be positive"
 }
@@ -106,7 +106,7 @@ def "apisguru metrics returns counts" [] {
 @test
 def "apisguru providers returns list" [] {
     # No-param GET returning a collection ({data: [provider strings]}).
-    let resp = run-cmd $in.apisguru "apisguru providers-json get --max-time 15sec"
+    let resp = run-cmd $in.apisguru "apisguru get-providers --max-time 15sec"
     assert (($resp.data | length) > 0) "should return at least one provider"
     assert ($resp.data | all {|p| ($p | describe) == "string" }) "providers should be strings"
 }
@@ -114,7 +114,7 @@ def "apisguru providers returns list" [] {
 @test
 def "apisguru provider lookup by path param" [] {
     # GET with a single path param returning an object (the provider's APIs).
-    let resp = run-cmd $in.apisguru "apisguru ap-is get 'apis.guru' --max-time 15sec"
+    let resp = run-cmd $in.apisguru "apisguru get-provider 'apis.guru' --max-time 15sec"
     assert ($resp.apis | is-not-empty) "provider should expose at least one API"
 }
 
@@ -125,14 +125,14 @@ def "apisguru provider lookup by path param" [] {
 
 @test
 def "dry-run record has dry_run marker" [] {
-    let r = run-cmd $in.httpbin "httpbin get get --dry-run"
+    let r = run-cmd $in.httpbin "httpbin get-get --dry-run"
     assert equal $r.dry_run true
     assert equal $r.method "get"
 }
 
 @test
 def "dry-run query record carries user-passed params by spec name" [] {
-    let r = run-cmd $in.httpbin "httpbin redirect-to get --url 'http://x.test' --dry-run"
+    let r = run-cmd $in.httpbin "httpbin get-redirect-to --url 'http://x.test' --dry-run"
     assert equal $r.query.url "http://x.test"
     # The wire URL should also contain the param, percent-encoded (so $r.url and
     # $r.query agree).
@@ -141,17 +141,17 @@ def "dry-run query record carries user-passed params by spec name" [] {
 
 @test
 def "dry-run query record is empty for no-query ops" [] {
-    let r = run-cmd $in.httpbin "httpbin get get --dry-run"
+    let r = run-cmd $in.httpbin "httpbin get-get --dry-run"
     assert equal ($r.query | columns | length) 0
 }
 
 @test
 def "dry-run auth metadata surfaces scheme and location" [] {
-    let r = run-cmd $in.httpbin "httpbin get get --dry-run"
+    let r = run-cmd $in.httpbin "httpbin get-get --dry-run"
     # httpbin needs no token → scheme falls back, location is "none"
     assert equal $r.auth.location "none"
     # When a token IS supplied (bearer default), location should be "header"
-    let r2 = run-cmd $in.httpbin "httpbin get get --token T --dry-run"
+    let r2 = run-cmd $in.httpbin "httpbin get-get --token T --dry-run"
     assert equal $r2.auth.location "header"
     assert equal $r2.auth.scheme "bearer"
 }
@@ -160,7 +160,7 @@ def "dry-run auth metadata surfaces scheme and location" [] {
 def "dry-run body is logical record" [] {
     # POST with a body: the logical (pre-serialization) body is a record keyed by
     # spec field name, regardless of the wire content-type.
-    let r = run-cmd $in.httpbin "httpbin redirect-to create 'http://b.test' --status-code 302 --dry-run"
+    let r = run-cmd $in.httpbin "httpbin post-redirect-to 'http://b.test' --status-code 302 --dry-run"
     assert equal ($r.body | describe | str starts-with "record") true
     assert equal $r.body.url "http://b.test"
     assert equal $r.body.status_code 302
@@ -170,6 +170,6 @@ def "dry-run body is logical record" [] {
 def "dry-run record has no query_string field" [] {
     # Breaking change: cycle-29's misnamed field is gone. Anything reading
     # $r.query_string should fail loudly so callers migrate to $r.query.
-    let r = run-cmd $in.httpbin "httpbin get get --dry-run"
+    let r = run-cmd $in.httpbin "httpbin get-get --dry-run"
     assert equal ($r.query_string? == null) true
 }

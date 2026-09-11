@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /items/{petId}/sub/{accountId}/{zoneId}
 #
 # operationId: getItemSub
-export def "items-sub get" [
+export def "get-item-sub" [
   pet_id: string
   account_id: string
   zone_id: string
@@ -137,7 +137,7 @@ export def "items-sub get" [
 # GET /mixed/{b}/{a}
 #
 # operationId: getMixed
-export def "mixed get" [
+export def "get-mixed" [
   b: string
   a: string
   --base-url(-b): string@base-url-completer # API base URL

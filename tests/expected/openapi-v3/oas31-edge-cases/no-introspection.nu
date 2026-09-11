@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # POST /things
 #
 # operationId: createThing
-export def "things create" [
+export def "create-thing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "things create" [
 # GET /things
 #
 # operationId: listThings
-export def "things get" [
+export def "list-things" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

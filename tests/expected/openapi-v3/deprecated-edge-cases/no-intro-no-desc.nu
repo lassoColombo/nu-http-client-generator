@@ -106,7 +106,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # DEPRECATED
 # operationId: getLegacy
 @deprecated
-export def "legacy get" [
+export def "get-legacy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +141,7 @@ export def "legacy get" [
 # operationId: createItem
 @deprecated --flag legacy-flag
 @deprecated --flag old-field
-export def "items create" [
+export def "create-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "items create" [
 # GET /items/{id}
 #
 # operationId: getItem
-export def "items get" [
+export def "get-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

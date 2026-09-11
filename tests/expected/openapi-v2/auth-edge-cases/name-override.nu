@@ -113,7 +113,7 @@ def auth-scheme-completer [] { ["basic" "x-api-key" "query-access_token" "x-clie
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "default-auth get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-default-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 # GET /default-auth
 #
 # operationId: getDefaultAuth
-export def "default-auth get" [
+export def "get-default-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "default-auth get" [
 # GET /basic
 #
 # operationId: getBasic
-export def "basic get" [
+export def "get-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "basic get" [
 # GET /query-key
 #
 # operationId: getQueryKey
-export def "query-key get" [
+export def "get-query-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "query-key get" [
 # GET /oauth
 #
 # operationId: getOauth
-export def "oauth get" [
+export def "get-oauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "oauth get" [
 # GET /public
 #
 # operationId: getPublic
-export def "public get" [
+export def "get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "public get" [
 # GET /and-header
 #
 # operationId: getAndHeader
-export def "and-header get" [
+export def "get-and-header" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeyheader: string # Auth token for apiKeyHeader (X-Api-Key)
   --token-clientidheader: string # Auth token for clientIdHeader (X-Client-Id)

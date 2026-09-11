@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["bearer"] }
 #
 # operationId: createTree
 # --children item shape: {value?: string, children?: list}
-export def "trees create" [
+export def "create-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "trees create" [
 # GET /aliased
 #
 # operationId: getAliased
-export def "aliased get" [
+export def "get-aliased" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "aliased get" [
 # POST /aliased
 #
 # operationId: createAliased
-export def "aliased create" [
+export def "create-aliased" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -118,7 +118,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "books get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-books" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /books
 #
 # operationId: getBooks
-export def "books get" [
+export def "get-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "books get" [
 # GET /books/{bookId}
 #
 # operationId: getBook
-export def "books get-by-book-id" [
+export def "get-book" [
   book_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +215,7 @@ export def "books get-by-book-id" [
 # POST /tomes
 #
 # operationId: createTome
-export def "tomes create" [
+export def "create-tome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "tomes create" [
 # POST /v1/tomes
 #
 # operationId: createTomeV1
-export def "tomes create-1" [
+export def "create-tome-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "tomes create-1" [
 # DELETE /scrolls/{isbn}
 #
 # operationId: removeScroll
-export def "scrolls delete-by-isbn" [
+export def "remove-scroll" [
   isbn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "scrolls delete-by-isbn" [
 # DELETE /v1/scrolls/{position}
 #
 # operationId: deleteScroll
-export def "scrolls delete-by-position" [
+export def "delete-scroll" [
   position: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +371,7 @@ export def "scrolls delete-by-position" [
 # PUT /v1/blocks/{dashboardId}/{id}
 #
 # operationId: replaceBlockV1
-export def "blocks replace-by-dashboard-id" [
+export def "replace-block-v1" [
   dashboard_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -415,7 +415,7 @@ export def "blocks replace-by-dashboard-id" [
 # PUT /v2/blocks/{pageId}/{id}
 #
 # operationId: replaceBlockV2
-export def "blocks replace-by-page-id" [
+export def "replace-block-v2" [
   page_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -459,7 +459,7 @@ export def "blocks replace-by-page-id" [
 # PUT /v1/catalogs/{type}/{typeId}/{id}
 #
 # operationId: replaceCatalogV1
-export def "catalogs replace-by-type-id" [
+export def "replace-catalog-v1" [
   type: string
   type_id: string
   id: string
@@ -505,7 +505,7 @@ export def "catalogs replace-by-type-id" [
 # PUT /v2/catalogs/{kind}/{kindId}/{id}
 #
 # operationId: replaceCatalogV2
-export def "catalogs replace-by-kind-id" [
+export def "replace-catalog-v2" [
   kind: string
   kind_id: string
   id: string

@@ -42,16 +42,16 @@ def cleanup [] {
 
 @test
 def "scalar-response command pipes into get under dry-run" [] {
-    let r = (run-cmd $in.client 'count get --dry-run | select method url')
+    let r = (run-cmd $in.client 'get-count --dry-run | select method url')
     assert equal $r.method "get" "dry-run record must be gettable (oneof record member)"
     assert ($r.url | str ends-with "/count") "url field reachable via structured op"
 }
 
 @test
 def "scalar-response command pipes into get for string and bool responses too" [] {
-    let t = (run-cmd $in.client 'token get --dry-run | get method')
+    let t = (run-cmd $in.client 'get-token --dry-run | get method')
     assert equal $t "get" "string-response command pipes into get"
-    let h = (run-cmd $in.client 'healthy get --dry-run | get method')
+    let h = (run-cmd $in.client 'get-healthy --dry-run | get method')
     assert equal $h "get" "bool-response command pipes into get"
 }
 
@@ -59,9 +59,9 @@ def "scalar-response command pipes into get for string and bool responses too" [
 # via the non-JSON media fallback — not collapse to `any`.
 @test
 def "text-plain scalar response is typed, not any" [] {
-    let rt = (run-cmd $in.client 'commands | where name == "etag get" | get return_type.0')
+    let rt = (run-cmd $in.client 'commands | where name == "get-etag" | get return_type.0')
     assert ($rt | str starts-with "oneof<string") $"text/plain string response must be oneof<string,…>, got: ($rt)"
-    let m = (run-cmd $in.client 'etag get --dry-run | get method')
+    let m = (run-cmd $in.client 'get-etag --dry-run | get method')
     assert equal $m "get" "text/plain-response command still pipes into get"
 }
 
@@ -69,7 +69,7 @@ def "text-plain scalar response is typed, not any" [] {
 
 @test
 def "scalar response type is preserved in the commands table" [] {
-    let rt = (run-cmd $in.client 'commands | where name == "count get" | get return_type.0')
+    let rt = (run-cmd $in.client 'commands | where name == "get-count" | get return_type.0')
     assert ($rt | str starts-with "oneof<int") $"return_type should preserve the int response, got: ($rt)"
     assert ($rt | str contains "record") "oneof must include record (dry-run/full)"
     assert ($rt | str contains "nothing") "oneof must include nothing (204)"
@@ -79,12 +79,12 @@ def "scalar response type is preserved in the commands table" [] {
 
 @test
 def "record response keeps its rich annotation, not a oneof" [] {
-    let rt = (run-cmd $in.client 'commands | where name == "profile get" | get return_type.0')
+    let rt = (run-cmd $in.client 'commands | where name == "get-profile" | get return_type.0')
     assert ($rt | str starts-with "record<") $"record response must keep record<…>, got: ($rt)"
 }
 
 @test
 def "schemaless response stays any" [] {
-    let rt = (run-cmd $in.client 'commands | where name == "ping get" | get return_type.0')
+    let rt = (run-cmd $in.client 'commands | where name == "get-ping" | get return_type.0')
     assert equal $rt "any" "no-schema response is genuinely any"
 }

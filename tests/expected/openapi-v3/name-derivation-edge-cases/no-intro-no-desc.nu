@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # DELETE /containers/{id}
 #
 # operationId: ContainerDelete
-export def "containers delete" [
+export def "container-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,7 +151,7 @@ export def "containers delete" [
 # GET /configs
 #
 # operationId: ConfigList
-export def "configs get" [
+export def "config-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "configs get" [
 # POST /images/build
 #
 # operationId: ImageBuild
-export def "images-build create" [
+export def "image-build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "images-build create" [
 # GET /system/ping
 #
 # operationId: SystemPing
-export def "system-ping get" [
+export def "system-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "system-ping get" [
 # GET /configmaps/{name}
 #
 # operationId: readNamespacedConfigMap
-export def "configmaps get-by-name" [
+export def "read-namespaced-config-map" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "configmaps get-by-name" [
 # PUT /configmaps/{name}
 #
 # operationId: replaceNamespacedConfigMap
-export def "configmaps replace" [
+export def "replace-namespaced-config-map" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "configmaps replace" [
 # GET /configmaps
 #
 # operationId: watchNamespacedConfigMap
-export def "configmaps get" [
+export def "watch-namespaced-config-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "configmaps get" [
 # POST /blocks/{id}/children
 #
 # operationId: appendBlockChildren
-export def "blocks-children create" [
+export def "append-block-children" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "blocks-children create" [
 # POST /certificates
 #
 # operationId: Add
-export def "certificates create" [
+export def "add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "certificates create" [
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
 # operationId: GetCertificate
-export def "certificates get" [
+export def "get-certificate" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "certificates get" [
 # GET /namespaces/{namespace}/configmaps/{name}/status
 #
 # operationId: readCoreV1NamespacedConfigMapStatus
-export def "namespaces-configmaps-status get" [
+export def "read-core-v1-namespaced-config-map-status" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL

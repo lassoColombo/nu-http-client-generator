@@ -99,7 +99,7 @@ def anchorsite-override-completer [] { ["Ashburn, VA" "Chicago, IL" "Latency"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "quoted get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-quoted" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /quoted
 # operationId: getQuoted
-export def "quoted get" [
+export def "get-quoted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "quoted get" [
 #
 # GET /clean
 # operationId: getClean
-export def "clean get" [
+export def "get-clean" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /lines/{ids}
 #
 # operationId: getLines
-export def "lines get" [
+export def "get-lines" [
   ids: list
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -139,7 +139,7 @@ export def "lines get" [
 # GET /branches/{branch}
 #
 # operationId: getBranch
-export def "branches get" [
+export def "get-branch" [
   branch: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "branches get" [
 # GET /regions/{region}/status
 #
 # operationId: getRegionStatus
-export def "regions-status get" [
+export def "get-region-status" [
   region: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "regions-status get" [
 # GET /reports
 #
 # operationId: getReports
-export def "reports get" [
+export def "get-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "reports get" [
 # POST /documents/{documentId}:batchUpdate
 #
 # operationId: batchUpdateDocument
-export def "documents create" [
+export def "batch-update-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -281,7 +281,7 @@ export def "documents create" [
 # GET /$metadata
 #
 # operationId: getMetadata
-export def "metadata get" [
+export def "get-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

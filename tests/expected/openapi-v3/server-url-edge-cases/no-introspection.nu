@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /ping
 #
 # operationId: ping
-export def "ping get" [
+export def "ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "ping get" [
 # GET /op-override
 #
 # operationId: getOpOverride
-export def "op-override get" [
+export def "get-op-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

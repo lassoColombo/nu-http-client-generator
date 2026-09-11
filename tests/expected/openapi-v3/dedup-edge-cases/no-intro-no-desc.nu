@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /books
 #
 # operationId: getBooks
-export def "books get" [
+export def "get-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,7 +149,7 @@ export def "books get" [
 # GET /books/{bookId}
 #
 # operationId: getBook
-export def "books get-by-book-id" [
+export def "get-book" [
   book_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "books get-by-book-id" [
 # POST /tomes
 #
 # operationId: createTome
-export def "tomes create" [
+export def "create-tome" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "tomes create" [
 # POST /v1/tomes
 #
 # operationId: createTomeV1
-export def "tomes create-1" [
+export def "create-tome-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "tomes create-1" [
 # DELETE /scrolls/{isbn}
 #
 # operationId: removeScroll
-export def "scrolls delete-by-isbn" [
+export def "remove-scroll" [
   isbn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "scrolls delete-by-isbn" [
 # DELETE /v1/scrolls/{position}
 #
 # operationId: deleteScroll
-export def "scrolls delete-by-position" [
+export def "delete-scroll" [
   position: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "scrolls delete-by-position" [
 # PUT /v1/blocks/{dashboardId}/{id}
 #
 # operationId: replaceBlockV1
-export def "blocks replace-by-dashboard-id" [
+export def "replace-block-v1" [
   dashboard_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -369,7 +369,7 @@ export def "blocks replace-by-dashboard-id" [
 # PUT /v2/blocks/{pageId}/{id}
 #
 # operationId: replaceBlockV2
-export def "blocks replace-by-page-id" [
+export def "replace-block-v2" [
   page_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -410,7 +410,7 @@ export def "blocks replace-by-page-id" [
 # PUT /v1/catalogs/{type}/{typeId}/{id}
 #
 # operationId: replaceCatalogV1
-export def "catalogs replace-by-type-id" [
+export def "replace-catalog-v1" [
   type: string
   type_id: string
   id: string
@@ -453,7 +453,7 @@ export def "catalogs replace-by-type-id" [
 # PUT /v2/catalogs/{kind}/{kindId}/{id}
 #
 # operationId: replaceCatalogV2
-export def "catalogs replace-by-kind-id" [
+export def "replace-catalog-v2" [
   kind: string
   kind_id: string
   id: string

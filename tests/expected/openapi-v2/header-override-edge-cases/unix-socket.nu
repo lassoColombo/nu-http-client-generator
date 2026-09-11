@@ -108,7 +108,7 @@ def accept-completer [] { ["application/json" "application/yaml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-token create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "token-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # POST /oauth/token
 # operationId: token_create
-export def "oauth-token create" [
+export def "token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "oauth-token create" [
 #
 # GET /widgets
 # operationId: widgets_list
-export def "widgets get" [
+export def "widgets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -118,7 +118,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/csv"] }
 # HEAD /resource/{id}
 #
 # operationId: headResource
-export def "resource head" [
+export def "head-resource" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -153,7 +153,7 @@ export def "resource head" [
 # DELETE /resource/{id}
 #
 # operationId: deleteResource
-export def "resource delete" [
+export def "delete-resource" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +192,7 @@ export def "resource delete" [
 # OPTIONS /resource
 #
 # operationId: optionsResource
-export def "resource options" [
+export def "options-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "resource options" [
 # DELETE /resource/{id}/hard
 #
 # operationId: hardDeleteResource
-export def "resource-hard delete" [
+export def "hard-delete-resource" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "resource-hard delete" [
 # GET /query
 #
 # operationId: queryWithBody
-export def "query get" [
+export def "query-with-body" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "query get" [
 #
 # Docs: https://docs.example.com/report — Report format reference.
 # operationId: getReport
-export def "report get" [
+export def "get-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

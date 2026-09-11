@@ -124,7 +124,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "settings get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-list-all-settings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # GET /settings
 #
 # operationId: GET_ListAllSettings
-export def "settings get" [
+export def "get-list-all-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "settings get" [
 # GET /catalog/products
 #
 # operationId: catalogProductRenderListV1GetListGet
-export def "catalog-products get" [
+export def "catalog-product-render-list-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "catalog-products get" [
 # OPTIONS /events
 #
 # operationId: options_events
-export def "events options" [
+export def "options-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "events options" [
 # DELETE /listings
 #
 # operationId: deleteall
-export def "listings delete" [
+export def "deleteall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "listings delete" [
 # GET /listings
 #
 # operationId: listings
-export def "listings get" [
+export def "listings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "listings get" [
 # DELETE /records
 #
 # operationId: deleteByNameBulk
-export def "records delete" [
+export def "delete-by-name-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "records delete" [
 # GET /airlines
 #
 # operationId: getairlines
-export def "airlines get" [
+export def "getairlines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "airlines get" [
 # DELETE /marketing/events/{externalEventId}/archive
 #
 # operationId: delete-/marketing/events/{externalEventId}_archive
-export def "marketing-events-archive delete" [
+export def "delete-marketing-events-archive" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "marketing-events-archive delete" [
 # POST /keys/{name}:macSign
 #
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.macSign
-export def "keys create" [
+export def "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "keys create" [
 # PATCH /profiles/{id}
 #
 # operationId: profiles_partial_update
-export def "profiles update" [
+export def "profiles-partial-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -521,7 +521,7 @@ export def "profiles update" [
 # POST /sendgrid
 #
 # operationId: sendgrid
-export def "sendgrid create" [
+export def "sendgrid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

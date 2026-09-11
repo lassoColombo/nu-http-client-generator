@@ -100,7 +100,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "token get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # GET /token
 #
 # operationId: getToken
-export def "token get" [
+export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "token get" [
 # GET /count
 #
 # operationId: getCount
-export def "count get" [
+export def "get-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "count get" [
 # GET /healthy
 #
 # operationId: getHealthy
-export def "healthy get" [
+export def "get-healthy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "healthy get" [
 # GET /profile
 #
 # operationId: getProfile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "profile get" [
 # GET /ping
 #
 # operationId: getPing
-export def "ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "ping get" [
 # GET /etag
 #
 # operationId: getEtag
-export def "etag get" [
+export def "get-etag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

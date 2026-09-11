@@ -184,51 +184,60 @@ def build-field-shapes [schema: record, schemas: record] {
   } | compact
 }
 
-# ── Command naming (mechanical) ────────────────────────────────────
+# ── Command naming ─────────────────────────────────────────────────
 #
-# Names are derived structurally, with no operationId semantics: the
-# namespace comes from the URL path, the command from the HTTP method.
-# Collisions are resolved downstream by `deduplicate-commands` (path-param
-# suffix, then numeric). A user `--name-fn` closure can override the name per
-# operation (see `apply-name-fn`); the generator still enforces valid def-names
-# and uniqueness.
+# The operationId IS the name. OpenAPI requires it to be unique per document
+# and real specs honour that, so the generator sanitizes it and gets out of the
+# way — no verb vocabulary, no path curation, no namespace/action split.
+#
+#   1. operationId, sanitized to a valid `def` name.
+#   2. absent, or sanitizing to something unusable -> a mechanical method+path
+#      slug, which is unique per (method, path) by construction.
+#
+# A user `--name-fn` closure can replace the result per operation (see
+# `apply-name-fn`). `deduplicate-commands` then guarantees every name is unique
+# and legal — it is the ONLY collision machinery left.
 
-# Map an HTTP method to its command word. Distinct words per method so two
-# methods on the same resource can never collide by construction
-# (PUT = replace, PATCH = update is textbook REST).
-def method-command [method: string]: nothing -> string {
-  match ($method | str lowercase) {
-    "get" => "get"
-    "post" => "create"
-    "put" => "replace"
-    "patch" => "update"
-    "delete" => "delete"
-    "head" => "head"
-    "options" => "options"
-    _ => ($method | str lowercase)
-  }
+# Names Nushell refuses as a `def`: parser keywords cannot be shadowed, and
+# `main` / `commands` are already defined by the generated module itself.
+# NOT the flag/variable reserved list (that one lives in render): `get`,
+# `delete`, `in`, `version` and `nothing` are all fine as module command names.
+const UNUSABLE_NAMES = [
+  use let mut const def module source overlay export export-env alias hide extern
+  if match for while loop break continue return where try
+  main commands
+]
+
+# Sanitize an arbitrary string to a valid `def "<name>"`: drop path
+# placeholders, turn `/ . _ :` and whitespace runs into `-`, and let
+# `str kebab-case` do the camelCase splitting and lowercasing
+# (`Databases_Get` -> `databases-get`, `repos/get-release` -> `repos-get-release`).
+# Returns "" when nothing survives — callers decide the fallback.
+def sanitize-command-name [name: string]: nothing -> string {
+  $name
+  | str replace --all --regex '\{[^}]*\}' ''
+  | str replace --all --regex '[^A-Za-z0-9 _./:-]' ''
+  | str replace --all --regex '[ _./:]+' '-'
+  | str kebab-case
+  | str trim --char '-'
 }
 
-# Derive the command namespace from a URL path: the non-param, non-`api`,
-# non-`v\d+` segments, stripped of chars that break a `def` name and then
-# kebab-joined. `str kebab-case` handles camelCase / dotted / acronym
-# splitting (`account.cart.add.json` -> `account-cart-add-json`). Falls back
-# to the first tag, then "api".
-def path-resource [url_path: string, tags: list]: nothing -> string {
-  let segments = ($url_path
-    | split row '/'
-    | where {|s| ($s | is-not-empty) and ($s != "api") and (not ($s | str starts-with "{")) and (not ($s =~ '^v\d+$')) and ($s != "-") and ($s != "--") }
-    # Strip OData function-call suffixes: `certificates(a={x})` -> `certificates`.
-    | each {|s| $s | str replace --regex '^([^()]+)\(.*\)$' '$1' }
-    # Strip chars unsafe in a `def` name; `str kebab-case` handles the rest.
-    | each {|s| $s | str replace --all --regex '[\\$()*\[\]=\x27",$#!@%^&+~`]' '' }
-    | where {|s| $s | is-not-empty })
-  if ($segments | is-not-empty) {
-    $segments | str join '-' | str kebab-case
-  } else if ($tags | is-not-empty) {
-    $tags | first | str kebab-case
+# Mechanical name for operations with no usable operationId. Braces become
+# separators rather than being dropped, so path-param names survive as segments
+# (`GET /pet/{petId}` -> `get-pet-pet-id`). That is what makes the slug unique
+# per (method, path) — dropping the params instead collides 80x more often.
+def path-slug [method: string, url_path: string]: nothing -> string {
+  sanitize-command-name $"($method) ($url_path | str replace --all --regex '[{}]' ' ')"
+}
+
+# The generator's own answer for one operation, before any `--name-fn` override.
+# Returns {name, source} — `source` tells the override closure which rule fired.
+def derive-command-name [op: record, method: string, url_path: string]: nothing -> record {
+  let from_op_id = (sanitize-command-name ($op.operationId? | default ""))
+  if ($from_op_id | is-empty) or ($from_op_id in $UNUSABLE_NAMES) {
+    {name: (path-slug $method $url_path), source: "path"}
   } else {
-    "api"
+    {name: $from_op_id, source: "operation-id"}
   }
 }
 
@@ -540,70 +549,16 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
   {accept_types: $accept_types, return_type: $return_type, returns_body: $returns_body, success_codes: $success_codes}
 }
 
-# Build the `-by-<...>` discriminator suffix from a list of path params, kebab-casing
-# each name and collapsing adjacent-duplicate tokens so nested `{thing_id}`/`{id}`
-# (and `{type}`/`{type_id}`, `{scope}`/`{scope_id}`) siblings don't stutter.
-#
-# Two collapse rules, both comparing against the trailing kebab-segment of the
-# previously kept token (`prev_tail`):
-#   - Issue 45.A: drop a param whose ENTIRE kebab form equals `prev_tail`
-#     (`dashboard-id` + `id` -> `dashboard-id`; `target-id` + `id` -> `target-id`).
-#   - Issue 46.A: when the param's LEADING kebab segment equals `prev_tail`, drop
-#     just that leading segment before appending
-#     (`type` + `type-id` -> `type-id`; `scope` + `scope-id` -> `scope-id`),
-#     so `[username,type,type_id,id]` -> `username-type-id` and
-#     `[site_id,scope,scope_id,metric]` -> `site-id-scope-id-metric`.
-# Counter-cases stay untouched: `[user_id,label_id]` (head `label` != tail `id`),
-# `[parent_id,child]` (head `child` != tail `id`), `[org,project,repo]`.
-#
-# Used by `deduplicate-commands`'s pass-1 suffix branch to disambiguate
-# same-resource same-method collisions.
-def param-suffix [path_params: list]: nothing -> string {
-  $path_params
-  | each {|p| $p.name | str kebab-case }
-  | reduce --fold [] {|tok, acc|
-      let prev_tail = (if ($acc | is-empty) { "" } else { $acc | last | split row '-' | last })
-      let tok_head = ($tok | split row '-' | first)
-      if $tok == $prev_tail {
-        $acc
-      } else if $tok_head == $prev_tail {
-        $acc | append ($tok | split row '-' | skip 1 | str join '-')
-      } else {
-        $acc | append $tok
-      }
-    }
-  | str join '-'
-}
-
-# Derive the command name mechanically as `<path-resource> <method-command>`.
-# No operationId and no verb vocabulary — name collisions are resolved by the
-# downstream `deduplicate-commands` pass.
-def derive-command-name [url_path: string, method: string, tags: list]: nothing -> string {
-  let resource = (path-resource $url_path $tags)
-  let command = (method-command $method)
-  $"($resource) ($command)"
-}
-
-# Strip chars that would break a `def "<name>"` and collapse whitespace runs.
-# Falls back to `fallback` when the result is empty. A correctness guard on
-# user `--name-fn` output — the mechanical default never needs it.
-def sanitize-command-name [name: string, fallback: string]: nothing -> string {
-  let cleaned = ($name
-    | str replace --all --regex '[\\$()*\[\]=\x27",.#!@%^&+~`]' ''
-    | str trim
-    | str replace --all --regex '\s+' ' ')
-  if ($cleaned | is-empty) { $fallback } else { $cleaned }
-}
-
-# Apply a user `--name-fn` closure to override the mechanical command name.
+# Apply a user `--name-fn` closure to override the derived command name.
 # The closure receives spec-derived context — `raw` (untouched operation
 # fields), `params` (resolved param names per location), and `derived` (the
-# generator's own answer) — and returns a replacement name, or null/"" to keep
-# the default. The result is sanitized to a valid `def` name; global uniqueness
-# is still guaranteed downstream by `deduplicate-commands`.
+# generator's own answer plus which rule produced it) — and returns a
+# replacement name, or null/"" to keep the default. The result is sanitized to
+# a valid `def` name; global uniqueness is still guaranteed downstream by
+# `deduplicate-commands`.
 def apply-name-fn [
   name_fn: closure
-  default_name: string
+  derived_name: record
   op: record
   method: string
   raw_path: string
@@ -629,74 +584,50 @@ def apply-name-fn [
     }
     derived: {
       path: $clean_path
-      resource: ($default_name | split row ' ' | first)
-      action: ($default_name | split row ' ' | skip 1 | str join ' ')
-      path_params: ($params.path_params | each {|p| $p.original_name? | default $p.name })
-      default_name: $default_name
+      default_name: $derived_name.name
+      source: $derived_name.source
     }
   }
   let custom = try {
     do $name_fn $ctx
   } catch {|e|
-    log warn $"name-fn threw for '($op.operationId? | default '<no opId>')': ($e.msg); using default '($default_name)'"
+    log warn $"name-fn threw for '($op.operationId? | default '<no opId>')': ($e.msg); using default '($derived_name.name)'"
     null
   }
-  let chosen = if (($custom | describe) == "string") and ($custom | is-not-empty) { $custom } else { $default_name }
-  sanitize-command-name $chosen $default_name
+  let chosen = if (($custom | describe) == "string") and ($custom | is-not-empty) { $custom } else { $derived_name.name }
+  let cleaned = (sanitize-command-name $chosen)
+  if ($cleaned | is-empty) { $derived_name.name } else { $cleaned }
 }
 
-# Deduplicate command names — the final pass of `command-list`. Resolves
-# collisions first by a path-param suffix (`-by-<param>`, see `param-suffix`),
-# then by a numeric suffix for any that still collide.
+# Guarantee every command name is unique and legal — the final pass of
+# `command-list`. Nushell rejects a repeated `def` outright
+# (`nu::parser::duplicate_command_def`), so this is a correctness requirement,
+# not cosmetics. It rarely fires: operationIds are unique per spec and the path
+# slug is unique per (method, path), so only two things reach it — distinct
+# operationIds that kebab to the same string, and whatever a `--name-fn`
+# returns. `taken` is seeded with UNUSABLE_NAMES so a closure returning `let`
+# can never produce an unparseable module.
 def deduplicate-commands []: list -> list {
-  let commands = $in
-  # pass 1: disambiguate collisions by path-param suffix. The colliding member
-  # with no path params (the collection endpoint) keeps the bare name; members
-  # carrying path params get `-by-<param>`.
-  let dup_names = $commands | group-by name | transpose name entries
-    | where { ($in.entries | length) > 1 } | get name
-
-  if ($dup_names | is-not-empty) {
-    log info $"($dup_names | length) duplicate command name\(s\) disambiguated with path-param suffix: ($dup_names | str join ', ')"
-  }
-
-  let pass1 = $commands | each {|cmd|
-    if ($cmd.name in $dup_names) and ($cmd.path_params | is-not-empty) {
-      let suffix = (param-suffix $cmd.path_params)
-      if ($suffix | is-empty) { $cmd } else {
-        $cmd | update name $"($cmd.name)-by-($suffix)"
-      }
-    } else {
-      $cmd
+  mut taken = ($UNUSABLE_NAMES | reduce --fold {} {|n, acc| $acc | upsert $n true })
+  mut out = []
+  mut renamed = []
+  for cmd in $in {
+    mut name = $cmd.name
+    mut n = 1
+    while (($taken | get -o $name) != null) {
+      $name = $"($cmd.name)-($n)"
+      $n = $n + 1
     }
-  }
-
-  # pass 2: numeric suffix for remaining dupes
-  let dup_names2 = $pass1 | group-by name | transpose name entries
-    | where { ($in.entries | length) > 1 } | get name
-
-  if ($dup_names2 | is-empty) {
-    return $pass1
-  }
-
-  log info $"($dup_names2 | length) command name\(s\) still collide after path-param disambiguation, adding numeric suffixes: ($dup_names2 | str join ', ')"
-
-  mut result = []
-  mut seen = {}
-  for cmd in $pass1 {
-    if ($cmd.name in $dup_names2) {
-      let count = ($seen | get -o $cmd.name | default 0)
-      $seen = ($seen | upsert $cmd.name ($count + 1))
-      if $count > 0 {
-        $result = ($result | append ($cmd | update name $"($cmd.name)-($count)"))
-      } else {
-        $result = ($result | append $cmd)
-      }
-    } else {
-      $result = ($result | append $cmd)
+    if $name != $cmd.name {
+      $renamed = ($renamed | append $cmd.name)
     }
+    $taken = ($taken | upsert $name true)
+    $out = ($out | append ($cmd | update name $name))
   }
-  $result
+  if ($renamed | is-not-empty) {
+    log info $"($renamed | uniq | length) command name\(s\) disambiguated with a numeric suffix: ($renamed | uniq | str join ', ')"
+  }
+  $out
 }
 
 # Build the command model list from a parsed+resolved REST spec.
@@ -765,11 +696,11 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
       })
       let body = (extract-body-info $op $schemas $h $spec_data)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
-      let default_name = (derive-command-name $clean_path $method ($op.tags? | default []))
+      let derived_name = (derive-command-name $op $method $clean_path)
       let cmd_name = if ($config.name_fn? == null) {
-        $default_name
+        $derived_name.name
       } else {
-        apply-name-fn $config.name_fn $default_name $op $method $path_entry.path $clean_path $params
+        apply-name-fn $config.name_fn $derived_name $op $method $path_entry.path $clean_path $params
       }
 
       # Build unified field_shapes: collapsed body shape + per-field shapes.

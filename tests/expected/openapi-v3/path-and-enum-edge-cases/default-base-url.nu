@@ -100,7 +100,7 @@ def literal-quoted-completer [] { ["Ashburn, VA" "Latency"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificates get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificates-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
 # operationId: certificates_get
-export def "certificates get" [
+export def "certificates-get" [
   thumbprint_algorithm: string
   thumbprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -160,7 +160,7 @@ export def "certificates get" [
 # GET /sites
 #
 # operationId: sites_list
-export def "sites get" [
+export def "sites-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "sites get" [
 # GET /sites/active
 #
 # operationId: sites_list_active
-export def "sites-active get" [
+export def "sites-list-active" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "sites-active get" [
 # GET /quoted-enum
 #
 # operationId: quoted_enum_get
-export def "quoted-enum get" [
+export def "quoted-enum-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -119,7 +119,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "default-auth get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-default-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # GET /default-auth
 #
 # operationId: getDefaultAuth
-export def "default-auth get" [
+export def "get-default-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "default-auth get" [
 # GET /basic
 #
 # operationId: getBasic
-export def "basic get" [
+export def "get-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "basic get" [
 # GET /jwt
 #
 # operationId: getJwt
-export def "jwt get" [
+export def "get-jwt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "jwt get" [
 # GET /static
 #
 # operationId: getStatic
-export def "static get" [
+export def "get-static" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "static get" [
 # GET /query-key
 #
 # operationId: getQueryKey
-export def "query-key get" [
+export def "get-query-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "query-key get" [
 # GET /cookie-key
 #
 # operationId: getCookieKey
-export def "cookie-key get" [
+export def "get-cookie-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "cookie-key get" [
 # GET /oauth
 #
 # operationId: getOauth
-export def "oauth get" [
+export def "get-oauth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "oauth get" [
 # GET /oidc
 #
 # operationId: getOidc
-export def "oidc get" [
+export def "get-oidc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "oidc get" [
 # GET /public
 #
 # operationId: getPublic
-export def "public get" [
+export def "get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "public get" [
 # GET /and-header
 #
 # operationId: getAndHeader
-export def "and-header get" [
+export def "get-and-header" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeya: string # Auth token for apiKeyA (X-Api-Key-A)
   --token-apikeyb: string # Auth token for apiKeyB (X-Api-Key-B)
@@ -502,7 +502,7 @@ export def "and-header get" [
 # GET /and-mixed
 #
 # operationId: getAndMixed
-export def "and-mixed get" [
+export def "get-and-mixed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikeya: string # Auth token for apiKeyA (X-Api-Key-A)
   --token-querykey: string # Auth token for queryKey (api_key)

@@ -15,16 +15,18 @@ const PETSTORE = "tests/fixtures/petstore-v3.yaml"
 
 @test
 def "tags single" [] {
-    let names = mod preview $PETSTORE --tags [pet] | get name
-    assert equal ($names | length) 8 "expected 8 pet-tagged commands"
-    assert ($names | all {|n| $n | str starts-with "pet"}) "all commands should start with 'pet'"
+    let result = mod preview $PETSTORE --tags [pet]
+    assert equal ($result | length) 8 "expected 8 pet-tagged commands"
+    # Names come from operationIds, so assert on what the filter actually
+    # selects on: every pet-tagged petstore op lives under /pet.
+    assert ($result | all {|r| $r.path_template | str starts-with "/pet"}) "all commands should be /pet operations"
 }
 
 @test
 def "tags multiple" [] {
-    let names = mod preview $PETSTORE --tags [store user] | get name
-    assert equal ($names | length) 11 "expected 11 store+user commands"
-    let has_pet = $names | any {|n| ($n | str starts-with "pet-") or ($n == "pet")}
+    let result = mod preview $PETSTORE --tags [store user]
+    assert equal ($result | length) 11 "expected 11 store+user commands"
+    let has_pet = $result | any {|r| $r.path_template | str starts-with "/pet"}
     assert (not $has_pet) "should not contain pet commands"
 }
 
@@ -38,16 +40,16 @@ def "tags empty match" [] {
 
 @test
 def "prefixes rest" [] {
-    let names = mod preview $PETSTORE --prefixes ["/pet"] | get name
-    assert equal ($names | length) 8 "expected 8 commands under /pet"
-    assert ($names | all {|n| $n | str starts-with "pet"}) "all commands should start with 'pet'"
+    let result = mod preview $PETSTORE --prefixes ["/pet"]
+    assert equal ($result | length) 8 "expected 8 commands under /pet"
+    assert ($result | all {|r| $r.path_template | str starts-with "/pet"}) "all commands should be /pet operations"
 }
 
 @test
 def "prefixes rest narrow" [] {
     let names = mod preview $PETSTORE --prefixes ["/store/order"] | get name
     assert equal ($names | length) 3 "expected 3 commands under /store/order"
-    let expected = ["store-order create", "store-order get", "store-order delete"]
+    let expected = ["place-order", "get-order-by-id", "delete-order"]
     assert equal $names $expected
 }
 
@@ -99,6 +101,5 @@ def "tags plus methods" [] {
 def "prefixes plus methods" [] {
     let result = mod preview $PETSTORE --prefixes ["/user"] --methods [get put]
     assert ($result | all {|r| $r.method in [get put]}) "all should be GET or PUT"
-    let names = $result | get name
-    assert ($names | all {|n| $n | str starts-with "user"}) "all should be user commands"
+    assert ($result | all {|r| $r.path_template | str starts-with "/user"}) "all should be user operations"
 }

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["x-app-key" "x-app-token" "none"] }
 # GET /widgets
 #
 # operationId: listWidgets
-export def "widgets get" [
+export def "list-widgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-App-Key)
   --token-apptoken: string # Auth token for appToken (X-App-Token)
@@ -143,7 +143,7 @@ export def "widgets get" [
 # GET /public
 #
 # operationId: getPublic
-export def "public get" [
+export def "get-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

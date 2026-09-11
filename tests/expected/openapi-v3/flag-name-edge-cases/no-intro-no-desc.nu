@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /widgets
 #
 # operationId: widgets_list
-export def "widgets get" [
+export def "widgets-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

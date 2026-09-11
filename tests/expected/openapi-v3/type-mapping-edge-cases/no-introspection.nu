@@ -106,7 +106,7 @@ def kind-completer [] { ["large" "medium" "small"] }
 # GET /token
 #
 # operationId: getToken
-export def "token get" [
+export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "token get" [
 #
 # operationId: createTags
 # --addresses item shape: {street?: string, city?: string, zip?: string}
-export def "tags create" [
+export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "tags create" [
 #
 # operationId: createWidget
 # --address shape: {street?: string, city?: string, zip?: string}
-export def "widgets create" [
+export def "create-widget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

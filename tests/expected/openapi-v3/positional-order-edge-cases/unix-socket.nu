@@ -100,7 +100,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "items-sub get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-item-sub" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # GET /items/{petId}/sub/{accountId}/{zoneId}
 #
 # operationId: getItemSub
-export def "items-sub get" [
+export def "get-item-sub" [
   pet_id: string
   account_id: string
   zone_id: string
@@ -165,7 +165,7 @@ export def "items-sub get" [
 # GET /mixed/{b}/{a}
 #
 # operationId: getMixed
-export def "mixed get" [
+export def "get-mixed" [
   b: string
   a: string
   --base-url(-b): string@base-url-completer # API base URL

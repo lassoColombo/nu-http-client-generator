@@ -46,7 +46,7 @@ def cleanup [] {
 
 @test
 def "and-form sends both header credentials" [] {
-    let r = (run-cmd $in.client 'and-header get --token-apikeya K1 --token-apikeyb C1 --dry-run')
+    let r = (run-cmd $in.client 'get-and-header --token-apikeya K1 --token-apikeyb C1 --dry-run')
     assert equal ($r.headers | get "X-Api-Key-A") "K1" "first scheme header must be sent"
     assert equal ($r.headers | get "X-Api-Key-B") "C1" "second scheme header must be sent"
     # The bug was that only one header (or a bearer fallback) was ever sent.
@@ -58,7 +58,7 @@ def "and-form sends both header credentials" [] {
 
 @test
 def "and-form merges header and query schemes" [] {
-    let r = (run-cmd $in.client 'and-mixed get --token-apikeya K1 --token-querykey Q1 --dry-run')
+    let r = (run-cmd $in.client 'get-and-mixed --token-apikeya K1 --token-querykey Q1 --dry-run')
     assert equal ($r.headers | get "X-Api-Key-A") "K1" "header scheme must be sent"
     assert ($r.url | str contains "api_key=Q1") "query scheme must be appended to the URL"
     assert equal $r.auth.location "header+query" "merged location reflects both schemes"
@@ -68,7 +68,7 @@ def "and-form merges header and query schemes" [] {
 
 @test
 def "and-form with partial credentials sends only what is provided" [] {
-    let r = (run-cmd $in.client 'and-header get --token-apikeya K1 --dry-run')
+    let r = (run-cmd $in.client 'get-and-header --token-apikeya K1 --dry-run')
     assert equal ($r.headers | get "X-Api-Key-A") "K1" "provided scheme is sent"
     assert ("X-Api-Key-B" not-in ($r.headers | columns)) "absent scheme contributes no header"
 }
@@ -77,7 +77,7 @@ def "and-form with partial credentials sends only what is provided" [] {
 
 @test
 def "single-scheme op still uses the shared token flag" [] {
-    let r = (run-cmd $in.client 'basic get --token TOK --dry-run')
+    let r = (run-cmd $in.client 'get-basic --token TOK --dry-run')
     assert equal ($r.headers | get "Authorization") "Basic TOK" "single-scheme path is unaffected"
 }
 
@@ -89,10 +89,10 @@ def "single-scheme op still uses the shared token flag" [] {
 @test
 def "and-form signature exposes per-scheme token flags and drops auth-scheme" [] {
     let content = (open $in.client --raw)
-    # Isolate the `and-header get` signature block (def line .. closing `]`).
+    # Isolate the `get-and-header` signature block (def line .. closing `]`).
     let sig = ($content
         | lines
-        | skip until {|l| $l | str contains 'export def "and-header get"' }
+        | skip until {|l| $l | str contains 'export def "get-and-header"' }
         | take until {|l| $l =~ '^\]' })
     assert ($sig | any {|l| $l | str contains "--token-apikeya" }) "must expose --token-apikeya"
     assert ($sig | any {|l| $l | str contains "--token-apikeyb" }) "must expose --token-apikeyb"
@@ -104,14 +104,14 @@ def "and-form signature exposes per-scheme token flags and drops auth-scheme" []
 
 @test
 def "global and-form is inherited by non-overriding ops" [] {
-    let r = (run-cmd $in.global_client 'widgets get --token-appkey AK --token-apptoken AT --dry-run')
+    let r = (run-cmd $in.global_client 'list-widgets --token-appkey AK --token-apptoken AT --dry-run')
     assert equal ($r.headers | get "X-App-Key") "AK" "inherited first scheme header must be sent"
     assert equal ($r.headers | get "X-App-Token") "AT" "inherited second scheme header must be sent"
 }
 
 @test
 def "global and-form public override drops all auth" [] {
-    let r = (run-cmd $in.global_client 'public get --dry-run')
+    let r = (run-cmd $in.global_client 'get-public --dry-run')
     assert equal $r.auth.location "none" "security: [] override must yield no auth"
     assert (("X-App-Key" not-in ($r.headers | columns)) and ("X-App-Token" not-in ($r.headers | columns))) "public op must send no auth headers"
 }

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # GET /token
 #
 # operationId: getToken
-export def "token get" [
+export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "token get" [
 # GET /count
 #
 # operationId: getCount
-export def "count get" [
+export def "get-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "count get" [
 # GET /healthy
 #
 # operationId: getHealthy
-export def "healthy get" [
+export def "get-healthy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "healthy get" [
 # GET /profile
 #
 # operationId: getProfile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "profile get" [
 # GET /ping
 #
 # operationId: getPing
-export def "ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "ping get" [
 # GET /etag
 #
 # operationId: getEtag
-export def "etag get" [
+export def "get-etag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
