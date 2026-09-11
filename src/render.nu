@@ -207,6 +207,58 @@ def decorate-param-group [params: list, prefix: string, seen: list<string>]: not
   {items: $items, seen: $acc}
 }
 
+# Decide the flag/positional naming for body fields, threading a seen-names set
+# so body flags avoid colliding with each other or with earlier query/header/
+# cookie flags. Returns {items, seen} where each item is the original field
+# merged with:
+#   is_positional : rendered as a positional arg (required, non-colliding,
+#                   non-bool, non-nullable) rather than a `--flag`
+#   flag_name     : the flag name when a flag; the positional var name otherwise
+#   var_name      : the Nushell variable to reference in the body (flag_name
+#                   with '-' → '_')
+#   collision     : "" | "cross-group" | "reserved" — drives the "(body field)"
+#                   note and the `-body` / `body-` prefix choice
+#
+# This is the SINGLE source of truth for body-field naming, consumed by both
+# `build-signature` (which declares the flags) and `build-body-code` (which
+# references the variables). The two MUST agree on every name or the emitted
+# signature and body diverge — hence one function rather than two mirrored copies.
+def decorate-body-fields [body_fields: list, path_param_names: list<string>, seen: list<string>]: nothing -> record {
+  mut items = []
+  mut body_seen = $seen
+  for f in $body_fields {
+    let sanitized_name = (to-var-name $f.name)
+    let flag_var = (to-flag-var $f.name)
+    let proposed_flag = (to-flag-name $f.name)
+    # Pre-existing reserved-word collision (path positional / language keyword):
+    # keep the `body-` PREFIX disambiguation that's been in place since the
+    # generator's earliest cycles — emitting clients already use those names.
+    let reserved_collision = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
+    # Issue 27.A: a body field whose flag-name matches one already used by
+    # query/header/cookie is a NEW collision class — suffix with `-body`.
+    let cross_group_collision = (not $reserved_collision) and ($proposed_flag in $body_seen)
+    let collides = $reserved_collision or $cross_group_collision
+    # Only `!= "bool"` matters here; nu-type-for and openapi-to-nu-type agree on
+    # bool-ness, so the cheaper mapping is enough for the positional decision.
+    let nu_type = (openapi-to-nu-type $f.type)
+    let is_nullable = ($f.nullable? | default false)
+    let is_positional = $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable)
+    let decided = if $is_positional {
+      {flag_name: $sanitized_name, collision: ""}
+    } else if $cross_group_collision {
+      {flag_name: $"($proposed_flag)-body", collision: "cross-group"}
+    } else if $reserved_collision {
+      {flag_name: $"body-($proposed_flag)", collision: "reserved"}
+    } else {
+      {flag_name: $proposed_flag, collision: ""}
+    }
+    let var_name = ($decided.flag_name | str replace --all '-' '_')
+    $items = ($items | append ($f | merge {is_positional: $is_positional, flag_name: $decided.flag_name, var_name: $var_name, collision: $decided.collision}))
+    $body_seen = ($body_seen | append $decided.flag_name)
+  }
+  {items: $items, seen: $body_seen}
+}
+
 # Names that cannot appear as a positional parameter on a generated `def`.
 # Narrower than RESERVED_VARS — body-code `let` bindings can safely shadow
 # positionals, so we only block actual language keywords, built-in variables,
@@ -454,50 +506,24 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
       $parts = ($parts | append $"  --body: record($body_desc)")
     } else {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
-      mut body_seen = $ck_decorated.seen
-      for f in $cmd.body_fields {
+      let decorated = (decorate-body-fields $cmd.body_fields $path_param_names $ck_decorated.seen)
+      for f in $decorated.items {
         let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
         let shape_hint = (lookup-shape $f.name $shapes)
         let desc_text = if ($f.description | is-not-empty) { $f.description | lines | str join " " } else { "" }
         let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
-        let sanitized_name = (to-var-name $f.name)
-        let flag_var = (to-flag-var $f.name)
-        let proposed_flag = (to-flag-name $f.name)
-        # Pre-existing reserved-word collision (path positional / language
-        # keyword): keep the `body-` PREFIX disambiguation that's been in
-        # place since the generator's earliest cycles — emitting clients
-        # already use those names, so changing the disambiguation would
-        # break callers.
-        let reserved_collision = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
-        # Issue 27.A: a body field whose flag-name matches one already
-        # used by query/header/cookie is a NEW collision class. Suffix
-        # with `-body` (so `--max-items` query stays, body becomes
-        # `--max-items-body`). This silently-data-loss bug previously
-        # affected 216 client files / 1778 operations.
-        let cross_group_collision = (not $reserved_collision) and ($proposed_flag in $body_seen)
-        let collides = $reserved_collision or $cross_group_collision
         let cname = if ($f.enum | is-not-empty) { resolve-completer $f $mapping } else { null }
-        let is_nullable = ($f.nullable? | default false)
-        if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
+        if $f.is_positional {
           let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
-          $parts = ($parts | append (render-param-sig $sanitized_name $nu_type $desc $cname --positional))
-          $body_seen = ($body_seen | append $sanitized_name)
+          $parts = ($parts | append (render-param-sig $f.flag_name $nu_type $desc $cname --positional))
           # @deprecated --flag doesn't work on positional params — skip
         } else {
-          let flag_name = if $cross_group_collision {
-            $"($proposed_flag)-body"
-          } else if $reserved_collision {
-            $"body-($proposed_flag)"
-          } else {
-            $proposed_flag
-          }
-          let body_note = if $cross_group_collision { " (body field)" } else { "" }
+          let body_note = if $f.collision == "cross-group" { " (body field)" } else { "" }
           let desc_with_note = $"($desc_with_shape)($body_note)"
           let desc = if $config.no_descriptions { "" } else if ($desc_with_note | is-not-empty) { $" # ($desc_with_note)" } else { "" }
-          $parts = ($parts | append (render-param-sig $flag_name $nu_type $desc $cname))
-          $body_seen = ($body_seen | append $flag_name)
+          $parts = ($parts | append (render-param-sig $f.flag_name $nu_type $desc $cname))
           if ($f.deprecated? | default false) {
-            $dep_flags = ($dep_flags | append {flag_name: $flag_name, reason: ($f.description? | default "")})
+            $dep_flags = ($dep_flags | append {flag_name: $f.flag_name, reason: ($f.description? | default "")})
           }
         }
       }
@@ -869,44 +895,21 @@ export def build-body-code [cmd: record, config: record] {
     let has_per_field = ($cmd.body_fields | is-not-empty) and (not $use_collapsed)
     if $has_per_field {
       let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
-      # Mirror the body-field naming logic from build-signature so the
-      # variable references here line up with the flag declarations.
-      # Issue 27.A.
-      mut body_seen = $pre_body_seen
-      mut body_parts_list = []
-      for item in ($cmd.body_fields | enumerate) {
+      # Same naming decision as build-signature — `decorate-body-fields` is the
+      # shared source of truth, so the variable references emitted here line up
+      # with the flag declarations there. Issue 27.A.
+      let decorated = (decorate-body-fields $cmd.body_fields $path_param_names $pre_body_seen)
+      let body_parts_list = ($decorated.items | enumerate | each {|item|
         let f = $item.item
         let idx = $item.index
-        let sanitized_name = (to-var-name $f.name)
-        let flag_base = (to-flag-var $f.name)
-        let proposed_flag = (to-flag-name $f.name)
-        let reserved_collision = ($sanitized_name in $path_param_names) or ($sanitized_name in $RESERVED_VARS) or ($flag_base in $RESERVED_VARS) or ($sanitized_name | is-empty)
-        let cross_group_collision = (not $reserved_collision) and ($proposed_flag in $body_seen)
-        let collides = $reserved_collision or $cross_group_collision
-        let nu_type = (openapi-to-nu-type $f.type)
-        let is_nullable = ($f.nullable? | default false)
-        let var_name = if $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable) {
-          $body_seen = ($body_seen | append $sanitized_name)
-          $'$($sanitized_name)'
-        } else if $cross_group_collision {
-          let flag_var = $"($flag_base)_body"
-          $body_seen = ($body_seen | append $"($proposed_flag)-body")
-          $'$($flag_var)'
-        } else if $reserved_collision {
-          let flag_var = $'body_($flag_base)'
-          $body_seen = ($body_seen | append $"body-($proposed_flag)")
-          $'$($flag_var)'
-        } else {
-          $body_seen = ($body_seen | append $proposed_flag)
-          $'$($flag_base)'
-        }
+        let var_ref = $"$($f.var_name)"
         # Use the original spec field name as the body key, but fall back to a
         # synthetic name when it is empty (e.g. the field name was ":" and the
         # sanitizer reduced it to ""). Always quote the key so names with
         # spaces, slashes, or colons are valid Nushell record syntax.
         let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
-        $body_parts_list = ($body_parts_list | append $'($key | to nuon): ($var_name)')
-      }
+        $'($key | to nuon): ($var_ref)'
+      })
       let body_parts = ($body_parts_list | str join ", ")
       $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
     } else {
