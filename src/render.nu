@@ -193,11 +193,19 @@ def disambiguate-flag-name [proposed: string, is_array: bool, seen: list<string>
 # {flag_name, flag_var, name_suffix} — `name_suffix` is the disambiguating
 # tail (empty when no collision) so callers can append origin notes to the
 # description text. Issue 27.A.
-def decorate-param-group [params: list, prefix: string, seen: list<string>]: nothing -> record {
+#
+# `path_param_names` are the path positionals' variable names. OpenAPI keys a
+# parameter by name AND location, so a path `{id}` next to a query `id` is
+# legal (DRF emits it for every detail route with an `id` filter), but both
+# would bind `$id`: the flag, declared later, wins and the path value is lost.
+# The positional keeps the name and the flag takes the group prefix, the same
+# way reserved names do (`decorate-body-fields` gives body fields `body-`).
+def decorate-param-group [params: list, prefix: string, path_param_names: list<string>, seen: list<string>]: nothing -> record {
   mut items = []
   mut acc = $seen
   for p in $params {
-    let proposed = (effective-flag-name $p.name $prefix)
+    let base = (effective-flag-name $p.name $prefix)
+    let proposed = if (($base | str replace --all '-' '_') in $path_param_names) { $"($prefix)-($base)" } else { $base }
     let is_array = (($p.items_type? | default null) != null) or (($p.name | str ends-with "[]"))
     let res = (disambiguate-flag-name $proposed $is_array $acc)
     let flag_var = ($res.flag_name | str replace --all '-' '_')
@@ -481,19 +489,20 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
   # collisions (e.g. body field `NextToken` vs query param `NextToken`,
   # AWS Smithy pattern) get suffixed instead of silently dropping values.
   # Issue 27.A.
-  let qp_decorated = (decorate-param-group ($cmd.query_params | each {|q| $q | merge {shape_key: ($q.name | str kebab-case), completer_key: $q} }) "qp" [])
+  let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
+  let qp_decorated = (decorate-param-group ($cmd.query_params | each {|q| $q | merge {shape_key: ($q.name | str kebab-case), completer_key: $q} }) "qp" $path_param_names [])
   let qp_result = (render-param-group $qp_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $qp_result.parts)
   $dep_flags = ($dep_flags | append $qp_result.dep_flags)
 
   # Header params
-  let hdr_decorated = (decorate-param-group ($cmd.header_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "hdr") }) "hdr" $qp_decorated.seen)
+  let hdr_decorated = (decorate-param-group ($cmd.header_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "hdr") }) "hdr" $path_param_names $qp_decorated.seen)
   let hdr_result = (render-param-group $hdr_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $hdr_result.parts)
   $dep_flags = ($dep_flags | append $hdr_result.dep_flags)
 
   # Cookie params
-  let ck_decorated = (decorate-param-group ($cmd.cookie_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "ck") }) "ck" $hdr_decorated.seen)
+  let ck_decorated = (decorate-param-group ($cmd.cookie_params | each {|q| $q | merge {completer_key: $q} | insert shape_key (effective-flag-name $q.name "ck") }) "ck" $path_param_names $hdr_decorated.seen)
   let ck_result = (render-param-group $ck_decorated.items $mapping $config $shapes)
   $parts = ($parts | append $ck_result.parts)
   $dep_flags = ($dep_flags | append $ck_result.dep_flags)
@@ -505,7 +514,6 @@ export def build-signature [cmd: record, completers: record, mapping: record, co
       let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
       $parts = ($parts | append $"  --body: record($body_desc)")
     } else {
-      let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       let decorated = (decorate-body-fields $cmd.body_fields $path_param_names $ck_decorated.seen)
       for f in $decorated.items {
         let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
@@ -866,9 +874,10 @@ export def build-body-code [cmd: record, config: record] {
   # collision-aware flag_name/flag_var so the variable references emitted
   # here match the signature flags declared in build-signature. Walked in
   # the same priority order (query → header → cookie → body).
-  let qp_decorated = (decorate-param-group $cmd.query_params "qp" [])
-  let hdr_decorated = (decorate-param-group $cmd.header_params "hdr" $qp_decorated.seen)
-  let ck_decorated = (decorate-param-group $cmd.cookie_params "ck" $hdr_decorated.seen)
+  let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
+  let qp_decorated = (decorate-param-group $cmd.query_params "qp" $path_param_names [])
+  let hdr_decorated = (decorate-param-group $cmd.header_params "hdr" $path_param_names $qp_decorated.seen)
+  let ck_decorated = (decorate-param-group $cmd.cookie_params "ck" $path_param_names $hdr_decorated.seen)
   let pre_body_seen = $ck_decorated.seen
 
   if ($qp_decorated.items | is-not-empty) {
@@ -894,7 +903,6 @@ export def build-body-code [cmd: record, config: record] {
     let use_collapsed = $cmd.body_collapsed
     let has_per_field = ($cmd.body_fields | is-not-empty) and (not $use_collapsed)
     if $has_per_field {
-      let path_param_names = ($cmd.path_params | each {|p| (effective-positional-var $p.name) })
       # Same naming decision as build-signature — `decorate-body-fields` is the
       # shared source of truth, so the variable references emitted here line up
       # with the flag declarations there. Issue 27.A.

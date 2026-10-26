@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: Path Shadowing Edge Cases
+  version: 1.0.0
+servers:
+  - url: https://example.com/api
+paths:
+  # The DRF shape that broke the Atlantis client: a detail route's `{id}` plus
+  # a filterset that also exposes `id`. OpenAPI keys a parameter by name AND
+  # location, so this is legal — but both bind `$id` in the generated command.
+  /groups/{id}/members:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: listGroupMembers
+      tags: [groups]
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  # The same clash from every non-path location at once.
+  /tenants/{tenant}/things:
+    get:
+      operationId: listTenantThings
+      tags: [tenants]
+      parameters:
+        - name: tenant
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tenant
+          in: query
+          schema:
+            type: string
+        - name: tenant
+          in: header
+          schema:
+            type: string
+        - name: tenant
+          in: cookie
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  # Names that only clash once sanitized: `{userId}` and `user_id` both become
+  # `$user_id`.
+  /users/{userId}/sessions:
+    get:
+      operationId: listUserSessions
+      tags: [users]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  # A body field named like the path param already takes the `body-` prefix;
+  # the query param must not steal that slot or bind `$id` either.
+  /groups/{id}/notes:
+    post:
+      operationId: createGroupNote
+      tags: [groups]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: query
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                id:
+                  type: integer
+                text:
+                  type: string
+      responses:
+        '200':
+          description: ok
