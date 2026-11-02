@@ -178,6 +178,7 @@ export def "both-required" [
   let full_url = (build-url $base "/both-required" $auth.query)
   let req_body = {"user_id": $user_id, "userId": $user_id_body} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "userId") == null) { error make --unspanned { msg: "required body field 'userId' missing: pass --user-id-body or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

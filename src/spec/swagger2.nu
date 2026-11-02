@@ -84,12 +84,22 @@ def get-body-info-impl [op: record, doc: record] {
   let params = ($op.parameters? | default []) | each {|p| spec resolve-ref $p $doc }
   let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
   if ($form_params | is-not-empty) {
+    # multipart when a param is a file OR the op (then the doc) `consumes`
+    # multipart — visagecloud uploads a picture as a plain `string` formData
+    # param under `consumes: [multipart/form-data]`.
+    let consumes = ($op.consumes? | default ($doc.consumes? | default []))
     let has_file = ($form_params | any {|p| ($p.type? | default "") == "file" })
-    let ct = if $has_file { $spec.CT_MULTIPART } else { $spec.CT_FORM }
+    let ct = if $has_file or ($spec.CT_MULTIPART in $consumes) { $spec.CT_MULTIPART } else { $spec.CT_FORM }
     mut props = {}
     mut required = []
     for fp in $form_params {
-      $props = ($props | insert $fp.name {type: ($fp.type? | default "string"), description: ($fp.description? | default ""), enum: ($fp.enum? | default [])})
+      # Synthesized property schema. `items` keeps array params typed
+      # (`list<string>`, not `list<any>`); `collectionFormat` rides along as
+      # a vendor-style key so model can serialize csv/ssv/… form arrays.
+      let prop = {type: ($fp.type? | default "string"), description: ($fp.description? | default ""), enum: ($fp.enum? | default [])}
+      let prop = if ($fp.items? | is-not-empty) { $prop | insert items $fp.items } else { $prop }
+      let prop = if ($fp.type? | default "") == "array" { $prop | insert collectionFormat ($fp.collectionFormat? | default "csv") } else { $prop }
+      $props = ($props | insert $fp.name $prop)
       if ($fp.required? | default false) {
         $required = ($required | append $fp.name)
       }
@@ -136,9 +146,10 @@ def get-response-content-types-impl [op: record, doc: record] {
 def get-response-type-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   mut found_schema: any = null
-  for code in $spec.RESPONSE_CODE_PRIORITY {
+  for code in (spec response-type-candidates $responses) {
     if ($found_schema == null) {
-      let resp = ($responses | get -o $code)
+      # `#/responses/…` refs are resolved before reading `.schema`
+      let resp = (spec resolve-ref ($responses | get -o $code) $doc)
       if ($resp | is-not-empty) {
         let s = ($resp.schema? | default null)
         if ($s | is-not-empty) { $found_schema = $s }

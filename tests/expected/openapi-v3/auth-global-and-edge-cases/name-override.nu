@@ -1,6 +1,8 @@
 # Auto-generated client for Auth Global And v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.TEST_CLIENT_TOKEN
+# Auth (appKey): --token-appkey flag or $env.TEST_CLIENT_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.TEST_CLIENT_APPTOKEN_TOKEN
 
 const BASE_URL = "https://api.example.com"
 
@@ -108,7 +110,7 @@ def auth-scheme-completer [] { ["x-app-key" "x-app-token" "none"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-appkey" "token-apptoken"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-widgets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)

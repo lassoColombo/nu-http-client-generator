@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Path Query Key Edge Cases
+  # already carries the `v`: the header must not render `vv4`
+  version: v4
+  description: >-
+    Path keys that embed a query string (`/request?view=collection` next to
+    `/request`, the openSUSE OBS shape). The query part is not path text: it
+    becomes a constant query fragment appended at request time so caller
+    params join it with `&` instead of a second `?`; the slug for an op
+    without operationId takes the query words as segments.
+servers:
+  - url: https://api.example.com
+paths:
+  /request:
+    get:
+      operationId: listRequests
+      responses:
+        '200': {description: ok}
+  # Same path with a fixed query, no operationId -> slug get-request-view-collection
+  /request?view=collection:
+    get:
+      parameters:
+        - name: states
+          in: query
+          style: form
+          explode: false
+          schema: {type: array, items: {type: string}}
+        - name: limit
+          in: query
+          schema: {type: integer}
+      responses:
+        '200': {description: ok}
+  # Two fixed pairs + a path param + a body
+  /request/{id}?cmd=diff&view=full:
+    post:
+      operationId: requestDiff
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: {type: string}
+      responses:
+        '200': {description: ok}

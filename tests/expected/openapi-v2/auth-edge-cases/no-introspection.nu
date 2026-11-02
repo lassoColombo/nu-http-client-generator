@@ -1,6 +1,8 @@
 # Auto-generated client for Auth Edge Cases v2 v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.AUTH_EDGE_CASES_V2_TOKEN
+# Auth (apiKeyHeader): --token-apikeyheader flag or $env.AUTH_EDGE_CASES_V2_APIKEYHEADER_TOKEN
+# Auth (clientIdHeader): --token-clientidheader flag or $env.AUTH_EDGE_CASES_V2_CLIENTIDHEADER_TOKEN
 
 const BASE_URL = "https://api.example.com/v1"
 

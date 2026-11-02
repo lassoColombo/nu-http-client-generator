@@ -139,7 +139,7 @@ export def "token-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --content-type: string # Equal to application/x-www-form-urlencoded
+  --content-type: string # Equal to application/x-www-form-urlencoded (required)
   --hdr-accept: string # Response media type override
   --grant-type: string
   --username: string

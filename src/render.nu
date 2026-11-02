@@ -339,7 +339,7 @@ export def collect-completers [commands: list] {
     # A collapsed body (`--body: record`) declares no per-field flags, so its
     # fields' enums would only produce completers nothing references.
     let body_source = if ($cmd.body_collapsed? | default false) { [] } else { $cmd.body_fields }
-    let enum_sources = ($cmd.query_params | append $body_source
+    let enum_sources = ($cmd.path_params | append $cmd.query_params | append $body_source
       | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
     $enum_sources | reduce -f $state {|q, st|
       if ($q.enum | is-empty) { return $st }
@@ -443,7 +443,9 @@ export def build-signature [cmd: record, mapping: record, config: record] {
   let shapes = if $config.no_descriptions { [] } else { $cmd.field_shapes? | default [] }
 
   for p in $cmd.path_params {
-    $parts = ($parts | append $"  ($p.var_name): (openapi-to-nu-type $p.type)")
+    let nu_type = (nu-type-for $p.type ($p.items_type? | default null))
+    let cname = if ($p.enum? | default [] | is-not-empty) { resolve-completer $p $mapping } else { null }
+    $parts = ($parts | append (render-param-sig $p.var_name $nu_type "" $cname --positional))
   }
 
   # AND-form security (>1 scheme in one requirement object) gets one
@@ -805,6 +807,27 @@ export def build-body-code [cmd: record, config: record] {
     $lines = ($lines | append ($"  if \($($p.var_name) | is-empty\) { error make --unspanned { msg: \"path parameter '($p.name)' must be non-empty\" } }"))
   }
 
+  # Required query/header/cookie params: apply the spec default (or the
+  # single-member enum) when the flag was left out, then refuse to build a
+  # request the spec says is invalid. Without this an AWS JSON-RPC call went
+  # out with no `X-Amz-Target` and VTEX calls with no `accountName`.
+  for group in [[query $cmd.query_params] [header $cmd.header_params] [cookie $cmd.cookie_params]] {
+    let loc = ($group | first)
+    for q in ($group | last | where {|q| $q.required? | default false }) {
+      let rd = ($q.required_default? | default null)
+      if ($rd != null) {
+        $lines = ($lines | append $"  let ($q.flag_var) = \($($q.flag_var) | default ($rd | to nuon)\)")
+      }
+      # `Content-Type` / `Accept` header params always have an effective value
+      # (the body's content type, the response media type), so they are never
+      # "missing" — only their explicit default is applied above.
+      let always_set = ($loc == "header") and (($q.name | str lowercase) in ["content-type" "accept"])
+      if ($rd == null) and (not $always_set) {
+        $lines = ($lines | append $"  if \($($q.flag_var) == null\) { error make --unspanned { msg: \"required ($loc) parameter '($q.name)' missing: pass --($q.flag_name)\" } }")
+      }
+    }
+  }
+
   let path_expr = if ($cmd.path_params | is-not-empty) {
     # Emit a `format pattern` call so the path text is a plain string literal —
     # parens, quotes, backslashes pass through untouched (only `{` and `}` are
@@ -828,15 +851,18 @@ export def build-body-code [cmd: record, config: record] {
     $cmd.path_template | to nuon
   }
 
+  # A fixed query from the path key (`/request?view=collection`) is a constant
+  # fragment ahead of the caller's params; build-url owns the `?`/`&` joins.
+  let fixed_q = if (($cmd.fixed_query? | default "") | is-empty) { "" } else { $" ($cmd.fixed_query | to nuon)" }
   if ($cmd.query_params | is-not-empty) {
     let calls = $cmd.query_params | each {|q|
       let var_name = $"$($q.flag_var)"
       $"\(serialize-qp \"($q.name)\" ($var_name) \"($q.collection_style)\"\)"
     } | str join " "
     $lines = ($lines | append ($"  let qp = [($calls)] | flatten | str join \"&\""))
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr) $qp $auth.query\)"))
+    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)($fixed_q) $qp $auth.query\)"))
   } else {
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr) $auth.query\)"))
+    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)($fixed_q) $auth.query\)"))
   }
 
   # Build the initial $req_body before the input-merge line. Two paths:
@@ -859,7 +885,15 @@ export def build-body-code [cmd: record, config: record] {
         # sanitizer reduced it to ""). Always quote the key so names with
         # spaces, slashes, or colons are valid Nushell record syntax.
         let key = if ($f.name | is-empty) { $"field-($idx + 1)" } else { $f.name }
-        $'($key | to nuon): ($var_ref)'
+        # Swagger 2 formData arrays with a csv/ssv/tsv/pipes collectionFormat
+        # are joined into one value; `url build-query` would otherwise repeat
+        # the key (`multi`) and the multipart envelope would JSON-stringify
+        # the list. Only form bodies (urlencoded or multipart) carry a style.
+        let sep = match ($f.collection_style? | default null) { "csv" => ",", "ssv" => " ", "tsv" => "\t", "pipes" => "|", _ => null }
+        let value_expr = if ($sep != null) and ($cmd.content_type in ["application/x-www-form-urlencoded" "multipart/form-data"]) {
+          $"\(if \(($var_ref) | describe | str starts-with \"list\"\) { ($var_ref) | each { into string } | str join ($sep | to nuon) } else { ($var_ref) }\)"
+        } else { $var_ref }
+        $'($key | to nuon): ($value_expr)'
       })
       let body_parts = ($body_parts_list | str join ", ")
       $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
@@ -885,6 +919,15 @@ export def build-body-code [cmd: record, config: record] {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }')
     } else {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
+    }
+    # A required body field that could not be a positional (it collides with a
+    # reserved name, or is a bool) is still required: refuse an empty value
+    # once flags and pipeline input are merged. Nullable fields are exempt —
+    # `null` is a legal value for them and `compact` would drop it anyway.
+    if $has_per_field {
+      for f in ($cmd.body_fields | where {|f| ($f.required? | default false) and (not $f.is_positional) and (not ($f.nullable? | default false)) }) {
+        $lines = ($lines | append $"  if \(\($req_body | get -o ($f.name | to nuon)\) == null\) { error make --unspanned { msg: \"required body field '($f.name)' missing: pass --($f.flag_name) or pipe a record\" } }")
+      }
     }
   }
 
@@ -936,8 +979,12 @@ export def build-body-code [cmd: record, config: record] {
     # the empty-schema case where $req_body comes from `--body: record` but
     # the user might pass nothing). Coerce to {} so the helper's `transpose`
     # works; the empty body yields a multipart envelope with just the trailer.
-    $lines = ($lines | append '  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }')
-    $lines = ($lines | append ($"  let mp = \(build-multipart-body $req_body [($file_list_lit)] $dry_run\)"))
+    # A record gets the envelope. Anything else (a multipart op whose schema is
+    # a bare `type: string` — spoonacular's recipe card, libretranslate's file
+    # token — binds `--body: string`) is sent verbatim rather than silently
+    # replaced by an empty envelope.
+    $lines = ($lines | append '  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }')
+    $lines = ($lines | append ($"  let mp = if \($req_body | describe | str starts-with \"record\"\) { build-multipart-body $req_body [($file_list_lit)] $dry_run } else { {body: $req_body, content_type: \"multipart/form-data\"} }"))
   }
 
   # Detect a user-facing `--content-type` flag. Some Swagger-2 specs declare
@@ -1090,13 +1137,24 @@ def render-module-header [
     [$"def unix-socket-completer [] { [($vals)] }"]
   } else { [] }
 
+  # Auth header lines: the shared `--token` only when some command has it;
+  # AND-form ops (one `--token-<scheme>` per required scheme) list theirs.
+  let and_schemes = ($commands | each {|c| $c.auth_required? | default [] } | flatten | uniq-by flag_slug)
+  let has_single_auth = ($commands | any {|c| (($c.auth_required? | default []) | length) <= 1 })
+  let auth_lines = (
+    (if $has_single_auth { [$'# Auth: --token flag or $env.($token_env_var)'] } else { [] })
+    | append ($and_schemes | each {|s| $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
+  )
+  let and_token_flags = ($and_schemes | each {|s| $'"token-($s.flag_slug)"' } | str join ' ')
+  let and_token_flags = if ($and_token_flags | is-empty) { "" } else { $" ($and_token_flags)" }
+
   # Only generate introspection command when not disabled
   let introspection_code = if not $config.no_introspection {
     let first_cmd_name = ($commands | first | get name)
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
-      (if $unix_socket_enabled { '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]' } else { '  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]' })
+      (if $unix_socket_enabled { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"($and_token_flags)]' } else { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"($and_token_flags)]' })
       $"  let mod_name = \(scope modules | where { $in.commands | any { $in.name == \"($first_cmd_name)\" } } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)'
@@ -1123,9 +1181,9 @@ def render-module-header [
   }
 
   [
-    $'# Auto-generated client for ($title) v($version_str)'
+    $'# Auto-generated client for ($title) (if ($version_str =~ "^[vV]") { "" } else { "v" })($version_str)'
     $'# Source: ($spec_file)'
-    $'# Auth: --token flag or $env.($token_env_var)'
+    ...$auth_lines
     ""
     $'const BASE_URL = "($base_url)"'
     ...$unix_socket_const
@@ -1149,7 +1207,8 @@ def render-command [cmd: record, mapping: record, config: record] {
   # The description is the summary line; the endpoint always appears in help,
   # as the summary itself when there is no description, otherwise as the first
   # extra line.
-  let endpoint_line = $"($cmd.method | str uppercase) ($cmd.path_template)"
+  let fixed_q = if (($cmd.fixed_query? | default "") | is-empty) { "" } else { $"?($cmd.fixed_query)" }
+  let endpoint_line = $"($cmd.method | str uppercase) ($cmd.path_template)($fixed_q)"
   let has_description = ($cmd.description | is-not-empty)
   let summary = if $has_description { flatten-description $cmd.description } else { $endpoint_line }
   $cmd_lines = ($cmd_lines | append $"# ($summary)")

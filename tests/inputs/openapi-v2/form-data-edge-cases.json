@@ -1,0 +1,146 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Form Data Edge Cases v2",
+    "version": "1.0.0",
+    "description": "Swagger 2.0 formData bodies: `consumes: multipart/form-data` with only non-file params (visagecloud) is multipart, formData arrays keep their items type and honour collectionFormat (csv joined, multi repeated), a `#/responses` ref resolves, and a 200 without schema does not take the `default` error schema as the success type."
+  },
+  "host": "api.example.com",
+  "basePath": "/v1",
+  "schemes": [
+    "https"
+  ],
+  "responses": {
+    "Analysis": {
+      "description": "ok",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "faces": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "paths": {
+    "/analysis": {
+      "post": {
+        "operationId": "performAnalysis",
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "parameters": [
+          {
+            "name": "picture",
+            "in": "formData",
+            "type": "string",
+            "required": true,
+            "description": "Picture as base64 or URL"
+          },
+          {
+            "name": "storeResult",
+            "in": "formData",
+            "type": "boolean"
+          },
+          {
+            "name": "tags",
+            "in": "formData",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "csv",
+            "description": "Joined with commas inside the multipart part"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/Analysis"
+          }
+        }
+      }
+    },
+    "/marketstat": {
+      "post": {
+        "operationId": "marketstat",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "parameters": [
+          {
+            "name": "typeid",
+            "in": "formData",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "collectionFormat": "csv",
+            "required": true
+          },
+          {
+            "name": "regionlimit",
+            "in": "formData",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "usesystem",
+            "in": "formData",
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok"
+          },
+          "default": {
+            "schema": {
+              "$ref": "#/definitions/Error"
+            },
+            "description": "error"
+          }
+        }
+      },
+      "get": {
+        "operationId": "marketstatGet",
+        "parameters": [
+          {
+            "name": "typeid",
+            "in": "formData",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "collectionFormat": "csv",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    }
+  }
+}

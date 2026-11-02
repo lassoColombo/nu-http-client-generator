@@ -1,6 +1,9 @@
 # Auto-generated client for Auth Edge Cases v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.AUTH_EDGE_CASES_TOKEN
+# Auth (apiKeyA): --token-apikeya flag or $env.AUTH_EDGE_CASES_APIKEYA_TOKEN
+# Auth (apiKeyB): --token-apikeyb flag or $env.AUTH_EDGE_CASES_APIKEYB_TOKEN
+# Auth (queryKey): --token-querykey flag or $env.AUTH_EDGE_CASES_QUERYKEY_TOKEN
 
 const BASE_URL = "https://api.example.com"
 
@@ -461,6 +464,39 @@ export def "get-and-mixed" [
   let auth = (merge-auth [(build-auth ($token_apikeya | default ($env | get -o AUTH_EDGE_CASES_APIKEYA_TOKEN | default "")) "x-api-key-a") (build-auth ($token_querykey | default ($env | get -o AUTH_EDGE_CASES_QUERYKEY_TOKEN | default "")) "query-api_key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/and-mixed" $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}
+
+# GET /and-identical
+#
+# operationId: getAndIdentical
+export def "get-and-identical" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/and-identical" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

@@ -150,6 +150,7 @@ export def "things-create" [
   let full_url = (build-url $base "/things" $auth.query)
   let req_body = {"harry potter": $harry_potter, "Aux Price": $aux_price, "Location:": $location, "osdb:body_data": $osdb_body_data, "Upload Yaml/Yml File": $upload_yaml_yml_file, ":": $body_param, "address": $address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o ":") == null) { error make --unspanned { msg: "required body field ':' missing: pass --body-param or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

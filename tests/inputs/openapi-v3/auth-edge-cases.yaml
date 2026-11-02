@@ -60,6 +60,15 @@ components:
         clientCredentials:
           tokenUrl: https://api.example.com/oauth/token
           scopes: {}
+    # A second oauth2 scheme: wire-identical to oauthScheme (Authorization:
+    # Bearer). Google declares `{Oauth2: [], Oauth2c: []}` this way.
+    oauthScheme2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.example.com/oauth/auth
+          tokenUrl: https://api.example.com/oauth/token
+          scopes: {}
     # openIdConnect -> normalized to bearer
     oidcScheme:
       type: openIdConnect
@@ -151,5 +160,16 @@ paths:
       security:
         - apiKeyA: []
           queryKey: []
+      responses:
+        '200': {description: ok}
+  # AND-form of two WIRE-IDENTICAL schemes (both Authorization: Bearer) ->
+  # collapses to the single-scheme `--token` path: two `--token-*` flags would
+  # write one header and the second would silently win.
+  /and-identical:
+    get:
+      operationId: getAndIdentical
+      security:
+        - oauthScheme: []
+          oauthScheme2: []
       responses:
         '200': {description: ok}

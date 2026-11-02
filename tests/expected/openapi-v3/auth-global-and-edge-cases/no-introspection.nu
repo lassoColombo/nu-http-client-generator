@@ -1,6 +1,8 @@
 # Auto-generated client for Auth Global And v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.AUTH_GLOBAL_AND_TOKEN
+# Auth (appKey): --token-appkey flag or $env.AUTH_GLOBAL_AND_APPKEY_TOKEN
+# Auth (appToken): --token-apptoken flag or $env.AUTH_GLOBAL_AND_APPTOKEN_TOKEN
 
 const BASE_URL = "https://api.example.com"
 

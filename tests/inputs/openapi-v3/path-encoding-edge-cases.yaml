@@ -68,3 +68,14 @@ paths:
       operationId: getMetadata
       responses:
         '200': {description: ok}
+  # Enum on a path param -> positional with a completer (sportsdata's {format}).
+  /export/{format}:
+    get:
+      operationId: exportReport
+      parameters:
+        - name: format
+          in: path
+          required: true
+          schema: {type: string, enum: [json, xml]}
+      responses:
+        '200': {description: ok}

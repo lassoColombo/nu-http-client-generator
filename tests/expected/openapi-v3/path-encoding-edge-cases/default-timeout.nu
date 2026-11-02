@@ -99,6 +99,8 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -127,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # operationId: getLines
 export def "get-lines" [
-  ids: list
+  ids: list<string>
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,6 +319,41 @@ export def "get-metadata" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/$metadata" $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}
+
+# GET /export/{format}
+#
+# operationId: exportReport
+export def "export-report" [
+  format: string@format-completer
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
+  let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/export/{format}") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

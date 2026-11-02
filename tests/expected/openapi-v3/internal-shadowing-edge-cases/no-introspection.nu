@@ -126,6 +126,7 @@ export def "create-embedding" [
   let full_url = (build-url $base "/embeddings" $auth.query)
   let req_body = {"input": $body_input, "model": $model, "sock": $body_sock, "req": $body_req, "mp": $body_mp} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

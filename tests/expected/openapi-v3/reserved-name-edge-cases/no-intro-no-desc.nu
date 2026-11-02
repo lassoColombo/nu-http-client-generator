@@ -231,6 +231,9 @@ export def "create-job" [
   let full_url = (build-url $base "/jobs" $auth.query)
   let req_body = {"dryRun": $body_dry_run, "raw": $body_raw, "baseUrl": $body_base_url, "token": $body_token, "accept": $body_accept} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "dryRun") == null) { error make --unspanned { msg: "required body field 'dryRun' missing: pass --body-dry-run or pipe a record" } }
+  if (($req_body | get -o "raw") == null) { error make --unspanned { msg: "required body field 'raw' missing: pass --body-raw or pipe a record" } }
+  if (($req_body | get -o "baseUrl") == null) { error make --unspanned { msg: "required body field 'baseUrl' missing: pass --body-base-url or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

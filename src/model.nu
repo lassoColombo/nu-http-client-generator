@@ -20,23 +20,41 @@ def build-param [p: record, h: record] {
   let deprecated = ($p.deprecated? | default false)
   let nullable = (spec is-nullable $schema)
   let allow_empty = ($p.allowEmptyValue? | default false)
+  let required = ($p.required? | default false)
+  let enum = (spec clean-enum-values (do $h.get-param-enum $p))
+  # The value a REQUIRED param takes when the caller gives none: the spec
+  # `default`, else a single-member enum (AWS JSON-RPC's `X-Amz-Target`
+  # header is `required: true, enum: [one-value]`). Optional params keep
+  # their default documentary only — sending it explicitly would change the
+  # wire for callers who left the flag out.
+  let required_default = if not $required { null } else if ($default_val != null) { $default_val } else if ($enum | length) == 1 { $enum | first } else { null }
   {
     name: $p.name
     type: (do $h.get-param-type $p)
     items_type: (do $h.get-param-items-type $p)
-    required: ($p.required? | default false)
+    required: $required
+    required_default: $required_default
     description: (spec build-description ($p.description? | default "") [
+      (if $required { "required" } else { null })
       (if $deprecated { "DEPRECATED" } else { null })
       (if $nullable { "nullable" } else { null })
       (if ($format != null) { $"format: ($format)" } else { null })
-      (if ($default_val != null) { $"default: ($default_val)" } else { null })
+      (default-note $default_val)
       (if ($example != null) { $"e.g. ($example)" } else { null })
       (if $allow_empty { "allows empty value" } else { null })
     ])
-    enum: (spec clean-enum-values (do $h.get-param-enum $p))
+    enum: $enum
     collection_style: (do $h.get-param-collection-style $p)
     deprecated: $deprecated
   }
+}
+
+# `default: X` description note; an empty-string default is shown as `""`
+# rather than vanishing into `(default: , e.g. NONE)`.
+def default-note [default_val: any]: nothing -> any {
+  if ($default_val == null) { return null }
+  let text = $"($default_val)"
+  if ($text | is-empty) { 'default: ""' } else { $"default: ($text)" }
 }
 
 # Normalize a discriminator into {propertyName, mapping}. OAS 3.x discriminators
@@ -111,7 +129,9 @@ def body-fields-from-props [merged: record, doc: record] {
   # a bare string sibling that would crash subsequent cell-path accesses).
   $props | items {|name, field_spec|
     if (($field_spec | describe) | str starts-with "record") {
-      {name: $name, field_spec: (spec resolve-ref $field_spec $doc)}
+      # resolve, then fold allOf so a `{allOf: [{$ref}, {description}]}`
+      # wrapper (every AWS property) yields the member's type + the description
+      {name: $name, field_spec: (spec merge-all-of (spec resolve-ref $field_spec $doc) $doc)}
     } else {
       {name: $name, field_spec: $field_spec}
     }
@@ -150,9 +170,13 @@ def body-fields-from-props [merged: record, doc: record] {
       (if $deprecated { "DEPRECATED" } else { null })
       (if $nullable { "nullable" } else { null })
       (if ($format != null) { $"format: ($format)" } else { null })
-      (if ($default_val != null) { $"default: ($default_val)" } else { null })
+      (default-note $default_val)
       (if ($example != null) { $"e.g. ($example)" } else { null })
     ])
+    # Swagger 2 formData arrays carry a `collectionFormat` (synthesized onto
+    # the property by spec/swagger2); render joins csv/ssv/tsv/pipes lists
+    # before the form body is url-encoded. Null means "repeat the key".
+    let collection_style = if $field_type == "array" { $field.field_spec.collectionFormat? | default null } else { null }
     {
       name: $field.name
       type: $field_type
@@ -163,6 +187,7 @@ def body-fields-from-props [merged: record, doc: record] {
       description: $desc
       deprecated: $deprecated
       format: $format
+      collection_style: $collection_style
     }
   }
 }
@@ -175,7 +200,7 @@ def build-field-shapes [props: record, doc: record] {
     if (not (($field_spec | describe) | str starts-with "record")) {
       null
     } else {
-      let fs = (spec resolve-ref $field_spec $doc)
+      let fs = (spec merge-all-of (spec resolve-ref $field_spec $doc) $doc)
       let ft = (spec normalize-type ($fs.type? | default ""))
       if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
         let sub_fields = (extract-body-fields $fs $doc)
@@ -210,15 +235,55 @@ def build-field-shapes [props: record, doc: record] {
 # `apply-name-fn`). `deduplicate-commands` then guarantees every name is unique
 # and legal — it is the ONLY collision machinery left.
 
-# Names Nushell refuses as a `def`: parser keywords cannot be shadowed, and
-# `main` / `commands` are already defined by the generated module itself.
-# NOT the flag/variable reserved list (that one lives in render): `get`,
-# `delete`, `in`, `version` and `nothing` are all fine as module command names.
-const UNUSABLE_NAMES = [
-  use let mut const def module source overlay export export-env alias hide extern
-  if match for while loop break continue return where try
-  main commands
+# Names a generated command must not take. Three families, all fatal or
+# silently wrong inside the emitted module:
+#   1. Parser keywords — `nu::parser::name_is_keyword`, a hard parse error.
+#   2. Nushell builtin commands. A module-level `export def "get"` shadows the
+#      builtin for every helper in the SAME module, so `$env | get -o X` inside
+#      `build-auth` resolves to the generated command (`unknown_flag` /
+#      `extra_positional` at parse time, or a silent wrong call at runtime for
+#      input-only builtins like `is-not-empty`). Every single-word builtin of
+#      nushell 0.116 is listed; the set rarely changes and the cost of an
+#      unneeded entry is one slug-named command, not a broken client.
+#   3. The module's own defs: the static helper library (`send-post`,
+#      `build-url`, …), the completers (`*-completer`) and `main`/`commands`.
+#      A collision is `nu::parser::duplicate_command_def`.
+# An unusable operationId falls back to the method+path slug; an unusable slug
+# (`GET /` → `get`) gets an `-op` suffix. NOT the flag/variable reserved list
+# — that one lives in render and is about variables, not commands.
+const PARSER_KEYWORDS = [
+  alias break collect const continue def export export-env extern for hide if let loop match module
+  mut overlay plugin return run source source-env try use where while
 ]
+const NU_BUILTIN_COMMANDS = [
+  abbr all ansi any append ast attr bits bytes cal cd char chunk-by chunks clear columns combinations
+  commandline compact complete config cp date debug decode default describe detect difference do drop
+  du each echo encode enumerate error every exec exit explain explore fill filter find first flatten
+  format from generate get glob grid group-by hash headers help hide-env histogram history http idx
+  ignore input insert inspect interleave intersect into is-admin is-empty is-not-empty is-redirected
+  is-terminal items job join keybindings kill last length let-env lines load-env ls math matrix merge
+  metadata mkdir mktemp move mv nu-check nu-highlight open panic par-each parse path peek
+  permutations port prepend print ps random reduce reject rename reverse rm roll rotate
+  run-external run-internal save schema scope select semver seq shuffle skip sleep slice sort sort-by
+  split start stor str sys table take tee term timeit to touch transpose tui tutor ulimit umask uname
+  union uniq uniq-by unlet update upsert url values version view watch which whoami window with-env
+  wrap zip
+]
+const EMITTED_DEF_NAMES = [
+  main commands
+  build-auth merge-auth serialize-qp encode-path-segment encode-path-array build-url status-ok
+  handle-response build-multipart-body
+  send-get send-post send-put send-patch send-delete send-head send-options
+  base-url-completer auth-scheme-completer unix-socket-completer
+]
+const UNUSABLE_NAMES = ($PARSER_KEYWORDS ++ $NU_BUILTIN_COMMANDS ++ $EMITTED_DEF_NAMES)
+
+# Is this a name the generated module cannot export? See UNUSABLE_NAMES; the
+# `-completer` suffix is reserved because every enum param gets a
+# `<flag>-completer` def of its own.
+def name-unusable [name: string]: nothing -> bool {
+  ($name in $UNUSABLE_NAMES) or ($name | str ends-with "-completer")
+}
 
 # Sanitize an arbitrary string to a valid `def "<name>"`: drop path
 # placeholders, turn `/ . _ :` and whitespace runs into `-`, and let
@@ -239,15 +304,16 @@ def sanitize-command-name [name: string]: nothing -> string {
 # (`GET /pet/{petId}` -> `get-pet-pet-id`). That is what makes the slug unique
 # per (method, path) — dropping the params instead collides 80x more often.
 def path-slug [method: string, url_path: string]: nothing -> string {
-  sanitize-command-name $"($method) ($url_path | str replace --all --regex '[{}]' ' ')"
+  sanitize-command-name $"($method) ($url_path | str replace --all --regex '[{}?=&]' ' ')"
 }
 
 # The generator's own answer for one operation, before any `--name-fn` override.
 # Returns {name, source} — `source` tells the override closure which rule fired.
 def derive-command-name [op: record, method: string, url_path: string]: nothing -> record {
   let from_op_id = (sanitize-command-name ($op.operationId? | default ""))
-  if ($from_op_id | is-empty) or ($from_op_id in $UNUSABLE_NAMES) {
-    {name: (path-slug $method $url_path), source: "path"}
+  if ($from_op_id | is-empty) or (name-unusable $from_op_id) {
+    let slug = (path-slug $method $url_path)
+    {name: (if (name-unusable $slug) { $"($slug)-op" } else { $slug }), source: "path"}
   } else {
     {name: $from_op_id, source: "operation-id"}
   }
@@ -323,10 +389,13 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
       let cols = ($first_req | columns)
       if ($cols | length) > 1 {
-        $cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact
+        collapse-wire-identical ($cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact)
       } else { [] }
     } else { [] }
   }
+  # An AND-set that collapsed to one wire credential is a single-scheme op.
+  let default_auth = if ($auth_required | length) == 1 { $auth_required | first | get name } else { $default_auth }
+  let auth_required = if ($auth_required | length) == 1 { [] } else { $auth_required }
 
   # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
   let chosen_server = ($op.servers?.0? | default $methods.servers?.0?)
@@ -340,6 +409,18 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     default_auth: $default_auth
     auth_required: $auth_required
     base_url: $base_url
+  }
+}
+
+# Drop AND-set members that put the same credential in the same place.
+# Google declares `{Oauth2: [...], Oauth2c: [...]}` — two oauth2 schemes that
+# both become `Authorization: Bearer` — so two `--token-*` flags would write
+# one header and the second would silently win. Keyed on the wire facts
+# (location, header/param name, prefix), first occurrence kept.
+def collapse-wire-identical [schemes: list]: nothing -> list {
+  $schemes | reduce --fold [] {|s, acc|
+    let same = ($acc | any {|a| ($a.in == $s.in) and ($a.header_name == $s.header_name) and ($a.prefix == $s.prefix) })
+    if $same { $acc } else { $acc | append $s }
   }
 }
 
@@ -369,10 +450,12 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   } | append $op_params
   ) | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] }
 
-  # Path params keep only the spec name and the type: render derives the
-  # positional variable name from the spec name.
+  # Path params keep the spec name, the (items) type and the enum: render
+  # derives the positional variable name from the spec name, types an array
+  # positional `list<string>` (a bare `list` would parse `[01 02]` as ints and
+  # send `1,2`), and wires an enum completer like it does for flags.
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
-    {name: $p.name, type: (do $h.get-param-type $p)}
+    {name: $p.name, type: (do $h.get-param-type $p), items_type: (do $h.get-param-items-type $p), enum: (spec clean-enum-values (do $h.get-param-enum $p))}
   }
   let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p $h } }
 
@@ -390,9 +473,12 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
 # `options` builtins take no body argument — so for those methods every body
 # artefact (has_body, fields, shapes) is suppressed together: the client must
 # never advertise a flag it cannot send, and --dry-run must match the wire.
-def extract-body-info [method: string, op: record, doc: record, h: record] {
+def extract-body-info [method: string, op: record, doc: record, h: record, label: string] {
   let body_info = (do $h.get-body-info $op $doc)
   let bodyless_method = ($method in ["get" "head" "options"])
+  if $body_info.has_body and $bodyless_method {
+    log warn $"($label): ($method | str uppercase) cannot carry a request body in nushell; the declared body/formData params are dropped and the command may be uncallable"
+  }
   let has_body = $body_info.has_body and (not $bodyless_method)
   let content_type = ($body_info.content_type? | default $spec.CT_JSON)
   let body_schema = $body_info.body_schema
@@ -577,6 +663,10 @@ def deduplicate-commands []: list -> list {
 
 # Build the command model list from a parsed+resolved REST spec.
 export def command-list [doc: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
+  # The global AND-set collapses the same way the per-op one does.
+  let root_auth_required = (collapse-wire-identical $root_auth_required)
+  let root_default_auth = if ($root_auth_required | length) == 1 { $root_auth_required | first | get name } else { $root_default_auth }
+  let root_auth_required = if ($root_auth_required | length) == 1 { [] } else { $root_auth_required }
   ($doc.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {
@@ -618,13 +708,19 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
       # client-side fragment, so it must not leak into the runtime URL, command
       # name, or doc comment.
       let clean_path = ($path_entry.path | str replace --regex '#.*$' '')
+      # A path key may carry a fixed query (OBS keys `/request?view=collection`
+      # next to `/request`). The query part is not path text: it becomes a
+      # constant query fragment appended at request time, so caller params
+      # join it with `&` instead of a second `?`.
+      let fixed_query = ($clean_path | split row '?' | get -o 1 | default "")
+      let clean_path = ($clean_path | split row '?' | first)
 
       let params = (classify-params $op $methods $doc $h)
       # Synthesize path params for undeclared URL template placeholders
       let declared = ($params.path_params | each {|p| $p.name })
       let template_placeholders = ($clean_path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
       let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared) } | each {|ph|
-        {name: $ph, type: "any"}
+        {name: $ph, type: "any", items_type: null, enum: []}
       }
       # Order path params as the URL template does. Path-param emission and
       # positional order are taken straight from this list, so a spec that
@@ -635,9 +731,9 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
         let idx = ($clean_path | str index-of $"{($p.name)}")
         if $idx < 0 { 999999 } else { $idx }
       })
-      let body = (extract-body-info $method $op $doc $h)
+      let body = (extract-body-info $method $op $doc $h $"($method | str uppercase) ($path_entry.path)")
       let resp = (extract-response-info $method $op $doc $h)
-      let derived_name = (derive-command-name $op $method $clean_path)
+      let derived_name = (derive-command-name $op $method (if ($fixed_query | is-empty) { $clean_path } else { $"($clean_path)?($fixed_query)" }))
       let cmd_name = if ($config.name_fn? == null) {
         $derived_name.name
       } else {
@@ -661,6 +757,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
         name: $cmd_name
         method: $method
         path_template: $clean_path
+        fixed_query: $fixed_query
         path_params: $params.path_params
         query_params: $params.query_params
         header_params: $params.header_params

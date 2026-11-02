@@ -7,10 +7,21 @@ info:
     schemas must terminate, multi-hop $ref chains collapse, allOf with a $ref
     base merges, shared #/components/parameters refs resolve, and a JSON
     Pointer into a schema resolves to that property rather than to a
-    top-level schema sharing the last segment's name.
+    top-level schema sharing the last segment's name. Also: a response given
+    as a $ref into #/components/responses resolves (return type + Accept), a
+    percent-encoded JSON Pointer (`%7B`/`%7D`, the openSUSE OBS shape) walks
+    the document, and an AWS-style `allOf: [{$ref: Scalar}, {description}]`
+    property wrapper yields the member's type plus the description — in body
+    fields and in the response type alike.
 servers:
   - url: https://api.example.com
 components:
+  responses:
+    PetResponse:
+      description: A pet
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Pet'}
   parameters:
     PageParam:
       name: page
@@ -42,6 +53,34 @@ components:
       type: object
       properties:
         status: {type: string, enum: [available, sold]}
+    # AWS shapes: scalar/list schemas referenced through allOf wrappers.
+    Date: {type: string, format: date-time}
+    ClusterStateList:
+      type: array
+      items: {type: string}
+    ListClustersInput:
+      type: object
+      required: [CreatedAfter]
+      properties:
+        CreatedAfter:
+          allOf:
+            - {$ref: '#/components/schemas/Date'}
+            - description: The creation date and time beginning value filter.
+        ClusterStates:
+          allOf:
+            - {$ref: '#/components/schemas/ClusterStateList'}
+            - description: The cluster state filters to apply.
+    ListClustersOutput:
+      type: object
+      properties:
+        Clusters:
+          allOf:
+            - {$ref: '#/components/schemas/ClusterStateList'}
+            - description: The list of clusters.
+        Marker:
+          allOf:
+            - {$ref: '#/components/schemas/Date'}
+            - description: Pagination token.
 paths:
   # Body is a self-referential schema -> generation must terminate.
   /trees:
@@ -89,3 +128,36 @@ paths:
           schema: {$ref: '#/components/schemas/Pet/properties/status'}
       responses:
         '200': {description: ok}
+  # Response is a $ref into #/components/responses -> resolved to Pet.
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/PetResponse'}
+  # Parameter ref with a percent-encoded pointer into the op above.
+  /pets/{petId}/photos:
+    get:
+      operationId: listPetPhotos
+      parameters:
+        - $ref: '#/paths/~1pets~1%7BpetId%7D/get/parameters/0'
+      responses:
+        '200': {description: ok}
+  # AWS allOf wrappers in the body fields and the response type.
+  /clusters:
+    post:
+      operationId: listClusters
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ListClustersInput'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ListClustersOutput'}

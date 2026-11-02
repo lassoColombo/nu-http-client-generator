@@ -143,7 +143,7 @@ export def "token-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --content-type: string # Equal to application/x-www-form-urlencoded
+  --content-type: string # Equal to application/x-www-form-urlencoded (required)
   --hdr-accept: string # Response media type override
   --grant-type: string
   --username: string

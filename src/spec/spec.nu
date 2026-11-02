@@ -99,9 +99,11 @@ def json-pointer-lookup [doc: any, ref_path: string]: nothing -> any {
   let stripped = ($ref_path | str substring 2..)
   if ($stripped | is-empty) { return $doc }
   let segments = ($stripped | split row '/' | each {|s|
-    # `~1` MUST be decoded before `~0` — per RFC 6901 — otherwise `~01`
+    # A `$ref` is a URI fragment, so `%7B`/`%7D` (OBS writes
+    # `#/paths/~1x~1%7Bname%7D/get/parameters/0`) are percent-decoded first
+    # (RFC 6901 §6), then `~1` MUST be decoded before `~0` — otherwise `~01`
     # round-trips to `/` instead of `~1`.
-    $s | str replace --all '~1' '/' | str replace --all '~0' '~'
+    $s | url decode | str replace --all '~1' '/' | str replace --all '~0' '~'
   })
   mut current = $doc
   for seg in $segments {
@@ -249,6 +251,15 @@ export def get-default-auth-required [spec: record, auth_schemes: list] {
   []
 }
 
+# The response codes to consult, in order, when picking the success schema.
+# `default` is the error envelope in practice (Azure ARM: `200` without a
+# schema + `default: ErrorResponse`), so it is only a candidate when the
+# operation declares NO 2xx response at all.
+export def response-type-candidates [responses: record]: nothing -> list<string> {
+  let has_2xx = ($responses | columns | any {|c| $c =~ '^2' })
+  if $has_2xx { $RESPONSE_CODE_PRIORITY | where {|c| $c != "default" } } else { $RESPONSE_CODE_PRIORITY }
+}
+
 # Explicit success status codes (2xx/3xx numerics) declared by the operation.
 # Ignores `default`, `2XX`-style wildcards, and documented error codes — none
 # enumerate a concrete acceptable set, so those fall callers back to `< 400`.
@@ -286,12 +297,13 @@ export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0
     return "any"
   }
 
+  # Fold allOf members in (an untyped schema with allOf is a record too;
+  # `type: object` alongside allOf still inherits; an AWS-style
+  # `allOf: [{$ref: Scalar}, {description}]` wrapper takes the member's type).
+  let had_all_of = ($schema.allOf? | is-not-empty)
+  let schema = (merge-all-of $schema $doc)
   let t = (normalize-type ($schema.type? | default null))
-  # Own properties merged with those of every allOf member (an untyped schema
-  # with allOf is a record too; `type: object` alongside allOf still inherits).
-  let props = ($schema.allOf? | default [] | each {|sub| resolve-ref $sub $doc }
-    | where {|sub| ($sub | describe) | str starts-with "record" }
-    | reduce --fold ($schema.properties? | default {}) {|sub, acc| $acc | merge ($sub.properties? | default {}) })
+  let props = ($schema.properties? | default {})
   let has_props = ($props | is-not-empty)
   let has_items = ($schema.items? | is-not-empty)
 
@@ -305,7 +317,7 @@ export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0
       "number" => "float"
       "boolean" => "bool"
       _ => {
-        if $has_props or ($schema.allOf? | is-not-empty) { "record" } else if $has_items { "list" } else { "any" }
+        if $has_props or $had_all_of { "record" } else if $has_items { "list" } else { "any" }
       }
     })
   }
@@ -326,7 +338,32 @@ export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0
     "boolean" => "bool"
     _ => {
       # no explicit type — infer from structure
-      if $has_props or ($schema.allOf? | is-not-empty) { do $record_of } else if $has_items { do $list_of } else { "any" }
+      if $has_props or $had_all_of { do $record_of } else if $has_items { do $list_of } else { "any" }
+    }
+  }
+}
+
+# Fold a schema's `allOf` members into the schema itself. Members are
+# resolved (shallow) and merged in order: `properties` accumulate, `required`
+# concatenates, and every other facet (`type`, `items`, `enum`, `format`,
+# `default`, `nullable`, `description`) is taken from the first member that
+# has it when the outer schema does not. This is what makes the AWS shape
+# `{allOf: [{$ref: '#/…/Date'}, {description: …}]}` a `string` field with a
+# description instead of an untyped `any`. Members' own allOf fold too, to a
+# small depth so a self-referencing schema cannot loop. A schema without
+# allOf comes back unchanged.
+export def merge-all-of [schema: any, doc: record, --depth: int = 0]: nothing -> any {
+  if not (($schema | describe) | str starts-with "record") { return $schema }
+  let members = ($schema.allOf? | default [] | each {|sub| resolve-ref $sub $doc }
+    | where {|sub| ($sub | describe) | str starts-with "record" }
+    | each {|sub| if $depth < 3 { merge-all-of $sub $doc --depth ($depth + 1) } else { $sub } })
+  if ($members | is-empty) { return $schema }
+  let base = ($schema | reject allOf)
+  $members | reduce --fold $base {|m, acc|
+    let acc = ($acc | upsert properties (($acc.properties? | default {}) | merge ($m.properties? | default {})))
+    let acc = ($acc | upsert required (($acc.required? | default []) | append ($m.required? | default []) | uniq))
+    [type items enum format default nullable description] | reduce --fold $acc {|k, a|
+      if (($a | get -o $k) == null) and (($m | get -o $k) != null) { $a | upsert $k ($m | get $k) } else { $a }
     }
   }
 }

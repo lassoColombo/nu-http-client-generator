@@ -1,6 +1,9 @@
 # Auto-generated client for Auth Edge Cases v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.AUTH_EDGE_CASES_TOKEN
+# Auth (apiKeyA): --token-apikeya flag or $env.AUTH_EDGE_CASES_APIKEYA_TOKEN
+# Auth (apiKeyB): --token-apikeyb flag or $env.AUTH_EDGE_CASES_APIKEYB_TOKEN
+# Auth (queryKey): --token-querykey flag or $env.AUTH_EDGE_CASES_QUERYKEY_TOKEN
 
 const BASE_URL = "https://api.example.com"
 const UNIX_SOCKET = "/var/run/docker.sock"
@@ -118,7 +121,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket" "token-apikeya" "token-apikeyb" "token-querykey"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-default-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
@@ -518,6 +521,42 @@ export def "get-and-mixed" [
   let base = ($base_url | default $BASE_URL)
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let full_url = (build-url $base "/and-mixed" $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+    unix_socket: $sock
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}
+
+# GET /and-identical
+#
+# operationId: getAndIdentical
+export def "get-and-identical" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let sock = ($unix_socket | default $UNIX_SOCKET)
+  let full_url = (build-url $base "/and-identical" $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {

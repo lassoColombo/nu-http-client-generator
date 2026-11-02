@@ -99,28 +99,34 @@ def get-body-info-impl [op: record, doc: record] {
     # text/xml, application/vnd.X+json, …) take the first one and its schema, so
     # model can still derive `body_scalar_type` for a typed `--body` flag.
     let preferred = ($spec.CT_PRIORITY | where {|ct| $content | get -o $ct | is-not-empty } | get -o 0)
-    let ct = ($preferred | default ($content | columns | get -o 0 | default $spec.CT_JSON))
-    let s = ($content | get -o $ct | default {} | get -o schema)
+    let declared = ($content | columns | get -o 0 | default $spec.CT_JSON)
+    # An empty media-type key (spoonacular writes `content: {"": {schema}}`) or
+    # a bare `*/*` is no content type a request can carry: fall back to JSON.
+    let ct = ($preferred | default (if ($declared | is-empty) or ($declared == "*/*") { $spec.CT_JSON } else { $declared }))
+    let s = ($content | get -o $declared | default {} | get -o schema)
     let schema = if ($s | is-not-empty) { spec resolve-ref $s $doc } else { {} }
     {has_body: true, body_schema: $schema, content_type: $ct}
   }
 }
 
-def get-response-content-types-impl [op: record] {
+# A response may be a `$ref` into `#/components/responses` (apideck, chompthis
+# do this for every operation), so each one is resolved before its `content`
+# is read — here and in get-response-type-impl.
+def get-response-content-types-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   $responses | transpose code resp | where {|r|
     ($r.code | str starts-with "2") or ($r.code == "default") or ($r.code =~ '^[12][xX]{2}$')
   } | each {|r|
-    $r.resp.content? | default {} | columns
+    (spec resolve-ref $r.resp $doc).content? | default {} | columns
   } | flatten | uniq | if ($in | is-empty) { [$spec.CT_JSON] } else { $in }
 }
 
 def get-response-type-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   mut found_schema: any = null
-  for code in $spec.RESPONSE_CODE_PRIORITY {
+  for code in (spec response-type-candidates $responses) {
     if ($found_schema == null) {
-      let resp = ($responses | get -o $code)
+      let resp = (spec resolve-ref ($responses | get -o $code) $doc)
       if ($resp | is-not-empty) {
         let content = ($resp.content? | default {})
         # Prefer application/json's schema; if this response has no JSON media
@@ -209,7 +215,7 @@ export def helpers [] {
       }
     }
     get-body-info: {|op, doc| get-body-info-impl $op $doc }
-    get-response-content-types: {|op, _doc| get-response-content-types-impl $op }
+    get-response-content-types: {|op, doc| get-response-content-types-impl $op $doc }
     get-response-type: {|op, doc| get-response-type-impl $op $doc }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }

@@ -1,6 +1,8 @@
 # Auto-generated client for Auth Edge Cases v2 v1.0.0
 # Source: <spec>
 # Auth: --token flag or $env.AUTH_EDGE_CASES_V2_TOKEN
+# Auth (apiKeyHeader): --token-apikeyheader flag or $env.AUTH_EDGE_CASES_V2_APIKEYHEADER_TOKEN
+# Auth (clientIdHeader): --token-clientidheader flag or $env.AUTH_EDGE_CASES_V2_CLIENTIDHEADER_TOKEN
 
 const BASE_URL = "https://api.example.com/v1"
 const UNIX_SOCKET = "/var/run/docker.sock"
@@ -115,7 +117,7 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket" "token-apikeyheader" "token-clientidheader"]
   let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-default-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)

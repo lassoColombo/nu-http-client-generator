@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: Builtin Shadowing Edge Cases
+  version: "1.0"
+  description: >-
+    operationIds that are nushell builtin commands, parser keywords, or names
+    the generated module defines itself. A module-level `export def "get"`
+    shadows the builtin for every helper in the same module (`$env | get -o`
+    inside build-auth becomes a call to the generated command), so these must
+    fall back to the method+path slug. Seen in the wild: ip2location (GET /
+    with no operationId → `get`), jira (`update`, `merge`, `start`), pinecone
+    (`upsert`), xtrf (`run`), d7networks (`SendPost` → helper `send-post`).
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /:
+    get:
+      summary: Root GET with no operationId — the slug itself is `get`
+      responses:
+        "200":
+          description: ok
+  /vectors/update:
+    post:
+      operationId: update
+      summary: Builtin used by the helpers (update headers) — parse error if shadowed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+              required: [id]
+      responses:
+        "200":
+          description: ok
+  /vectors/upsert:
+    post:
+      operationId: upsert
+      summary: Builtin used by the helpers (upsert path/query)
+      responses:
+        "200":
+          description: ok
+  /issues/merge:
+    put:
+      operationId: merge
+      summary: Builtin used by the helpers (merge headers)
+      responses:
+        "200":
+          description: ok
+  /macros/{macroId}/run:
+    post:
+      operationId: run
+      summary: Parser keyword in nushell 0.116
+      parameters:
+        - name: macroId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: ok
+  /send:
+    post:
+      operationId: SendPost
+      summary: Kebabs to `send-post`, the name of the emitted POST helper
+      responses:
+        "200":
+          description: ok
+  /check:
+    get:
+      operationId: is-not-empty
+      summary: Input-only builtin — shadowing it is silent at parse time and wrong at runtime
+      responses:
+        "200":
+          description: ok
+  /version:
+    get:
+      operationId: version
+      summary: Builtin the helpers never call — reserved anyway, the list is the whole builtin set
+      responses:
+        "200":
+          description: ok
+  /status/options:
+    get:
+      operationId: status-completer
+      summary: The `-completer` suffix is reserved for enum completers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, closed]
+      responses:
+        "200":
+          description: ok
+  /items:
+    get:
+      operationId: listItems
+      summary: Control — an ordinary operationId keeps its name
+      responses:
+        "200":
+          description: ok

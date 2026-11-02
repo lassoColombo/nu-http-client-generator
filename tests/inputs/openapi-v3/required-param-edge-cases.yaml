@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Required Param Edge Cases
+  version: 1.0.0
+  description: >-
+    `required: true` query/header/cookie params. The generated flag stays a
+    flag, but the command applies the spec `default` (or a single-member enum)
+    when the caller leaves it out and refuses to build the request when the
+    value is still missing. Optional params keep their default documentary
+    only. Shapes from the wild: AWS JSON-RPC (`X-Amz-Target` required,
+    enum of one), VTEX (`accountName` required with a default, `Accept` /
+    `Content-Type` required header params), firebrowse/tfl (required query
+    with no default).
+servers:
+  - url: https://api.example.com
+paths:
+  /search:
+    get:
+      operationId: search
+      parameters:
+        # required, no default -> runtime guard: error when omitted
+        - name: q
+          in: query
+          required: true
+          schema: {type: string}
+          description: Free-text query.
+        # required with a default -> applied when omitted
+        - name: sort
+          in: query
+          required: true
+          schema: {type: string, default: asc, enum: [asc, desc]}
+        # required bool with a default -> `--strict=false` applied when omitted
+        - name: strict
+          in: query
+          required: true
+          schema: {type: boolean, default: false}
+        # OPTIONAL with a default -> documented, NOT applied (wire unchanged)
+        - name: limit
+          in: query
+          schema: {type: integer, default: 10}
+        # required list with a default list
+        - name: fields
+          in: query
+          required: true
+          style: form
+          explode: false
+          schema: {type: array, items: {type: string}, default: [id, name]}
+        # required cookie, no default -> guard
+        - name: session
+          in: cookie
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: ok}
+  # AWS JSON-RPC shape: every op is POST / with a required single-enum header.
+  /:
+    post:
+      operationId: ListClusters
+      parameters:
+        - name: X-Amz-Target
+          in: header
+          required: true
+          schema: {type: string, enum: [ElasticMapReduce.ListClusters]}
+        - name: Marker
+          in: query
+          schema: {type: string}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ClusterStates: {type: array, items: {type: string}}
+      responses:
+        '200': {description: ok}
+  # VTEX shape: required Accept/Content-Type header params. Both always have
+  # an effective value, so only their default is applied; no guard.
+  /notify:
+    post:
+      operationId: notify
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          schema: {type: string, default: application/json}
+        - name: Content-Type
+          in: header
+          required: true
+          schema: {type: string}
+        - name: accountName
+          in: query
+          required: true
+          schema: {type: string, default: apiexamples}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                skuId: {type: string}
+      responses:
+        '200': {description: ok}
