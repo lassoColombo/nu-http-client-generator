@@ -90,7 +90,11 @@ def merge-body-props [schema: record, schemas: record] {
 
 # Extract body field info from a resolved request body schema
 def extract-body-fields [schema: record, schemas: record] {
-  let merged = (merge-body-props $schema $schemas)
+  body-fields-from-props (merge-body-props $schema $schemas) $schemas
+}
+
+# Body field info from an already-merged {props, required} (see merge-body-props).
+def body-fields-from-props [merged: record, schemas: record] {
   let props = $merged.props
   let required = $merged.required
   # Filter out malformed entries where a property value isn't a schema record
@@ -155,11 +159,11 @@ def extract-body-fields [schema: record, schemas: record] {
   }
 }
 
-# Build shape documentation entries for complex-typed body fields (record/list).
-# Returns list of {flag: string, shape: string, is_item: bool}.
-def build-field-shapes [schema: record, schemas: record] {
-  let merged = (merge-body-props $schema $schemas)
-  $merged.props | items {|name, field_spec|
+# Build shape documentation entries for complex-typed body fields (record/list)
+# from an already-merged props record (see merge-body-props).
+# Returns list of {flag: string, fields: list, is_item: bool}.
+def build-field-shapes [props: record, schemas: record] {
+  $props | items {|name, field_spec|
     if (not (($field_spec | describe) | str starts-with "record")) {
       null
     } else {
@@ -333,28 +337,29 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
 
 # Merge path+op params, resolve refs, split into path/query/header/cookie categories.
 def classify-params [op: record, methods: record, schemas: record, h: record] {
-  # merge path-level params with operation params (op overrides path-level)
-  let path_level_params = ($methods.parameters? | default [])
-  let op_params = ($op.parameters? | default [])
-  let op_param_keys = $op_params | each {|p| $"($p.name? | default ''):($p.in? | default '')" }
-  let parameters = ($path_level_params | where {|p|
-    let key = $"($p.name? | default ''):($p.in? | default '')"
-    not ($key in $op_param_keys)
-  } | append $op_params)
-
-  # resolve $ref in params, filter out body params
-  # resolve-ref is shallow, so we also resolve the nested .schema if it's a ref
-  let resolved_params = $parameters | each {|p|
-    let resolved = if ("$ref" in ($p | columns)) {
-      spec resolve-ref $p $schemas
-    } else { $p }
+  # Resolve $ref in params FIRST: the path-level/op dedup below keys on
+  # `name:in`, and an unresolved `{$ref: …}` has neither, so it would survive
+  # next to the op's own same-named param and emit a duplicate flag.
+  # resolve-ref is shallow, so also resolve the nested .schema if it's a ref.
+  let resolve = {|p|
+    let resolved = (spec resolve-ref $p $schemas)
     let s = ($resolved.schema? | default null)
     if (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
       $resolved | upsert schema (spec resolve-ref $s $schemas)
     } else {
       $resolved
     }
-  } | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] }
+  }
+  let path_level_params = ($methods.parameters? | default [] | each $resolve)
+  let op_params = ($op.parameters? | default [] | each $resolve)
+
+  # merge path-level params with operation params (op overrides path-level)
+  let op_param_keys = $op_params | each {|p| $"($p.name? | default ''):($p.in? | default '')" }
+  let resolved_params = ($path_level_params | where {|p|
+    let key = $"($p.name? | default ''):($p.in? | default '')"
+    not ($key in $op_param_keys)
+  } | append $op_params
+  ) | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] }
 
   # classify params
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
@@ -373,7 +378,7 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
     let param_type = (do $h.get-param-type $p)
     let collection_style = (do $h.get-param-collection-style $p)
     let deprecated = ($p.deprecated? | default false)
-    let nullable = ($p.schema?.nullable? | default false)
+    let nullable = (spec is-nullable ($p.schema? | default {}))
     let allow_empty = ($p.allowEmptyValue? | default false)
     let desc_base = ($p.description? | default "")
     let description = (spec build-description $desc_base [
@@ -403,31 +408,17 @@ def classify-params [op: record, methods: record, schemas: record, h: record] {
 }
 
 # Extract body info: has_body, content_type, body_fields, discriminator.
-def extract-body-info [op: record, schemas: record, h: record, spec_data: record] {
+#
+# GET/HEAD/OPTIONS cannot carry a request body — Nushell's `http get`/`head`/
+# `options` builtins take no body argument — so for those methods every body
+# artefact (has_body, fields, shapes) is suppressed together: the client must
+# never advertise a flag it cannot send, and --dry-run must match the wire.
+def extract-body-info [method: string, op: record, schemas: record, h: record, spec_data: record] {
   let body_info = (do $h.get-body-info $op $schemas $spec_data)
-  let has_body = $body_info.has_body
+  let bodyless_method = ($method in ["get" "head" "options"])
+  let has_body = $body_info.has_body and (not $bodyless_method)
   let content_type = ($body_info.content_type? | default $spec.CT_JSON)
-
-  # Issue 25.A: when the body content-type is non-priority (e.g. text/plain,
-  # text/xml, application/vnd.X+json), `get-body-info` records the
-  # content_type but returns an empty `body_schema` because it only resolves
-  # schemas for application/json / multipart / form-urlencoded. To surface
-  # `body_scalar_type` for those endpoints, bridge here by re-reading the
-  # schema directly from op.requestBody.content.{content_type}.schema (OA3
-  # shape only — Swagger 2 always uses application/json so its body_schema
-  # is already populated by get-body-info).
-  let body_schema = if ($body_info.body_schema | is-empty) and $has_body and (($op.requestBody? | describe) | str starts-with "record") {
-    let rb = (spec resolve-ref ($op.requestBody) $schemas)
-    let content = ($rb.content? | default {})
-    let s = ($content | get -o $content_type | default {} | get -o schema)
-    if ($s | is-not-empty) {
-      spec resolve-ref $s $schemas
-    } else {
-      {}
-    }
-  } else {
-    $body_info.body_schema
-  }
+  let body_schema = $body_info.body_schema
 
   # For non-JSON content-types (text/xml, application/vnd.X+json, …) we do
   # NOT expand record schemas into per-field flags: there is no canonical
@@ -439,18 +430,11 @@ def extract-body-info [op: record, schemas: record, h: record, spec_data: record
   # expand — the renderer has dedicated `build-multipart-body` and
   # `url build-query` codecs for them.
   let priority_ct = ($content_type | str starts-with "application/json") or ($content_type == "multipart/form-data") or ($content_type == "application/x-www-form-urlencoded")
-  let has_schema = ($body_schema | is-not-empty) and (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
-  let expand_fields = $has_schema and ($priority_ct or (not $has_body))
-  let body_fields = if $expand_fields {
-    extract-body-fields $body_schema $schemas
-  } else {
-    []
-  }
-  let field_shapes = if $expand_fields {
-    build-field-shapes $body_schema $schemas
-  } else {
-    []
-  }
+  let has_schema = (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
+  let expand_fields = $has_body and $has_schema and $priority_ct
+  let merged = if $expand_fields { merge-body-props $body_schema $schemas } else { {props: {}, required: []} }
+  let body_fields = (body-fields-from-props $merged $schemas)
+  let field_shapes = (build-field-shapes $merged.props $schemas)
 
   # discriminator info
   let body_disc = (normalize-discriminator (if (($body_schema | describe) | str starts-with "record") { $body_schema.discriminator? | default null } else { null }))
@@ -522,7 +506,7 @@ def extract-body-info [op: record, schemas: record, h: record, spec_data: record
   {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
 }
 
-# Extract response info: accept_types, return_type, returns_body.
+# Extract response info: accept_types, return_type, success_codes.
 def extract-response-info [method: string, op: record, spec_data: record, schemas: record, h: record] {
   let accept_types = (do $h.get-response-content-types $op $spec_data)
 
@@ -532,21 +516,11 @@ def extract-response-info [method: string, op: record, spec_data: record, schema
     do $h.get-response-type $op $spec_data $schemas
   }
 
-  let responses = ($op.responses? | default {})
-  let returns_body = if ($method == "delete") {
-    let resp_204 = ($responses | get -o "204")
-    ($resp_204 | is-empty)
-  } else if ($method in ["head" "options"]) {
-    false
-  } else {
-    true
-  }
-
   # Spec-declared success codes (2xx/3xx) gate handle-response's error throw.
   # Empty list → spec enumerated none → the client falls back to `< 400`.
   let success_codes = (do $h.get-success-codes $op)
 
-  {accept_types: $accept_types, return_type: $return_type, returns_body: $returns_body, success_codes: $success_codes}
+  {accept_types: $accept_types, return_type: $return_type, success_codes: $success_codes}
 }
 
 # Apply a user `--name-fn` closure to override the derived command name.
@@ -694,7 +668,7 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         let idx = ($clean_path | str index-of $token)
         if $idx < 0 { 999999 } else { $idx }
       })
-      let body = (extract-body-info $op $schemas $h $spec_data)
+      let body = (extract-body-info $method $op $schemas $h $spec_data)
       let resp = (extract-response-info $method $op $spec_data $schemas $h)
       let derived_name = (derive-command-name $op $method $clean_path)
       let cmd_name = if ($config.name_fn? == null) {
@@ -726,25 +700,17 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         query_params: $params.query_params
         header_params: $params.header_params
         cookie_params: $params.cookie_params
-        # D-11: GET/HEAD/OPTIONS cannot carry a request body — Nushell's
-        # `http get`/`head`/`options` builtins take no body argument, so
-        # do-request silently drops it. Suppress all body plumbing (body
-        # flags, req_body construction, the do-request body arg, and the
-        # dry-run body) for these methods so the client never advertises a
-        # body it cannot send and --dry-run matches what goes on the wire.
-        has_body: ($body.has_body and not ($method in [get head options]))
+        has_body: $body.has_body
         content_type: $body.content_type
         body_fields: $body.body_fields
         body_polymorphic_array: $body.body_polymorphic_array
         body_scalar_type: $body.body_scalar_type
         field_shapes: $field_shapes
         body_collapsed: $body_collapsed
-        returns_body: $resp.returns_body
         description: $meta.description
         extra_doc_lines: (if ($meta.description | is-not-empty) { [$"# ($endpoint_line)"] } else { [] })
         operation_id: $meta.operation_id
         deprecated: $meta.deprecated
-        deprecation_reason: null
         external_docs: $meta.external_docs
         default_auth: $meta.default_auth
         auth_required: $meta.auth_required
@@ -753,7 +719,6 @@ export def command-list [spec_data: record, schemas: record, h: record, auth_sch
         success_codes: $resp.success_codes
         discriminator: $body.discriminator
         return_type: $resp.return_type
-        tags: ($op.tags? | default [])
       }
     }
   } | flatten | compact | deduplicate-commands

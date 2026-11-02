@@ -99,8 +99,6 @@ def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: 
 def base-url-completer [] { ["https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
-# Completers for enum parameters
-def kind-completer [] { ["large" "medium" "small"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {

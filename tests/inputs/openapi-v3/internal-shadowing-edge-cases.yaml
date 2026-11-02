@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: Internal Shadowing Edge Cases
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer}
+paths:
+  # Body fields named like the generated body-code internals (`let input = $in`,
+  # `let sock`, `let req`, ...). Each must get a `body-` prefix instead of being
+  # shadowed and silently dropped from the request body.
+  /embeddings:
+    post:
+      operationId: createEmbedding
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input: {type: string}
+                model: {type: string}
+                sock: {type: string}
+                req: {type: string}
+                mp: {type: string}
+      responses:
+        '200': {description: ok}
+  # Path-level `$ref` param that the op redeclares by name: must dedupe to ONE
+  # `--limit` (refs are resolved before the name:in merge). Also: a `help`
+  # query param (collides with nushell's built-in --help), a 3.1 nullable array
+  # with explode:false (must serialize as csv, not multi), and a GET with a
+  # requestBody (no body flags AND no `# --ghost shape:` doc line).
+  /items:
+    parameters:
+      - $ref: '#/components/parameters/Limit'
+    get:
+      operationId: listItems
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer}
+        - name: help
+          in: query
+          schema: {type: string}
+        - name: tags
+          in: query
+          schema:
+            type: [array, "null"]
+            items: {type: string}
+          style: form
+          explode: false
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ghost:
+                  type: object
+                  properties:
+                    x: {type: string}
+      responses:
+        '200': {description: ok}
+  # Path-level `$ref` param inherited by an op that does NOT redeclare it: must
+  # still produce exactly one `--limit`.
+  /items/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Limit'
+    get:
+      operationId: getItem
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: ok}

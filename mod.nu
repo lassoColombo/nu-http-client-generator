@@ -15,13 +15,13 @@ use src/render.nu
 use src/log.nu
 use src/model.nu
 
-# Validate that a loaded spec has callable endpoints. Returns "ok" to proceed,
-# or "skip" after logging a warning. Hard-errors only for malformed specs
-# (no `paths` AND no `webhooks` — neither is a valid OpenAPI shape).
+# Assert that a loaded spec has callable endpoints; errors otherwise with a
+# message naming the reason (webhooks-only, empty `paths`, or no `paths` at
+# all — the last isn't a valid OpenAPI/Swagger shape).
 def check-spec-generatable [loaded: record] {
   let has_paths = ($loaded.data.paths? | is-not-empty)
   let has_webhooks = ($loaded.data.webhooks? | is-not-empty)
-  if $has_paths { return "ok" }
+  if $has_paths { return }
   # OpenAPI 3.1 promoted `webhooks` to a top-level Paths-sibling for specs
   # that describe only inbound server-to-client events.
   if $has_webhooks {
@@ -81,7 +81,7 @@ export def main [
   --spec-headers: record        # Headers for fetching remote specs (e.g. {Authorization: "Bearer tok"})
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
-  if (check-spec-generatable $loaded) == "skip" { return null }
+  check-spec-generatable $loaded
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])
@@ -125,7 +125,7 @@ export def preview [
   --spec-headers: record        # Headers for fetching remote specs
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
-  if (check-spec-generatable $loaded) == "skip" { return [] }
+  check-spec-generatable $loaded
   let config = {
     filter_tags: ($tags | default [])
     filter_prefixes: ($prefixes | default [])

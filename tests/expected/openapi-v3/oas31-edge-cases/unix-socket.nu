@@ -182,7 +182,7 @@ export def "list-things" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --status: string
+  --status: string # nullable
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

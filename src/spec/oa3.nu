@@ -114,8 +114,13 @@ def get-body-info-impl [op: record, schemas: record] {
     if ($found_ct != null) {
       {has_body: true, body_schema: $found_schema, content_type: $found_ct}
     } else {
+      # No priority media type (text/plain, text/xml, application/vnd.X+json,
+      # …): take the first declared one and its schema, so model can still
+      # derive `body_scalar_type` for a typed `--body` flag.
       let first_ct = ($content | columns | first | default $spec.CT_JSON)
-      {has_body: true, body_schema: {}, content_type: $first_ct}
+      let s = ($content | get -o $first_ct | default {} | get -o schema)
+      let schema = if ($s | is-not-empty) { spec resolve-ref $s $schemas } else { {} }
+      {has_body: true, body_schema: $schema, content_type: $first_ct}
     }
   }
 }
@@ -226,7 +231,8 @@ export def helpers [] {
       if ($param.content? | is-not-empty) {
         "scalar"
       } else {
-        let t = ($param.schema?.type? | default "string")
+        # normalize-type: OAS 3.1 `type: [array, "null"]` is still an array
+        let t = (spec normalize-type ($param.schema?.type? | default "string"))
         let style = ($param.style? | default "form")
         if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
           let explode = ($param.explode? | default ($style == "form"))

@@ -44,8 +44,11 @@ export def load-spec [source: string, headers: record = {}] {
     let body = (fetch-text $source $headers)
     {data: (parse-spec-text $body $source), source: $source}
   } else {
+    # `open --raw` + parse-spec-text instead of `open`'s extension-driven
+    # parser, so an extension-less spec (or `.txt`) still parses and a
+    # non-spec file fails with the same clear error as the URL path.
     let expanded = ($source | path expand | into string)
-    {data: (open $expanded), source: $expanded}
+    {data: (parse-spec-text (open --raw $expanded) $expanded), source: $expanded}
   }
 }
 
@@ -119,12 +122,16 @@ def json-pointer-lookup [doc: any, ref_path: string]: nothing -> any {
 
 # Look up a $ref target in a nested schemas record (keyed by namespace).
 # Parses the ref path to find the right sub-record, with two fallbacks:
-# (1) search all known namespaces by entity name, and (2) generic JSON Pointer
-# traversal of the full spec document when it's been stashed under `__spec__`
-# (DigitalOcean uses cross-path refs like `#/paths/~1v2~1.../get/parameters/0`
-# to dedupe pagination params; those don't name a schemas-table entity and
-# can only be resolved by walking the original spec).
-# Returns null if not found.
+# (1) for a bare-name ref (no namespace in the path) search all known
+# namespaces by entity name, and (2) generic JSON Pointer traversal of the
+# full spec document when it's been stashed under `__spec__` (DigitalOcean
+# uses cross-path refs like `#/paths/~1v2~1.../get/parameters/0` to dedupe
+# pagination params; those don't name a schemas-table entity and can only be
+# resolved by walking the original spec).
+# Returns null if not found. A well-formed ref whose target is missing is NOT
+# guessed by name across namespaces — that could hand back e.g. the `Error`
+# *response* for a dangling `#/components/schemas/Error` and hide the broken
+# spec behind an `any` type.
 def ref-lookup [ref_path: string, schemas: record] {
   let parts = ($ref_path | split row '/')
   let name = ($parts | last)
@@ -136,20 +143,21 @@ def ref-lookup [ref_path: string, schemas: record] {
   } else {
     null
   }
-  if ($ns in ($schemas | columns)) {
-    let sub = ($schemas | get $ns)
+  if ($ns != null) {
+    let sub = ($schemas | get -o $ns)
     if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
       return ($sub | get $name)
     }
-  }
-  # Fallback 1: search known schemas-table namespaces by entity name. Skip
-  # `__spec__` so we don't accidentally return a top-level spec field that
-  # happens to share a name with the target.
-  for col in ($schemas | columns) {
-    if $col == "__spec__" { continue }
-    let sub = ($schemas | get $col)
-    if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
-      return ($sub | get $name)
+  } else {
+    # Fallback 1 (bare-name ref only): search the schemas-table namespaces by
+    # entity name. Skip `__spec__` so a top-level spec field sharing the name
+    # isn't returned.
+    for col in ($schemas | columns) {
+      if $col == "__spec__" { continue }
+      let sub = ($schemas | get $col)
+      if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
+        return ($sub | get $name)
+      }
     }
   }
   # Fallback 2: generic JSON Pointer traversal of the original spec document.

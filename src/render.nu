@@ -118,10 +118,16 @@ const RESERVED_VARS = [
   where each error try catch not do
   # generated signature flags
   base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept unix_socket
+  # nushell's built-in --help flag: a `--help: string` param parses but is
+  # routed to the help path, so the user can never pass it
+  help
   # generated body-code internal variables. `body` was renamed to `req_body`
   # to free up spec-side `body` fields (GitHub discussion post body, etc.) —
   # the user-facing `--body` flag no longer collides with anything internal.
-  auth base qp full_url req_body extra_headers cookie_str accept_val
+  # `input` and `sock` are bound BEFORE the body/query are assembled, so a
+  # same-named flag would be shadowed and silently dropped; the rest bind
+  # after their flags are consumed but are listed so the set stays complete.
+  input sock auth base qp full_url req_body req_body_wire effective_ct extra_headers cookie_str accept_val mp req
   # nushell builtins that cause issues as variable names
   sort from to get open save into split str
 ]
@@ -319,7 +325,10 @@ export def collect-completers [commands: list] {
   let initial = {completers: {}, mapping: {}, name_counts: {}}
   let final = ($commands | reduce -f $initial {|cmd, state|
     let accept_source = if ($cmd.accept_types | length) > 1 { [{name: "accept", enum: $cmd.accept_types}] } else { [] }
-    let enum_sources = ($cmd.query_params | append $cmd.body_fields
+    # A collapsed body (`--body: record`) declares no per-field flags, so its
+    # fields' enums would only produce completers nothing references.
+    let body_source = if ($cmd.body_collapsed? | default false) { [] } else { $cmd.body_fields }
+    let enum_sources = ($cmd.query_params | append $body_source
       | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
     $enum_sources | reduce -f $state {|q, st|
       if ($q.enum | is-empty) { return $st }
@@ -1064,7 +1073,7 @@ export def build-body-code [cmd: record, config: record] {
   # header/cookie params; fold any static default-headers UNDER them so an
   # op-set value wins on collision (matches the old do-request merge order).
   let req_headers_expr = if ($config.default_headers? | is-not-empty) {
-    let pairs = ($config.default_headers | items {|k, v| $'"($k)": "($v)"' } | str join ", ")
+    let pairs = ($config.default_headers | items {|k, v| $'($k | to nuon): ($v | to nuon)' } | str join ", ")
     $"\({($pairs)} | merge $auth.headers\)"
   } else { '$auth.headers' }
   # ok_codes: the spec's declared success codes; [] falls back to < 400 at runtime.
@@ -1263,13 +1272,7 @@ def render-command [cmd: record, completers: record, mapping: record, config: re
   # Emit @deprecated attributes (must come immediately before export def)
   mut annotations = []
   if $cmd.deprecated {
-    let reason = ($cmd.deprecation_reason? | default null)
-    if ($reason | is-not-empty) {
-      let flat = ($reason | str replace --all "\n" " ")
-      $annotations = ($annotations | append $"@deprecated ($flat | to nuon)")
-    } else {
-      $annotations = ($annotations | append '@deprecated')
-    }
+    $annotations = ($annotations | append '@deprecated')
   }
   for df in $sig_result.deprecated_flags {
     $annotations = ($annotations | append $'@deprecated --flag ($df.flag_name)')
