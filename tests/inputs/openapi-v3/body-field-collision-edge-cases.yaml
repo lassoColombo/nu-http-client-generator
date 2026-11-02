@@ -1,0 +1,67 @@
+openapi: 3.0.3
+info:
+  title: Body Field Collision Edge Cases
+  version: 1.0.0
+  description: >-
+    Body fields whose names collide with each other, or with a query param,
+    once sanitized. Nushell binds a positional and a flag that share a variable
+    name without complaint (the later one wins), and accepts two positionals
+    with the same name, so every clash has to be resolved by the generator.
+servers:
+  - url: https://api.example.com
+paths:
+  # `user_id` (required -> positional `user_id`) and `userId` (optional ->
+  # flag `--user-id`, which would also bind `$user_id`): the second takes
+  # `-body`.
+  /mixed:
+    post:
+      operationId: mixedCase
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: {type: string}
+                userId: {type: string}
+      responses:
+        '200': {description: ok}
+  # Both required: only the first can be the `user_id` positional; the second
+  # must become a flag.
+  /both-required:
+    post:
+      operationId: bothRequired
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, userId]
+              properties:
+                user_id: {type: string}
+                userId: {type: string}
+      responses:
+        '200': {description: ok}
+  # A query param and a record-typed body field share a name: the body field
+  # takes `-body`, and its `shape:` doc must stay on the body flag only (the
+  # query flag is a plain string).
+  /shared:
+    post:
+      operationId: sharedName
+      parameters:
+        - name: filter
+          in: query
+          schema: {type: string}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filter:
+                  type: object
+                  properties:
+                    field: {type: string}
+      responses:
+        '200': {description: ok}

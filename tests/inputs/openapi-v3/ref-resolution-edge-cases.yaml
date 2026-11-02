@@ -5,7 +5,9 @@ info:
   description: >-
     Synthetic spec exercising $ref resolution: self-referential (circular)
     schemas must terminate, multi-hop $ref chains collapse, allOf with a $ref
-    base merges, and shared #/components/parameters refs resolve.
+    base merges, shared #/components/parameters refs resolve, and a JSON
+    Pointer into a schema resolves to that property rather than to a
+    top-level schema sharing the last segment's name.
 servers:
   - url: https://api.example.com
 components:
@@ -33,6 +35,13 @@ components:
       properties:
         name: {type: string}
         count: {type: integer}
+    # Decoy: shares its name with `Pet.properties.status`. The pointer
+    # `#/components/schemas/Pet/properties/status` must NOT land here.
+    status: {type: string, enum: [decoy]}
+    Pet:
+      type: object
+      properties:
+        status: {type: string, enum: [available, sold]}
 paths:
   # Body is a self-referential schema -> generation must terminate.
   /trees:
@@ -68,5 +77,15 @@ paths:
         content:
           application/json:
             schema: {$ref: '#/components/schemas/AliasA'}
+      responses:
+        '200': {description: ok}
+  # Query param whose schema is a pointer INTO a schema.
+  /pets:
+    get:
+      operationId: listPets
+      parameters:
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/Pet/properties/status'}
       responses:
         '200': {description: ok}

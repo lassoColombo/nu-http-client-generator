@@ -89,39 +89,20 @@ def get-base-url-impl [spec_data: record] {
   }
 }
 
-def get-body-info-impl [op: record, schemas: record] {
+def get-body-info-impl [op: record, doc: record] {
   let request_body = $op.requestBody?
   if ($request_body | is-empty) {
     {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
   } else {
-    let rb = (spec resolve-ref $request_body $schemas)
-    let content = ($rb.content? | default {})
-    let ct_order = $spec.CT_PRIORITY
-    mut found_ct: any = null
-    mut found_schema = {}
-    for ct in $ct_order {
-      if ($found_ct == null) {
-        let ct_content = ($content | get -o $ct)
-        if ($ct_content | is-not-empty) {
-          $found_ct = $ct
-          let s = $ct_content.schema?
-          if ($s | is-not-empty) {
-            $found_schema = (spec resolve-ref $s $schemas)
-          }
-        }
-      }
-    }
-    if ($found_ct != null) {
-      {has_body: true, body_schema: $found_schema, content_type: $found_ct}
-    } else {
-      # No priority media type (text/plain, text/xml, application/vnd.X+json,
-      # …): take the first declared one and its schema, so model can still
-      # derive `body_scalar_type` for a typed `--body` flag.
-      let first_ct = ($content | columns | first | default $spec.CT_JSON)
-      let s = ($content | get -o $first_ct | default {} | get -o schema)
-      let schema = if ($s | is-not-empty) { spec resolve-ref $s $schemas } else { {} }
-      {has_body: true, body_schema: $schema, content_type: $first_ct}
-    }
+    let content = ((spec resolve-ref $request_body $doc).content? | default {})
+    # Prefer a media type the client can encode; with none declared (text/plain,
+    # text/xml, application/vnd.X+json, …) take the first one and its schema, so
+    # model can still derive `body_scalar_type` for a typed `--body` flag.
+    let preferred = ($spec.CT_PRIORITY | where {|ct| $content | get -o $ct | is-not-empty } | get -o 0)
+    let ct = ($preferred | default ($content | columns | get -o 0 | default $spec.CT_JSON))
+    let s = ($content | get -o $ct | default {} | get -o schema)
+    let schema = if ($s | is-not-empty) { spec resolve-ref $s $doc } else { {} }
+    {has_body: true, body_schema: $schema, content_type: $ct}
   }
 }
 
@@ -134,17 +115,7 @@ def get-response-content-types-impl [op: record] {
   } | flatten | uniq | if ($in | is-empty) { [$spec.CT_JSON] } else { $in }
 }
 
-# Explicit success status codes (2xx/3xx numerics) declared by the operation.
-# Ignores `default`, `2XX`-style wildcards, and documented error codes — none
-# enumerate a concrete acceptable set, so those fall callers back to `< 400`.
-def get-success-codes-impl [op: record]: nothing -> list<int> {
-  $op.responses? | default {} | columns
-    | where {|c| $c =~ '^[23][0-9][0-9]$' }
-    | each {|c| $c | into int }
-    | sort
-}
-
-def get-response-type-impl [op: record, spec_data: record, schemas: record] {
+def get-response-type-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   mut found_schema: any = null
   for code in $spec.RESPONSE_CODE_PRIORITY {
@@ -154,9 +125,9 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
         let content = ($resp.content? | default {})
         # Prefer application/json's schema; if this response has no JSON media
         # (e.g. text/plain, application/xml, a vendor +json variant), fall back
-        # to the first media type that declares a schema. Issue 52 follow-up:
-        # without this, a non-JSON scalar response (`text/plain` `{type: string}`)
-        # derived `any` and lost the typed `oneof<…>` output annotation.
+        # to the first media type that declares a schema. Without this, a
+        # non-JSON scalar response (`text/plain` `{type: string}`) derives `any`
+        # and loses the typed `oneof<…>` output annotation.
         let json_schema = ($content | get -o "application/json" | default {} | get -o schema)
         let s = if ($json_schema | is-not-empty) {
           $json_schema
@@ -169,7 +140,7 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
     }
   }
   if ($found_schema == null) { return "any" }
-  spec schema-to-type-descriptor $found_schema $schemas
+  spec schema-to-type-descriptor $found_schema $doc
 }
 
 def get-auth-schemes-impl [spec_data: record] {
@@ -192,14 +163,6 @@ def get-auth-schemes-impl [spec_data: record] {
 
 export def helpers [] {
   {
-    get-schemas: {|spec|
-      {
-        schemas: ($spec.components?.schemas? | default {})
-        parameters: ($spec.components?.parameters? | default {})
-        responses: ($spec.components?.responses? | default {})
-        requestBodies: ($spec.components?.requestBodies? | default {})
-      }
-    }
     get-base-url: {|spec| get-base-url-impl $spec }
     get-all-urls: {|spec| collect-oa3-urls $spec }
     resolve-server-url: {|server| resolve-server-url $server }
@@ -245,10 +208,9 @@ export def helpers [] {
         }
       }
     }
-    get-body-info: {|op, schemas, _spec| get-body-info-impl $op $schemas }
-    get-response-content-types: {|op, _spec| get-response-content-types-impl $op }
-    get-success-codes: {|op| get-success-codes-impl $op }
-    get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
+    get-body-info: {|op, doc| get-body-info-impl $op $doc }
+    get-response-content-types: {|op, _doc| get-response-content-types-impl $op }
+    get-response-type: {|op, doc| get-response-type-impl $op $doc }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }
 }

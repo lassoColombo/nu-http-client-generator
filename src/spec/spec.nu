@@ -120,119 +120,39 @@ def json-pointer-lookup [doc: any, ref_path: string]: nothing -> any {
   $current
 }
 
-# Look up a $ref target in a nested schemas record (keyed by namespace).
-# Parses the ref path to find the right sub-record, with two fallbacks:
-# (1) for a bare-name ref (no namespace in the path) search all known
-# namespaces by entity name, and (2) generic JSON Pointer traversal of the
-# full spec document when it's been stashed under `__spec__` (DigitalOcean
-# uses cross-path refs like `#/paths/~1v2~1.../get/parameters/0` to dedupe
-# pagination params; those don't name a schemas-table entity and can only be
-# resolved by walking the original spec).
-# Returns null if not found. A well-formed ref whose target is missing is NOT
-# guessed by name across namespaces — that could hand back e.g. the `Error`
-# *response* for a dangling `#/components/schemas/Error` and hide the broken
-# spec behind an `any` type.
-def ref-lookup [ref_path: string, schemas: record] {
-  let parts = ($ref_path | split row '/')
-  let name = ($parts | last)
-  # OA3: #/components/{ns}/{name} (4 parts) — Swagger 2: #/{ns}/{name} (3 parts)
-  let ns = if ($parts | length) >= 4 {
-    $parts | get 2
-  } else if ($parts | length) == 3 {
-    $parts | get 1
-  } else {
-    null
-  }
-  if ($ns != null) {
-    let sub = ($schemas | get -o $ns)
-    if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
-      return ($sub | get $name)
-    }
-  } else {
-    # Fallback 1 (bare-name ref only): search the schemas-table namespaces by
-    # entity name. Skip `__spec__` so a top-level spec field sharing the name
-    # isn't returned.
-    for col in ($schemas | columns) {
-      if $col == "__spec__" { continue }
-      let sub = ($schemas | get $col)
-      if (($sub | describe) | str starts-with "record") and ($name in ($sub | columns)) {
-        return ($sub | get $name)
-      }
-    }
-  }
-  # Fallback 2: generic JSON Pointer traversal of the original spec document.
-  let spec_doc = ($schemas.__spec__? | default null)
-  if $spec_doc != null {
-    let target = (json-pointer-lookup $spec_doc $ref_path)
-    if $target != null { return $target }
-  }
-  null
+# Where a `$ref` points in the spec document. JSON Pointer refs
+# (`#/components/schemas/Pet`, `#/definitions/Pet`, DigitalOcean's cross-path
+# `#/paths/~1v2~1x/get/parameters/0`, a pointer into a schema such as
+# `#/components/schemas/Pet/properties/status`) are all walked generically. A
+# bare name (`Pet`, the pre-pointer Swagger style) is looked up in the schema
+# and component tables. Returns null when nothing is there.
+def ref-target [ref_path: string, doc: record]: nothing -> any {
+  if ($ref_path | str starts-with "#") { return (json-pointer-lookup $doc $ref_path) }
+  [
+    $doc.components?.schemas? $doc.components?.parameters? $doc.components?.responses? $doc.components?.requestBodies?
+    $doc.definitions? $doc.parameters? $doc.responses?
+  ] | where {|t| ($t | describe) | str starts-with "record" } | each {|t| $t | get -o $ref_path } | compact | get -o 0
 }
 
-# Pre-resolve $ref chains in a raw schemas record. Each entry has any top-
-# level $ref chain (A → B → C) collapsed to the final concrete value, but
-# inner $refs inside that value are LEFT IN PLACE. Callers re-invoke
-# resolve-ref to resolve those inner refs when they actually need them.
-#
-# Why shallow rather than deep: Nushell has no shared object references —
-# every "share" is a copy. Deep-inlining a heavily-shared schema graph
-# (Confluence, GitLab, GitHub) blows up memory by the fan-out factor.
-# Shallow resolution keeps the table size O(sum of schema sizes) and
-# pushes resolution work to where it's actually needed.
-#
-# Cycles: a {$ref} that points back into its own chain is returned as-is
-# ("first wins" semantics, same as the previous implementation).
-export def resolve-schemas [raw_schemas: record] {
-  mut output = {}
-  for ns in ($raw_schemas | columns) {
-    let sub = ($raw_schemas | get $ns)
-    if not (($sub | describe) | str starts-with "record") {
-      $output = ($output | upsert $ns $sub)
-      continue
-    }
-    mut resolved_sub = {}
-    for name in ($sub | columns) {
-      let val = ($sub | get $name)
-      let collapsed = (collapse-ref-chain $val $raw_schemas [])
-      $resolved_sub = ($resolved_sub | upsert $name $collapsed)
-    }
-    $output = ($output | upsert $ns $resolved_sub)
+# Resolve a `$ref` against the spec document. Follows chains (A → B → C) to
+# the first non-ref value; the result's OWN nested $refs are left in place and
+# callers re-resolve as they descend. Shallow on purpose: Nushell has no shared
+# object references, so deep-inlining a heavily-shared schema graph (Confluence,
+# GitLab, GitHub) blows up memory by the fan-out factor. A non-ref value, a
+# dangling ref, or a cycle comes back unchanged.
+export def resolve-ref [val: any, doc: record] {
+  mut current = $val
+  mut visited = []
+  loop {
+    if not (($current | describe) | str starts-with "record") { return $current }
+    let ref_path = ($current | get -o "$ref")
+    if (($ref_path | describe) != "string") { return $current }
+    if ($ref_path in $visited) { return $current }
+    let target = (ref-target $ref_path $doc)
+    if ($target == null) { return $current }
+    $visited = ($visited | append $ref_path)
+    $current = $target
   }
-  $output
-}
-
-# Internal: follow a $ref chain to the first non-$ref value (or to a cycle).
-# Does NOT descend into the resolved value's structure.
-def collapse-ref-chain [val: any, schemas: record, visited: list<string>] {
-  let t = ($val | describe)
-  if not ($t | str starts-with "record") { return $val }
-  if not ("$ref" in ($val | columns)) { return $val }
-  let ref_path = ($val | get "$ref")
-  if not (($ref_path | describe) == "string") { return $val }
-  if ($ref_path in $visited) { return $val }
-  let target = (ref-lookup $ref_path $schemas)
-  if ($target == null) { return $val }
-  collapse-ref-chain $target $schemas ($visited | append $ref_path)
-}
-
-# Resolve a $ref pointer against a (pre-resolved) schemas table.
-#
-# Behaviour is intentionally SHALLOW — only the top-level $ref is followed:
-# - If $val is a {$ref: X} record, return ref-lookup of X. The returned
-#   value is the target schema with its OWN $refs still inline; the caller
-#   must re-invoke resolve-ref on any sub-field it wants resolved.
-# - Otherwise return $val unchanged.
-#
-# Combined with `resolve-schemas`, ref chains (A → B → C) collapse
-# to C in a single lookup, and each ref resolution is O(1).
-export def resolve-ref [val: any, schemas: record] {
-  let t = ($val | describe)
-  if not ($t | str starts-with "record") { return $val }
-  if not ("$ref" in ($val | columns)) { return $val }
-  let ref_path = ($val | get "$ref")
-  if not (($ref_path | describe) == "string") { return $val }
-  let resolved = (ref-lookup $ref_path $schemas)
-  if ($resolved == null) { $val } else { $resolved }
 }
 
 # Clean enum values: strip a matching pair of outer ASCII quotes once.
@@ -310,7 +230,7 @@ export def get-default-auth [spec: record, auth_schemes: list] {
   }
 }
 
-# D-7 (issue 51): the GLOBAL (top-level) AND-form security set, mirroring the
+# The GLOBAL (top-level) AND-form security set, mirroring the
 # per-op detection in `extract-op-metadata`. When the spec's top-level
 # `security` is a single requirement object listing >1 scheme (e.g. VTEX's
 # `[{appKey: [], appToken: []}]`), EVERY op that does not override `security`
@@ -329,6 +249,16 @@ export def get-default-auth-required [spec: record, auth_schemes: list] {
   []
 }
 
+# Explicit success status codes (2xx/3xx numerics) declared by the operation.
+# Ignores `default`, `2XX`-style wildcards, and documented error codes — none
+# enumerate a concrete acceptable set, so those fall callers back to `< 400`.
+export def get-success-codes [op: record]: nothing -> list<int> {
+  $op.responses? | default {} | columns
+    | where {|c| $c =~ '^[23][0-9][0-9]$' }
+    | each {|c| $c | into int }
+    | sort
+}
+
 # Walk an OpenAPI schema and produce a structured *type descriptor* (NOT a
 # Nushell type string). Recursively builds records/lists. Depth-limited to
 # avoid huge types. render's `nu-type-string` turns a descriptor into emitted
@@ -341,7 +271,7 @@ export def get-default-auth-required [spec: record, auth_schemes: list] {
 #   scalar leaf : "any" | "string" | "int" | "float" | "bool" | "record" | "list"
 #   list        : {list: <descriptor>}
 #   record      : {record: [{name: string, type: <descriptor>}, ...]}
-export def schema-to-type-descriptor [schema: any, schemas: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
+export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
   if ($schema == null) or (not (($schema | describe) | str starts-with "record")) { return "any" }
 
   # resolve $ref
@@ -349,21 +279,24 @@ export def schema-to-type-descriptor [schema: any, schemas: record, --depth: int
     let ref_path = ($schema | get "$ref")
     if not (($ref_path | describe) == "string") { return "any" }
     if ($ref_path in $visited) { return "any" }  # circular ref
-    let resolved = (ref-lookup $ref_path $schemas)
+    let resolved = (ref-target $ref_path $doc)
     if ($resolved != null) {
-      return (schema-to-type-descriptor $resolved $schemas --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
+      return (schema-to-type-descriptor $resolved $doc --depth $depth --max-depth $max_depth --visited ($visited | append $ref_path))
     }
     return "any"
   }
 
-  # if we're past max depth, use simple types
   let t = (normalize-type ($schema.type? | default null))
-  let has_props = ($schema.properties? | is-not-empty)
-  let has_allof = ($schema.allOf? | is-not-empty)
+  # Own properties merged with those of every allOf member (an untyped schema
+  # with allOf is a record too; `type: object` alongside allOf still inherits).
+  let props = ($schema.allOf? | default [] | each {|sub| resolve-ref $sub $doc }
+    | where {|sub| ($sub | describe) | str starts-with "record" }
+    | reduce --fold ($schema.properties? | default {}) {|sub, acc| $acc | merge ($sub.properties? | default {}) })
+  let has_props = ($props | is-not-empty)
   let has_items = ($schema.items? | is-not-empty)
 
   if $depth >= $max_depth {
-    # simplified: no recursion into fields — collapse to a bare leaf
+    # past max depth: no recursion into fields — collapse to a bare leaf
     return (match $t {
       "array" => "list"
       "object" => "record"
@@ -372,47 +305,28 @@ export def schema-to-type-descriptor [schema: any, schemas: record, --depth: int
       "number" => "float"
       "boolean" => "bool"
       _ => {
-        if $has_props or $has_allof { "record" } else if $has_items { "list" } else { "any" }
+        if $has_props or ($schema.allOf? | is-not-empty) { "record" } else if $has_items { "list" } else { "any" }
       }
     })
   }
 
+  let record_of = {||
+    let fields = (build-td-fields $props $doc ($depth + 1) $max_depth $visited)
+    if ($fields | is-empty) { "record" } else { {record: $fields} }
+  }
+  let list_of = {||
+    {list: (schema-to-type-descriptor ($schema.items? | default {}) $doc --depth ($depth + 1) --max-depth $max_depth --visited $visited)}
+  }
   match $t {
-    "array" => {
-      let items_schema = ($schema.items? | default {})
-      {list: (schema-to-type-descriptor $items_schema $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)}
-    }
-    "object" => {
-      if $has_props {
-        let fields = (build-td-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
-        if ($fields | is-empty) { "record" } else { {record: $fields} }
-      } else { "record" }
-    }
+    "array" => (do $list_of)
+    "object" => (do $record_of)
     "string" => "string"
     "integer" => "int"
     "number" => "float"
     "boolean" => "bool"
     _ => {
       # no explicit type — infer from structure
-      if $has_allof {
-        # merge allOf properties
-        mut merged_props = ($schema.properties? | default {})
-        for sub in ($schema.allOf? | default []) {
-          let resolved = (resolve-ref $sub $schemas)
-          if (($resolved | describe) | str starts-with "record") {
-            $merged_props = ($merged_props | merge ($resolved.properties? | default {}))
-          }
-        }
-        if ($merged_props | is-not-empty) {
-          let fields = (build-td-fields $merged_props $schemas ($depth + 1) $max_depth $visited)
-          if ($fields | is-empty) { "record" } else { {record: $fields} }
-        } else { "record" }
-      } else if $has_props {
-        let fields = (build-td-fields ($schema.properties? | default {}) $schemas ($depth + 1) $max_depth $visited)
-        if ($fields | is-empty) { "record" } else { {record: $fields} }
-      } else if $has_items {
-        {list: (schema-to-type-descriptor ($schema.items? | default {}) $schemas --depth ($depth + 1) --max-depth $max_depth --visited $visited)}
-      } else { "any" }
+      if $has_props or ($schema.allOf? | is-not-empty) { do $record_of } else if $has_items { do $list_of } else { "any" }
     }
   }
 }
@@ -425,9 +339,9 @@ export def schema-to-type-descriptor [schema: any, schemas: record, --depth: int
 # records produce long-but-valid signatures (terminals wrap; parsers don't fix
 # bad syntax). Insertion order is preserved so the rendered field order is
 # stable.
-def build-td-fields [properties: record, schemas: record, depth: int, max_depth: int, visited: list<string>] {
+def build-td-fields [properties: record, doc: record, depth: int, max_depth: int, visited: list<string>] {
   $properties | items {|name, prop_schema|
-    {name: $name, type: (schema-to-type-descriptor $prop_schema $schemas --depth $depth --max-depth $max_depth --visited $visited)}
+    {name: $name, type: (schema-to-type-descriptor $prop_schema $doc --depth $depth --max-depth $max_depth --visited $visited)}
   }
 }
 

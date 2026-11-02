@@ -32,6 +32,23 @@ paths:
           required: false
           schema:
             type: string
+        # Common param names that nushell accepts as flags unchanged: builtin
+        # command names and keywords are not reserved variable names.
+        - name: sort
+          in: query
+          schema: {type: string}
+        - name: from
+          in: query
+          schema: {type: string}
+        - name: to
+          in: query
+          schema: {type: string}
+        - name: if
+          in: query
+          schema: {type: string}
+        - name: "null"
+          in: query
+          schema: {type: string}
       responses:
         '200':
           description: OK

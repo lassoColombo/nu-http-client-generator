@@ -131,13 +131,18 @@ export def "widgets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-name: string
+  --sort: string
+  --from: string
+  --to: string
+  --if: string
+  --null: string
   --notion-version: string
   --x-request-id: string
   --x-custom-header: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "{field-name}" $field_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "{field-name}" $field_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "if" $if "scalar") (serialize-qp "null" $null "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/widgets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +151,7 @@ export def "widgets-list" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"{field-name}": $field_name} | compact)
+    query: ({"{field-name}": $field_name, "sort": $sort, "from": $from, "to": $to, "if": $if, "null": $null} | compact)
     headers: ({"X-Test": "value"} | merge $auth.headers)
     body: null
     content_type: null

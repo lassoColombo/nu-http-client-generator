@@ -69,3 +69,35 @@ paths:
       responses:
         '200':
           description: ok
+  # Path params named like the body-code internals (`let input = $in`,
+  # `let base = ...`) get `_arg`: without it the positional is shadowed before
+  # the URL is built — `input` fails as "must be non-empty" and `base` would
+  # silently substitute the base URL.
+  /jobs/{input}/{base}:
+    post:
+      operationId: runJob
+      tags: [jobs]
+      parameters:
+        - name: input
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: base
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sort:
+                  type: string
+                str:
+                  type: string
+      responses:
+        '200':
+          description: ok

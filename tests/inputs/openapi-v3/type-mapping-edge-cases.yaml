@@ -76,3 +76,19 @@ paths:
           content:
             application/json:
               schema: {type: object}
+  # `type: object` alongside `allOf`: the inherited fields belong in the
+  # response record type too, not only when `type` is absent.
+  /profiles:
+    get:
+      operationId: getProfile
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                allOf:
+                  - {$ref: '#/components/schemas/Address'}
+                properties:
+                  name: {type: string}

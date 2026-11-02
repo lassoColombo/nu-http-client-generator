@@ -265,3 +265,45 @@ export def "create-job" [
   if $dry_run { return ({dry_run: true} | merge $req) }
   send-post $req $req_body $insecure $raw $allow_errors $full [200]
 }
+
+# POST /jobs/{input}/{base}
+#
+# operationId: runJob
+export def "run-job" [
+  input_arg: string
+  base_arg: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --sort: string
+  --str: string
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  if ($input_arg | is-empty) { error make --unspanned { msg: "path parameter 'input' must be non-empty" } }
+  if ($base_arg | is-empty) { error make --unspanned { msg: "path parameter 'base' must be non-empty" } }
+  let full_url = (build-url $base ({input_arg: (encode-path-segment $input_arg), base_arg: (encode-path-segment $base_arg)} | format pattern "/jobs/{input_arg}/{base_arg}") $auth.query)
+  let req_body = {"sort": $sort, "str": $str} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+}

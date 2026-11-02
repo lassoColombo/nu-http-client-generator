@@ -33,28 +33,34 @@ def check-spec-generatable [loaded: record] {
   error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
 }
 
-# Shared pipeline: parse spec, resolve refs, extract metadata, build & dedupe commands.
-# Returns {commands, auth_schemes, base_url, all_urls}.
-def process-spec [spec_data: record, config: record] {
-  let info = (spec detect $spec_data)
+# Shared pipeline: detect the format, extract auth metadata, build the
+# command model. Returns {commands, auth_schemes, base_url, all_urls}.
+def process-spec [doc: record, config: record] {
+  let info = (spec detect $doc)
   let h = match $info.schema {
     "openapi" => (oa3 helpers)
     "swagger" => (swagger2 helpers)
   }
-  let raw_schemas = (do $h.get-schemas $spec_data)
-  # Stash the full spec under `__spec__` so cross-path refs (e.g. DigitalOcean's
-  # `#/paths/~1v2~1.../get/parameters/0`) can be resolved via generic JSON
-  # Pointer traversal — those refs don't name a schemas-table entity.
-  let schemas = ((spec resolve-schemas $raw_schemas) | upsert __spec__ $spec_data)
-  let auth_schemes = (do $h.get-auth-schemes $spec_data)
-  let default_auth = (spec get-default-auth $spec_data $auth_schemes)
-  let default_auth_required = (spec get-default-auth-required $spec_data $auth_schemes)
-  let commands = (model command-list $spec_data $schemas $h $auth_schemes $default_auth $default_auth_required $config)
+  let auth_schemes = (do $h.get-auth-schemes $doc)
+  let default_auth = (spec get-default-auth $doc $auth_schemes)
+  let default_auth_required = (spec get-default-auth-required $doc $auth_schemes)
   {
-    commands: $commands
+    commands: (model command-list $doc $h $auth_schemes $default_auth $default_auth_required $config)
     auth_schemes: $auth_schemes
-    base_url: (do $h.get-base-url $spec_data)
-    all_urls: (do $h.get-all-urls $spec_data)
+    base_url: (do $h.get-base-url $doc)
+    all_urls: (do $h.get-all-urls $doc)
+  }
+}
+
+# The config keys model reads: operation filters and the naming override.
+# Shared by `main` and `preview`.
+def filter-config [tags: any, prefixes: any, methods: any, exclude_deprecated: bool, name_fn: any] {
+  {
+    filter_tags: ($tags | default [])
+    filter_prefixes: ($prefixes | default [])
+    filter_methods: ($methods | default [] | each { $in | str lowercase })
+    exclude_deprecated: $exclude_deprecated
+    name_fn: $name_fn
   }
 }
 
@@ -82,12 +88,7 @@ export def main [
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
   check-spec-generatable $loaded
-  let config = {
-    filter_tags: ($tags | default [])
-    filter_prefixes: ($prefixes | default [])
-    filter_methods: ($methods | default [] | each { $in | str lowercase })
-    exclude_deprecated: $exclude_deprecated
-    name_fn: $name_fn
+  let config = (filter-config $tags $prefixes $methods $exclude_deprecated $name_fn) | merge {
     token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
     default_timeout: $default_timeout
     default_headers: ($default_headers | default {})
@@ -108,8 +109,7 @@ export def main [
     log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to generate"
     return null
   }
-  let extra_urls = (($autocompletion_base_urls | default []) | append $result.all_urls)
-  let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $extra_urls $result.auth_schemes $config)
+  let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $result.all_urls $result.auth_schemes $config)
   let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
   $output_content | save --force $out_path
 }
@@ -126,14 +126,7 @@ export def preview [
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
   check-spec-generatable $loaded
-  let config = {
-    filter_tags: ($tags | default [])
-    filter_prefixes: ($prefixes | default [])
-    filter_methods: ($methods | default [] | each { $in | str lowercase })
-    exclude_deprecated: $exclude_deprecated
-    name_fn: $name_fn
-    body_threshold: 0
-  }
+  let config = (filter-config $tags $prefixes $methods $exclude_deprecated $name_fn) | merge {body_threshold: 0}
 
   let result = (process-spec $loaded.data $config)
   if ($result.commands | is-empty) {

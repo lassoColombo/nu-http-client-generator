@@ -15,6 +15,8 @@ use std/testing *
 use ../mod.nu
 
 const SPEC = "tests/inputs/openapi-v3/path-shadowing-edge-cases.yaml"
+const BODY_SPEC = "tests/inputs/openapi-v3/body-field-collision-edge-cases.yaml"
+const RESERVED_SPEC = "tests/inputs/openapi-v3/reserved-name-edge-cases.yaml"
 
 def run-cmd [client: string, cmd: string]: nothing -> any {
     let result = ^nu --no-config-file -c $"use '($client)' *; ($cmd) | to json -r" | complete
@@ -29,7 +31,11 @@ def setup []: nothing -> record {
     let temp = mktemp --directory
     let client = ($temp | path join "shadowing.nu")
     mod $SPEC -o $client
-    { temp: $temp, client: $client }
+    let body_client = ($temp | path join "collision.nu")
+    mod $BODY_SPEC -o $body_client
+    let reserved_client = ($temp | path join "reserved.nu")
+    mod $RESERVED_SPEC -o $reserved_client
+    { temp: $temp, client: $client, body_client: $body_client, reserved_client: $reserved_client }
 }
 
 @after-all
@@ -71,8 +77,24 @@ def "path, query and body can all carry the same name" [] {
     assert equal $r.body {id: 9, text: "hello"}
 }
 
-# The invariant itself, over every golden input: no generated command declares
-# a positional and a flag that bind the same variable.
+@test
+def "two body fields that sanitize alike bind two variables" [] {
+    let r = (run-cmd $in.body_client 'mixed-case A --user-id-body B --dry-run')
+    assert equal $r.body {user_id: "A", userId: "B"}
+    let r = (run-cmd $in.body_client 'both-required A --user-id-body B --dry-run')
+    assert equal $r.body {user_id: "A", userId: "B"}
+}
+
+@test
+def "path params named like body-code internals are not shadowed" [] {
+    let r = (run-cmd $in.reserved_client 'run-job IN BASE --sort s --dry-run')
+    assert equal $r.url "https://example.com/api/jobs/IN/BASE"
+    assert equal $r.body {sort: "s"}
+}
+
+# The invariant itself, over every golden input: no generated command binds
+# the same variable twice, whether through two positionals, two flags, or a
+# positional and a flag.
 @test
 def "no golden command binds a variable twice" [] {
     let clashes = (glob tests/expected/**/baseline.nu | each {|f|
@@ -80,7 +102,7 @@ def "no golden command binds a variable twice" [] {
             let sig = ($blk | take while {|l| not ($l | str starts-with ']') })
             let positionals = ($sig | parse --regex '^  (?<n>[a-z_][a-z0-9_]*): ' | get n)
             let flags = ($sig | parse --regex '^  --(?<n>[a-z0-9-]+)' | get n | str replace --all '-' '_')
-            $positionals | where $it in $flags | each {|v| $"($f | path relative-to $env.PWD): `$($v)`" }
+            $positionals | append $flags | uniq --count | where count > 1 | each {|v| $"($f | path relative-to $env.PWD): `$($v.value)`" }
         } | flatten
     } | flatten)
     assert ($clashes | is-empty) $"commands binding a variable twice:\n($clashes | str join (char nl))"

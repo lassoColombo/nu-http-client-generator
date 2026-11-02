@@ -6,11 +6,11 @@ use ../log.nu
 
 # ── Private helpers ───────────────────────────────────────────────
 
-# Issue 40.A: Azure data-plane specs use the `x-ms-parameterized-host` vendor
+# Azure data-plane specs use the `x-ms-parameterized-host` vendor
 # extension to template the host (e.g. `{searchServiceName}.{searchDnsSuffix}`)
 # and set `host: "azure.local"` as a sentinel. Honor the extension when present;
 # substitute placeholders whose referenced parameter has a `default:`, and leave
-# unresolved placeholders in place (mirrors cycle 16.A's OAS3 resolve-server-url
+# unresolved placeholders in place (mirrors the OAS3 resolve-server-url
 # behavior — `url parse` will then fail loudly on the unsubstituted `{var}`
 # instead of silently dispatching to azure.local).
 def resolve-parameterized-host [spec_data: record] {
@@ -50,19 +50,8 @@ def resolve-parameterized-host [spec_data: record] {
   }
 }
 
-def get-base-url-impl [spec_data: record] {
-  let parameterized = (resolve-parameterized-host $spec_data)
-  if ($parameterized != null) {
-    let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
-    return ($"($parameterized)($base_path)" | str trim --right --char '/')
-  }
-  let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
-  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
-  let raw_schemes = ($spec_data.schemes? | default [])
-  let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
-  {scheme: $scheme, host: $host, path: $base_path} | url join | str trim --right --char '/'
-}
-
+# One URL per declared scheme (https when none); a parameterized host yields
+# a single URL. The first one is the base URL.
 def get-all-urls-impl [spec_data: record] {
   let parameterized = (resolve-parameterized-host $spec_data)
   if ($parameterized != null) {
@@ -76,7 +65,7 @@ def get-all-urls-impl [spec_data: record] {
   $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }
 }
 
-# Issue 33.B: Swagger-2 `basePath` may contain `{name}` template variables
+# Swagger-2 `basePath` may contain `{name}` template variables
 # (e.g. `/v2.0/{apikey}`) that are never declared as path parameters. Leaving
 # them in the path means `url parse` percent-encodes the braces (`%7B…%7D`),
 # producing guaranteed-404 URLs. Drop unresolved templates entirely; the user
@@ -88,11 +77,11 @@ def strip-base-path-template [base_path: string]: nothing -> string {
   $cleaned
 }
 
-def get-body-info-impl [op: record, schemas: record, spec_data: record] {
+def get-body-info-impl [op: record, doc: record] {
   # Resolve $ref-only param entries (e.g. Kubernetes spec shares body/query
   # params under #/parameters/...). Without this the body/form filter below
   # never finds them and the op is silently classified as no-body.
-  let params = ($op.parameters? | default []) | each {|p| spec resolve-ref $p $schemas }
+  let params = ($op.parameters? | default []) | each {|p| spec resolve-ref $p $doc }
   let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
   if ($form_params | is-not-empty) {
     let has_file = ($form_params | any {|p| ($p.type? | default "") == "file" })
@@ -111,12 +100,12 @@ def get-body-info-impl [op: record, schemas: record, spec_data: record] {
     if ($body_param | is-empty) {
       {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
     } else {
-      # Issue 28.A: honour Swagger-2 `consumes` (op-level, then doc-level).
+      # Honour Swagger-2 `consumes` (op-level, then doc-level).
       # Picker: prefer application/json (since `*/*` accepts it and most specs
       # list it explicitly), then application/merge-patch+json (safest k8s
       # PATCH default), then first non-wildcard. Wildcard `*/*` collapses to
       # application/json because `http patch` rejects `*/*` as a CT header.
-      let consumes_global = ($spec_data.consumes? | default [])
+      let consumes_global = ($doc.consumes? | default [])
       let consumes_op = ($op.consumes? | default $consumes_global)
       let picked_ct = (
         if ($consumes_op | is-empty) or ($spec.CT_JSON in $consumes_op) or ("*/*" in $consumes_op) {
@@ -129,7 +118,7 @@ def get-body-info-impl [op: record, schemas: record, spec_data: record] {
       )
       let s = $body_param.schema?
       if ($s | is-not-empty) {
-        {has_body: true, body_schema: (spec resolve-ref $s $schemas), content_type: $picked_ct}
+        {has_body: true, body_schema: (spec resolve-ref $s $doc), content_type: $picked_ct}
       } else {
         {has_body: true, body_schema: {}, content_type: $picked_ct}
       }
@@ -137,14 +126,14 @@ def get-body-info-impl [op: record, schemas: record, spec_data: record] {
   }
 }
 
-def get-response-content-types-impl [op: record, spec_data: record] {
+def get-response-content-types-impl [op: record, doc: record] {
   let op_produces = ($op.produces? | default [])
-  let global_produces = ($spec_data.produces? | default [])
+  let global_produces = ($doc.produces? | default [])
   let types = if ($op_produces | is-not-empty) { $op_produces } else { $global_produces }
   if ($types | is-empty) { [$spec.CT_JSON] } else { $types | uniq }
 }
 
-def get-response-type-impl [op: record, spec_data: record, schemas: record] {
+def get-response-type-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   mut found_schema: any = null
   for code in $spec.RESPONSE_CODE_PRIORITY {
@@ -157,17 +146,7 @@ def get-response-type-impl [op: record, spec_data: record, schemas: record] {
     }
   }
   if ($found_schema == null) { return "any" }
-  spec schema-to-type-descriptor $found_schema $schemas
-}
-
-# Explicit success status codes (2xx/3xx numerics) declared by the operation.
-# Ignores `default` and documented error codes — neither enumerates a concrete
-# acceptable set, so those fall callers back to `< 400`.
-def get-success-codes-impl [op: record]: nothing -> list<int> {
-  $op.responses? | default {} | columns
-    | where {|c| $c =~ '^[23][0-9][0-9]$' }
-    | each {|c| $c | into int }
-    | sort
+  spec schema-to-type-descriptor $found_schema $doc
 }
 
 def get-auth-schemes-impl [spec_data: record] {
@@ -189,14 +168,7 @@ def get-auth-schemes-impl [spec_data: record] {
 
 export def helpers [] {
   {
-    get-schemas: {|spec|
-      {
-        definitions: ($spec.definitions? | default {})
-        parameters: ($spec.parameters? | default {})
-        responses: ($spec.responses? | default {})
-      }
-    }
-    get-base-url: {|spec| get-base-url-impl $spec }
+    get-base-url: {|spec| get-all-urls-impl $spec | first }
     get-all-urls: {|spec| get-all-urls-impl $spec }
     resolve-server-url: {|server| $server.url? | default null }
     get-param-type: {|param|
@@ -219,10 +191,9 @@ export def helpers [] {
         match $cf { "csv" => "csv", "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
       }
     }
-    get-body-info: {|op, schemas, spec| get-body-info-impl $op $schemas $spec }
-    get-response-content-types: {|op, spec| get-response-content-types-impl $op $spec }
-    get-success-codes: {|op| get-success-codes-impl $op }
-    get-response-type: {|op, spec, schemas| get-response-type-impl $op $spec $schemas }
+    get-body-info: {|op, doc| get-body-info-impl $op $doc }
+    get-response-content-types: {|op, doc| get-response-content-types-impl $op $doc }
+    get-response-type: {|op, doc| get-response-type-impl $op $doc }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }
 }

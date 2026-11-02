@@ -12,13 +12,13 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "basic" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val)"}, query: "", location: "header"} }
-    "x-jwt-token" => { {scheme: $scheme, headers: {X-JWT-Token: $token_val}, query: "", location: "header"} }
-    "x-static-key" => { {scheme: $scheme, headers: {X-Static-Key: $token_val}, query: "", location: "header"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
+    "x-jwt-token" => { {scheme: $scheme, headers: {"X-JWT-Token": $token_val}, query: "", location: "header"} }
+    "x-static-key" => { {scheme: $scheme, headers: {"X-Static-Key": $token_val}, query: "", location: "header"} }
     "query-api_key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_key")=(encode-path-segment $token_val)", location: "query"} }
-    "x-api-key-a" => { {scheme: $scheme, headers: {X-Api-Key-A: $token_val}, query: "", location: "header"} }
-    "x-api-key-b" => { {scheme: $scheme, headers: {X-Api-Key-B: $token_val}, query: "", location: "header"} }
+    "x-api-key-a" => { {scheme: $scheme, headers: {"X-Api-Key-A": $token_val}, query: "", location: "header"} }
+    "x-api-key-b" => { {scheme: $scheme, headers: {"X-Api-Key-B": $token_val}, query: "", location: "header"} }
     "cookie-brain.sid" => { {scheme: $scheme, headers: {Cookie: $"(encode-path-segment "brain.sid")=(encode-path-segment $token_val)"}, query: "", location: "cookie"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
     "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
