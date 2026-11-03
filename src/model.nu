@@ -87,8 +87,10 @@ def merge-body-props [schema: record, doc: record] {
   let disc_prop = if ($disc != null) { $disc.propertyName } else { null }
   let disc_mapping = if ($disc != null) { $disc.mapping } else { {} }
 
+  # Each variant is resolved and its own allOf folded: the common union shape
+  # is `Cat: allOf: [Pet, {meow}]`, whose fields all live inside the allOf.
   let poly_resolved = (($schema.oneOf? | default ($schema.anyOf? | default []))
-    | each {|v| spec resolve-ref $v $doc }
+    | each {|v| spec merge-all-of (spec resolve-ref $v $doc) $doc }
     | where {($in | describe) | str starts-with "record"})
 
   # Variant properties join in document order; a name the base (or an earlier
@@ -99,10 +101,15 @@ def merge-body-props [schema: record, doc: record] {
     } | compact | reduce -f $acc {|kv, a| $a | insert $kv.col $kv.val }
   })
 
-  # The discriminator property is implicitly required, and its mapping keys
-  # are its enum.
+  # A field is required when the base requires it or when EVERY variant does:
+  # a field only some variants require may be legitimately absent from the
+  # body the caller picks. The discriminator property is implicitly required,
+  # and its mapping keys are its enum.
+  let variant_required = if ($poly_resolved | is-empty) { [] } else {
+    $poly_resolved | each {|v| $v.required? | default [] } | reduce {|r, acc| $acc | where {|n| $n in $r } }
+  }
   let has_disc = ($disc_prop in ($merged_props | columns))
-  let required = if $has_disc { $required_after_allof | append $disc_prop | uniq } else { $required_after_allof }
+  let required = ($required_after_allof | append $variant_required | append (if $has_disc { [$disc_prop] } else { [] }) | uniq)
   let props = if $has_disc and ($disc_mapping | is-not-empty) {
     $merged_props | upsert $disc_prop ($merged_props | get $disc_prop | upsert enum ($disc_mapping | columns))
   } else {
@@ -431,11 +438,16 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   # <record>` auto-encodes correctly. Multipart and form-urlencoded also
   # expand — the renderer has dedicated `build-multipart-body` and
   # `url build-query` codecs for them.
-  # `body_encodable` is the one place this is decided: render reads it to
-  # type the fallback `--body` flag and to choose the pipeline-input merge.
-  let body_encodable = ($content_type | str starts-with "application/json") or ($content_type == $spec.CT_MULTIPART) or ($content_type == $spec.CT_FORM)
+  # `body_kind` is the one place this is decided, and render matches on it
+  # instead of re-reading content-type strings:
+  #   none      — no request body (or a GET/HEAD/OPTIONS that cannot send one)
+  #   json      — JSON-family; nushell's `http` encodes a record itself
+  #   form      — x-www-form-urlencoded; render emits `url build-query`
+  #   multipart — multipart/form-data; render emits `build-multipart-body`
+  #   opaque    — anything else; the caller supplies the wire form
+  let body_kind = if not $has_body { "none" } else if ($content_type | str starts-with "application/json") { "json" } else if $content_type == $spec.CT_FORM { "form" } else if $content_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
   let has_schema = (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
-  let expand_fields = $has_body and $has_schema and $body_encodable
+  let expand_fields = $has_schema and ($body_kind in ["json" "form" "multipart"])
   let merged = if $expand_fields { merge-body-props $body_schema $doc } else { {props: {}, required: []} }
   let resolved = (resolve-body-props $merged.props $doc)
   let body_fields = (body-fields-from-resolved $resolved $merged.required $doc)
@@ -476,7 +488,7 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
     if ($normalized == null) or ($normalized == "object") { "any" } else { $normalized }
   }
 
-  {has_body: $has_body, content_type: $content_type, body_encodable: $body_encodable, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
+  {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
 }
 
 # Extract response info: accept_types, return_type, success_codes, discriminator.
@@ -573,10 +585,10 @@ def deduplicate-commands []: list -> list {
       $n = $n + 1
     }
     if $name != $cmd.name {
-      $renamed = ($renamed | append $cmd.name)
+      $renamed ++= [$cmd.name]
     }
     $taken = ($taken | upsert $name true)
-    $out = ($out | append ($cmd | update name $name))
+    $out ++= [($cmd | update name $name)]
   }
   if ($renamed | is-not-empty) {
     log info $"($renamed | uniq | length) command name\(s\) disambiguated with a numeric suffix: ($renamed | uniq | str join ', ')"
@@ -683,7 +695,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
         cookie_params: $params.cookie_params
         has_body: $body.has_body
         content_type: $body.content_type
-        body_encodable: $body.body_encodable
+        body_kind: $body.body_kind
         body_fields: $body.body_fields
         body_polymorphic_array: $body.body_polymorphic_array
         body_scalar_type: $body.body_scalar_type

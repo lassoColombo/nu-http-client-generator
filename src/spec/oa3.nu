@@ -25,59 +25,33 @@ def resolve-server-template [raw: string, vars: record, overrides: record = {}]:
   $full | format pattern $raw
 }
 
-# Resolve OA3 server URL with variable substitution
-def resolve-server-url [server: record] {
+# Resolve an OA3 server object to an absolute URL: `{var}` placeholders take
+# the per-call `overrides`, else the variable's `default`; a relative URL is
+# anchored on localhost; a trailing slash is dropped so path joins stay single.
+def resolve-server-url [server: record, overrides: record = {}] {
   let raw = ($server.url? | default $"http://($spec.DEFAULT_HOST)")
-  let vars = ($server.variables? | default {})
-  let substituted = (resolve-server-template $raw $vars)
-  # Prepend localhost for relative URLs
-  let absolute = if ($substituted | str starts-with "/") {
-    $"http://($spec.DEFAULT_HOST)($substituted)"
-  } else {
-    $substituted
-  }
-  # Remove trailing slash to avoid double-slash in constructed URLs
+  let substituted = (resolve-server-template $raw ($server.variables? | default {}) $overrides)
+  let absolute = if ($substituted | str starts-with "/") { $"http://($spec.DEFAULT_HOST)($substituted)" } else { $substituted }
   $absolute | str trim --right --char '/'
 }
 
-# Collect all server URLs from OA3 spec (root + path + operation level)
+# Every server URL the spec mentions, for `--base-url` completion: each root
+# server followed by one URL per enum value of each of its variables, then the
+# path-level and operation-level overrides, in document order.
 def collect-oa3-urls [spec_data: record] {
-  mut urls = []
-  # root-level servers
-  let root_servers = ($spec_data.servers? | default [])
-  for s in $root_servers {
-    $urls = ($urls | append (resolve-server-url $s))
-    # also add enum variants for each variable
-    let vars = ($s.variables? | default {})
-    for v in ($vars | transpose name def) {
-      let enum_vals = ($v.def.enum? | default [])
-      for ev in $enum_vals {
-        let resolved = (resolve-server-template ($s.url? | default "") $vars {$v.name: $ev})
-        let resolved_abs = if ($resolved | str starts-with "/") { $"http://($spec.DEFAULT_HOST)($resolved)" } else { $resolved }
-        $urls = ($urls | append ($resolved_abs | str trim --right --char '/'))
-      }
-    }
-  }
-  # path-level and operation-level servers
-  let paths = ($spec_data.paths? | default {} | spec drop-vendor-extensions)
-  for entry in ($paths | transpose path methods) {
-    let path_servers = ($entry.methods.servers? | default [])
-    for s in $path_servers {
-      $urls = ($urls | append (resolve-server-url $s))
-    }
-    for m in ($entry.methods | transpose method op) {
-      if $m.method in [get post put patch delete head options] {
-        let op = $m.op
-        if (($op | describe) | str starts-with "record") {
-          let op_servers = ($op.servers? | default [])
-          for s in $op_servers {
-            $urls = ($urls | append (resolve-server-url $s))
-          }
-        }
-      }
-    }
-  }
-  $urls | uniq
+  let root = ($spec_data.servers? | default [] | each {|s|
+    let variants = ($s.variables? | default {} | items {|name, def|
+      $def.enum? | default [] | each {|ev| resolve-server-url $s {$name: $ev} }
+    } | flatten)
+    [(resolve-server-url $s)] ++ $variants
+  } | flatten)
+  let overrides = ($spec_data.paths? | default {} | spec drop-vendor-extensions | values | each {|item|
+    let op_servers = ($item | items {|method, op|
+      if ($method in [get post put patch delete head options]) and (($op | describe) | str starts-with "record") { $op.servers? | default [] } else { [] }
+    } | flatten)
+    ($item.servers? | default []) ++ $op_servers
+  } | flatten | each {|s| resolve-server-url $s })
+  $root ++ $overrides | uniq
 }
 
 def get-base-url-impl [spec_data: record] {

@@ -39,10 +39,10 @@ export def build-shape-doc [fields: list, --max-width: int = 500] {
     let proj = $len + $entry_len + (if ($kept | is-empty) { 0 } else { 2 })
     if ($proj > $max_width) and ($kept | is-not-empty) {
       let remaining = ($total - ($kept | length))
-      $kept = ($kept | append $"... \(($remaining) more fields\)")
+      $kept ++= [$"... \(($remaining) more fields\)"]
       break
     }
-    $kept = ($kept | append $entry)
+    $kept ++= [$entry]
     $len = $proj
   }
   $"{($kept | str join ', ')}"
@@ -129,18 +129,27 @@ def unix-socket-enabled [config: record]: nothing -> bool {
 # (`--qp-`, `--hdr-`, `--ck-`, `--body-`) or, for positionals, the `_arg`
 # suffix. Nushell accepts a duplicate binding silently (the later one wins),
 # so this list is the only thing keeping a value from being dropped.
-const RESERVED_VARS = [
+# The flags `build-signature` gives every command besides its spec params.
+# Two per-client additions are not listed: the gated `--unix-socket` and the
+# AND-form `--token-<scheme>` flags. The `commands` introspection hides these
+# (plus nushell's own `--help` and the per-client ones) from the param list,
+# and RESERVED_VARS keeps spec params off their variables, so a flag added to
+# the signature must be added here. `tests/test_signature.nu` checks it.
+const SIGNATURE_FLAGS = [base-url token auth-scheme insecure max-time raw allow-errors full dry-run accept]
+
+const RESERVED_VARS = (
   # built-in variables
-  in nu env
-  # generated signature flags, plus nushell's own --help: a `--help: string`
-  # param parses but is routed to the help path, so the user can never pass it
-  base_url token auth_scheme insecure max_time raw allow_errors full dry_run accept unix_socket help
+  [in nu env]
+  # the signature flags' variables, and nushell's own `--help`: a
+  # `--help: string` param parses but is routed to the help path, so the user
+  # could never pass it.
+  ++ ($SIGNATURE_FLAGS ++ [unix-socket help] | str replace --all '-' '_')
   # body-code internals. `input` and `sock` are bound BEFORE path params are
   # validated and the body/query are assembled, so a same-named param would be
   # shadowed and silently dropped; the rest bind after their params are
   # consumed but are listed so the set stays complete.
-  input sock auth base qp full_url req_body req_body_wire effective_ct extra_headers cookie_str accept_val mp req
-]
+  ++ [input sock auth base qp full_url req_body req_body_wire effective_ct extra_headers cookie_str accept_val mp req]
+)
 
 # Variables a query/header/cookie flag must not bind: the reserved set plus
 # `body`, the fallback flag a command declares when its body has no per-field
@@ -216,8 +225,8 @@ def decorate-param-group [params: list, prefix: string, path_vars: list<string>,
     let is_array = (($p.items_type? | default null) != null) or (($p.name | str ends-with "[]"))
     let res = (disambiguate-flag-name $proposed $is_array $acc)
     let flag_var = (flag-var $res.flag_name)
-    $items = ($items | append ($p | merge {flag_name: $res.flag_name, flag_var: $flag_var, name_suffix: $res.suffix}))
-    $acc = ($acc | append $flag_var)
+    $items ++= [($p | merge {flag_name: $res.flag_name, flag_var: $flag_var, name_suffix: $res.suffix})]
+    $acc ++= [$flag_var]
   }
   {items: $items, seen: $acc}
 }
@@ -267,8 +276,8 @@ def decorate-body-fields [body_fields: list, path_vars: list<string>, seen: list
     # positional is unbound by construction.
     let flag_name = if $is_positional { $decided.flag_name } else { (disambiguate-flag-name $decided.flag_name false $body_seen).flag_name }
     let var_name = (flag-var $flag_name)
-    $items = ($items | append ($f | merge {is_positional: $is_positional, flag_name: $flag_name, var_name: $var_name, collision: $decided.collision}))
-    $body_seen = ($body_seen | append $var_name)
+    $items ++= [($f | merge {is_positional: $is_positional, flag_name: $flag_name, var_name: $var_name, collision: $decided.collision})]
+    $body_seen ++= [$var_name]
   }
   {items: $items, seen: $body_seen}
 }
@@ -419,9 +428,9 @@ def render-param-group [params: list, mapping: record, config: record] {
     let desc_text = $"(flatten-description $q.description)($suffix_note)"
     let desc = if $config.no_descriptions or ($desc_text | is-empty) { "" } else { $" # ($desc_text)" }
     let cname = if ($q.enum | is-not-empty) { resolve-completer $q $mapping } else { null }
-    $parts = ($parts | append (render-param-sig $q.flag_name $nu_type $desc $cname))
+    $parts ++= [(render-param-sig $q.flag_name $nu_type $desc $cname)]
     if ($q.deprecated? | default false) {
-      $dep_flags = ($dep_flags | append $q.flag_name)
+      $dep_flags ++= [$q.flag_name]
     }
   }
   {parts: $parts, dep_flags: $dep_flags}
@@ -447,7 +456,7 @@ export def build-signature [cmd: record, mapping: record, config: record] {
   for p in $cmd.path_params {
     let nu_type = (nu-type-for $p.type ($p.items_type? | default null))
     let cname = if ($p.enum? | default [] | is-not-empty) { resolve-completer $p $mapping } else { null }
-    $parts = ($parts | append (render-param-sig $p.var_name $nu_type "" $cname --positional))
+    $parts ++= [(render-param-sig $p.var_name $nu_type "" $cname --positional)]
   }
 
   # AND-form security (>1 scheme in one requirement object) gets one
@@ -463,42 +472,42 @@ export def build-signature [cmd: record, mapping: record, config: record] {
       '  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme'
     ]
   }
-  $parts = ($parts | append '  --base-url(-b): string@base-url-completer # API base URL' | append $token_flags | append [
+  $parts ++= ['  --base-url(-b): string@base-url-completer # API base URL'] ++ $token_flags ++ [
     '  --insecure(-k) # Skip TLS verification'
     '  --max-time(-m): duration # Timeout'
     '  --raw(-r) # Fetch as text'
     '  --allow-errors(-e) # Return full response without error handling'
     '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
     '  --dry-run(-n) # Return the request that would be sent without executing it'
-  ])
+  ]
 
   # Unix-socket transport flag (gated): completes from the baked default plus any
   # --autocompletion-unix-sockets. Default $UNIX_SOCKET is applied in the body.
   if (unix-socket-enabled $config) {
-    $parts = ($parts | append '  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP')
+    $parts ++= ['  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP']
   }
 
   # Accept header flag (only when multiple response content types)
   if ($cmd.accept_types | length) > 1 {
     let cname = resolve-completer {name: "accept", enum: $cmd.accept_types} $mapping
     if ($cname | is-not-empty) {
-      $parts = ($parts | append $'  --accept: string@($cname) # Response content type')
+      $parts ++= [$'  --accept: string@($cname) # Response content type']
     } else {
-      $parts = ($parts | append '  --accept: string # Response content type')
+      $parts ++= ['  --accept: string # Response content type']
     }
   }
 
   for group in [$cmd.query_params $cmd.header_params $cmd.cookie_params] {
     let result = (render-param-group $group $mapping $config)
-    $parts = ($parts | append $result.parts)
-    $dep_flags = ($dep_flags | append $result.dep_flags)
+    $parts ++= $result.parts
+    $dep_flags ++= $result.dep_flags
   }
 
   if $cmd.has_body {
     if $cmd.body_collapsed {
       let body_shape = (lookup-shape "body" $shapes)
       let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
-      $parts = ($parts | append $"  --body: record($body_desc)")
+      $parts ++= [$"  --body: record($body_desc)"]
     } else {
       for f in $cmd.body_fields {
         let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
@@ -508,15 +517,15 @@ export def build-signature [cmd: record, mapping: record, config: record] {
         let cname = if ($f.enum | is-not-empty) { resolve-completer $f $mapping } else { null }
         if $f.is_positional {
           let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
-          $parts = ($parts | append (render-param-sig $f.flag_name $nu_type $desc $cname --positional))
+          $parts ++= [(render-param-sig $f.flag_name $nu_type $desc $cname --positional)]
           # @deprecated --flag doesn't work on positional params — skip
         } else {
           let body_note = if $f.collision == "cross-group" { "(body field)" } else { "" }
           let desc_with_note = ([$desc_with_shape $body_note] | where {|t| $t | is-not-empty } | str join " ")
           let desc = if $config.no_descriptions { "" } else if ($desc_with_note | is-not-empty) { $" # ($desc_with_note)" } else { "" }
-          $parts = ($parts | append (render-param-sig $f.flag_name $nu_type $desc $cname))
+          $parts ++= [(render-param-sig $f.flag_name $nu_type $desc $cname)]
           if ($f.deprecated? | default false) {
-            $dep_flags = ($dep_flags | append $f.flag_name)
+            $dep_flags ++= [$f.flag_name]
           }
         }
       }
@@ -530,8 +539,8 @@ export def build-signature [cmd: record, mapping: record, config: record] {
         # them pass either a record or a string. JSON-family records keep the
         # `--body: record` typing.
         let scalar = ($cmd.body_scalar_type? | default "any")
-        let body_t = if ($scalar != "any") { nu-type-for $scalar } else if $cmd.body_encodable { "record" } else { "any" }
-        $parts = ($parts | append $"  --body: ($body_t)")
+        let body_t = if ($scalar != "any") { nu-type-for $scalar } else if $cmd.body_kind == "opaque" { "any" } else { "record" }
+        $parts ++= [$"  --body: ($body_t)"]
       }
     }
   }
@@ -557,23 +566,23 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
   mut seen_names = []
   for s in $auth_schemes {
     if not ($s.name in $seen_names) {
-      $seen_names = ($seen_names | append $s.name)
+      $seen_names ++= [$s.name]
       if $s.in == "query" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {}, query: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\", location: \"query\"} }"))
+        $match_arms ++= [$"    ($s.name | to nuon) => { {scheme: $scheme, headers: {}, query: $\"\(encode-path-segment ($s.header_name | to nuon)\)=\(encode-path-segment $token_val\)\", location: \"query\"} }"]
       } else if $s.in == "cookie" {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {Cookie: $\"\(encode-path-segment \"($s.header_name)\"\)=\(encode-path-segment $token_val\)\"}, query: \"\", location: \"cookie\"} }"))
+        $match_arms ++= [$"    ($s.name | to nuon) => { {scheme: $scheme, headers: {Cookie: $\"\(encode-path-segment ($s.header_name | to nuon)\)=\(encode-path-segment $token_val\)\"}, query: \"\", location: \"cookie\"} }"]
       } else if $s.prefix == "" {
-        $match_arms = ($match_arms | append $"    \"($s.name)\" => { {scheme: $scheme, headers: {($s.header_name | to nuon): $token_val}, query: \"\", location: \"header\"} }")
+        $match_arms ++= [$"    ($s.name | to nuon) => { {scheme: $scheme, headers: {($s.header_name | to nuon): $token_val}, query: \"\", location: \"header\"} }"]
       } else {
-        $match_arms = ($match_arms | append ($"    \"($s.name)\" => { {scheme: $scheme, headers: {($s.header_name | to nuon): $\"($s.prefix) \($token_val\)\"}, query: \"\", location: \"header\"} }"))
+        $match_arms ++= [$"    ($s.name | to nuon) => { {scheme: $scheme, headers: {($s.header_name | to nuon): $\"($s.prefix) \($token_val\)\"}, query: \"\", location: \"header\"} }"]
       }
     }
   }
   if (offers-basic-credentials $auth_schemes) and (not ("basic-credentials" in $seen_names)) {
-    $seen_names = ($seen_names | append "basic-credentials")
-    $match_arms = ($match_arms | append '    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }')
+    $seen_names ++= ["basic-credentials"]
+    $match_arms ++= ['    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }']
   }
-  $match_arms = ($match_arms | append '    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }')
+  $match_arms ++= ['    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }']
   let match_body = $match_arms | str join "\n"
 
   # Emitted only for clients with at least one AND-form op.
@@ -667,7 +676,7 @@ export def build-body-code [cmd: record, config: record] {
   mut lines = []
 
   if $cmd.has_body {
-    $lines = ($lines | append '  let input = $in')
+    $lines ++= ['  let input = $in']
   }
 
   # AND-form ops merge every required scheme's auth. Each per-scheme token
@@ -676,21 +685,21 @@ export def build-body-code [cmd: record, config: record] {
   let auth_req = ($cmd.auth_required? | default [])
   if ($auth_req | length) > 1 {
     let auth_parts = ($auth_req | each {|s|
-      $"\(build-auth \($token_($s.flag_slug) | default \($env | get -o ($s.env_var) | default \"\"\)\) \"($s.name)\"\)"
+      $"\(build-auth \($token_($s.flag_slug) | default \($env | get -o ($s.env_var) | default \"\"\)\) ($s.name | to nuon)\)"
     } | str join " ")
-    $lines = ($lines | append $"  let auth = \(merge-auth [($auth_parts)]\)")
+    $lines ++= [$"  let auth = \(merge-auth [($auth_parts)]\)"]
   } else {
-    $lines = ($lines | append ($"  let auth = \(build-auth $token \($auth_scheme | default \"($cmd.default_auth)\"\)\)"))
+    $lines ++= [$"  let auth = \(build-auth $token \($auth_scheme | default ($cmd.default_auth | to nuon)\)\)"]
   }
   if ($cmd.base_url | is-not-empty) {
-    $lines = ($lines | append ($"  let base = \($base_url | default \"($cmd.base_url)\"\)"))
+    $lines ++= [$"  let base = \($base_url | default ($cmd.base_url | to nuon)\)"]
   } else {
-    $lines = ($lines | append '  let base = ($base_url | default $BASE_URL)')
+    $lines ++= ['  let base = ($base_url | default $BASE_URL)']
   }
   # Effective Unix socket: --unix-socket flag, else the baked-in $UNIX_SOCKET
   # default. Empty means "no socket" — the senders branch on it at runtime.
   if (unix-socket-enabled $config) {
-    $lines = ($lines | append '  let sock = ($unix_socket | default $UNIX_SOCKET)')
+    $lines ++= ['  let sock = ($unix_socket | default $UNIX_SOCKET)']
   }
 
   # Validate each path param is non-empty before URL substitution. Without
@@ -699,7 +708,8 @@ export def build-body-code [cmd: record, config: record] {
   # then erases — silently routing the request to a different endpoint. Naming
   # the spec param in the error tells the caller which arg was passed empty.
   for p in $cmd.path_params {
-    $lines = ($lines | append ($"  if \($($p.var_name) | is-empty\) { error make --unspanned { msg: \"path parameter '($p.name)' must be non-empty\" } }"))
+    let msg = $"path parameter '($p.name)' must be non-empty"
+    $lines ++= [$"  if \($($p.var_name) | is-empty\) { error make --unspanned { msg: ($msg | to nuon) } }"]
   }
 
   # Required query/header/cookie params: apply the spec default (or the
@@ -711,14 +721,15 @@ export def build-body-code [cmd: record, config: record] {
     for q in ($group | last | where {|q| $q.required? | default false }) {
       let rd = ($q.required_default? | default null)
       if ($rd != null) {
-        $lines = ($lines | append $"  let ($q.flag_var) = \($($q.flag_var) | default ($rd | to nuon)\)")
+        $lines ++= [$"  let ($q.flag_var) = \($($q.flag_var) | default ($rd | to nuon)\)"]
       }
       # `Content-Type` / `Accept` header params always have an effective value
       # (the body's content type, the response media type), so they are never
       # "missing" — only their explicit default is applied above.
       let always_set = ($loc == "header") and (($q.name | str lowercase) in ["content-type" "accept"])
       if ($rd == null) and (not $always_set) {
-        $lines = ($lines | append $"  if \($($q.flag_var) == null\) { error make --unspanned { msg: \"required ($loc) parameter '($q.name)' missing: pass --($q.flag_name)\" } }")
+        let msg = $"required ($loc) parameter '($q.name)' missing: pass --($q.flag_name)"
+        $lines ++= [$"  if \($($q.flag_var) == null\) { error make --unspanned { msg: ($msg | to nuon) } }"]
       }
     }
   }
@@ -752,12 +763,12 @@ export def build-body-code [cmd: record, config: record] {
   if ($cmd.query_params | is-not-empty) {
     let calls = $cmd.query_params | each {|q|
       let var_name = $"$($q.flag_var)"
-      $"\(serialize-qp \"($q.name)\" ($var_name) \"($q.collection_style)\"\)"
+      $"\(serialize-qp ($q.name | to nuon) ($var_name) \"($q.collection_style)\"\)"
     } | str join " "
-    $lines = ($lines | append ($"  let qp = [($calls)] | flatten | str join \"&\""))
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)($fixed_q) $qp $auth.query\)"))
+    $lines ++= [$"  let qp = [($calls)] | flatten | str join \"&\""]
+    $lines ++= [$"  let full_url = \(build-url $base ($path_expr)($fixed_q) $qp $auth.query\)"]
   } else {
-    $lines = ($lines | append ($"  let full_url = \(build-url $base ($path_expr)($fixed_q) $auth.query\)"))
+    $lines ++= [$"  let full_url = \(build-url $base ($path_expr)($fixed_q) $auth.query\)"]
   }
 
   # Build the initial $req_body before the input-merge line. Two paths:
@@ -785,15 +796,15 @@ export def build-body-code [cmd: record, config: record] {
         # the key (`multi`) and the multipart envelope would JSON-stringify
         # the list. Only form bodies (urlencoded or multipart) carry a style.
         let sep = match ($f.collection_style? | default null) { "csv" => ",", "ssv" => " ", "tsv" => "\t", "pipes" => "|", _ => null }
-        let value_expr = if ($sep != null) and ($cmd.content_type in ["application/x-www-form-urlencoded" "multipart/form-data"]) {
+        let value_expr = if ($sep != null) and ($cmd.body_kind in ["form" "multipart"]) {
           $"\(if \(($var_ref) | describe | str starts-with \"list\"\) { ($var_ref) | each { into string } | str join ($sep | to nuon) } else { ($var_ref) }\)"
         } else { $var_ref }
         $'($key | to nuon): ($value_expr)'
       })
       let body_parts = ($body_parts_list | str join ", ")
-      $lines = ($lines | append ($"  let req_body = {($body_parts)} | compact"))
+      $lines ++= [$"  let req_body = {($body_parts)} | compact"]
     } else {
-      $lines = ($lines | append '  let req_body = $body')
+      $lines ++= ['  let req_body = $body']
     }
     # Pipeline-input merge: records merge deep into the assembled body. When
     # the spec declares `oneOf: [{object}, {array}]` (or anyOf), we also accept
@@ -807,11 +818,11 @@ export def build-body-code [cmd: record, config: record] {
     # everything else the wire format is the user's responsibility.
     let non_record_body = (($cmd.body_scalar_type? | default "any") != "any")
     if ($cmd.body_polymorphic_array? | default false) {
-      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }')
-    } else if (not $cmd.body_encodable) or $non_record_body {
-      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }')
+      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }']
+    } else if ($cmd.body_kind == "opaque") or $non_record_body {
+      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }']
     } else {
-      $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
+      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }']
     }
     # A required body field that could not be a positional (it collides with a
     # reserved name, or is a bool) is still required: refuse an empty value
@@ -822,7 +833,8 @@ export def build-body-code [cmd: record, config: record] {
     if $has_per_field {
       let only_record = if ($cmd.body_polymorphic_array? | default false) { '($req_body | describe | str starts-with "record") and ' } else { "" }
       for f in ($cmd.body_fields | where {|f| ($f.required? | default false) and (not $f.is_positional) and (not ($f.nullable? | default false)) }) {
-        $lines = ($lines | append $"  if ($only_record)\(\($req_body | get -o ($f.name | to nuon)\) == null\) { error make --unspanned { msg: \"required body field '($f.name)' missing: pass --($f.flag_name) or pipe a record\" } }")
+        let msg = $"required body field '($f.name)' missing: pass --($f.flag_name) or pipe a record"
+        $lines ++= [$"  if ($only_record)\(\($req_body | get -o ($f.name | to nuon)\) == null\) { error make --unspanned { msg: ($msg | to nuon) } }"]
       }
     }
   }
@@ -834,22 +846,22 @@ export def build-body-code [cmd: record, config: record] {
   # param the user set) overrides the spec-default.
   let default_accept = ($cmd.accept_types | first)
   if ($cmd.accept_types | length) > 1 {
-    $lines = ($lines | append ($"  let accept_val = \($accept | default \"($default_accept)\"\)"))
+    $lines ++= [$"  let accept_val = \($accept | default ($default_accept | to nuon)\)"]
   } else {
-    $lines = ($lines | append ($"  let accept_val = \"($default_accept)\""))
+    $lines ++= [$"  let accept_val = ($default_accept | to nuon)"]
   }
-  $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
+  $lines ++= ['  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))']
 
   if ($cmd.header_params | is-not-empty) {
     let hp_record = (render-param-record $cmd.header_params)
-    $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
-    $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))')
+    $lines ++= [$"  let extra_headers = {($hp_record)} | compact"]
+    $lines ++= ['  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))']
   }
 
   if ($cmd.cookie_params | is-not-empty) {
     let cp_record = (render-param-record $cmd.cookie_params)
-    $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""))
-    $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
+    $lines ++= [$"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""]
+    $lines ++= ['  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }']
   }
 
   # multipart/form-data: encode the request body as an RFC 7578 envelope so
@@ -865,7 +877,7 @@ export def build-body-code [cmd: record, config: record] {
   # setColumns, Codat push-*-attachments, Jira addAttachment). The helper
   # accepts an empty `file_fields` list and still builds a well-formed
   # envelope (records JSON-stringified).
-  let is_multipart = $cmd.has_body and ($cmd.content_type == "multipart/form-data")
+  let is_multipart = ($cmd.body_kind == "multipart")
   if $is_multipart {
     let file_field_names = ($cmd.body_fields | where {|f|
       ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
@@ -879,8 +891,8 @@ export def build-body-code [cmd: record, config: record] {
     # a bare `type: string` — spoonacular's recipe card, libretranslate's file
     # token — binds `--body: string`) is sent verbatim rather than silently
     # replaced by an empty envelope.
-    $lines = ($lines | append '  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }')
-    $lines = ($lines | append ($"  let mp = if \($req_body | describe | str starts-with \"record\"\) { build-multipart-body $req_body [($file_list_lit)] $dry_run } else { {body: $req_body, content_type: \"multipart/form-data\"} }"))
+    $lines ++= ['  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }']
+    $lines ++= [$"  let mp = if \($req_body | describe | str starts-with \"record\"\) { build-multipart-body $req_body [($file_list_lit)] $dry_run } else { {body: $req_body, content_type: \"multipart/form-data\"} }"]
   }
 
   # Detect a user-facing `--content-type` flag. Some Swagger-2 specs declare
@@ -910,16 +922,16 @@ export def build-body-code [cmd: record, config: record] {
   # accepts a record/table. record → compact+build-query; null → "" (empty
   # form body); else → `into string` (the caller already supplied the wire form).
   let form_encode = 'if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }'
-  let emitted_wire_body = $has_ct_override or ($cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded"))
+  let emitted_wire_body = $has_ct_override or ($cmd.body_kind == "form")
   if $has_ct_override {
     # Effective content-type for body serialization and the request. When the
     # user (or the spec default) picks x-www-form-urlencoded, serialize; other
     # content types pass the body through unchanged — JSON is what Nushell's
     # `http post` already does by default.
-    $lines = ($lines | append ($"  let effective_ct = \(($ct_var) | default \"($cmd.content_type)\"\)"))
-    $lines = ($lines | append ('  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (' + $form_encode + ') } else { $req_body }'))
+    $lines ++= [$"  let effective_ct = \(($ct_var) | default ($cmd.content_type | to nuon)\)"]
+    $lines ++= [('  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (' + $form_encode + ') } else { $req_body }')]
   } else if $emitted_wire_body {
-    $lines = ($lines | append ('  let req_body_wire = (' + $form_encode + ')'))
+    $lines ++= [('  let req_body_wire = (' + $form_encode + ')')]
   }
 
   # Wire body handed to the sender: multipart envelope, form-urlencoded string,
@@ -932,7 +944,7 @@ export def build-body-code [cmd: record, config: record] {
   # OPTIONS carry no body on the wire, so report null body/content_type rather
   # than advertising a phantom.
   let bodyless = ($cmd.method in ["get" "head" "options"])
-  let req_ct_expr = if $bodyless { 'null' } else if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $'"($cmd.content_type)"' }
+  let req_ct_expr = if $bodyless { 'null' } else if $is_multipart { '$mp.content_type' } else if $has_ct_override { '$effective_ct' } else { $cmd.content_type | to nuon }
   let req_body_expr = if $bodyless { 'null' } else if $cmd.has_body { '$req_body' } else { 'null' }
   let dr_query_expr = if ($cmd.query_params | is-not-empty) {
     let entries = ($cmd.query_params | each {|q| $"($q.name | to nuon): $($q.flag_var)" } | str join ", ")
@@ -949,20 +961,21 @@ export def build-body-code [cmd: record, config: record] {
   let ok_codes_expr = $"[($cmd.success_codes? | default [] | each {|c| $c | into string } | str join ' ')]"
   let timeout_expr = $"\($max_time | default (duration-literal $config.default_timeout))"
 
-  $lines = ($lines | append '  let req = {')
-  $lines = ($lines | append $'    method: "($cmd.method)"')
-  $lines = ($lines | append '    url: $full_url')
-  $lines = ($lines | append $'    query: ($dr_query_expr)')
-  $lines = ($lines | append $'    headers: ($req_headers_expr)')
-  $lines = ($lines | append $'    body: ($req_body_expr)')
-  $lines = ($lines | append $'    content_type: ($req_ct_expr)')
-  $lines = ($lines | append $'    timeout: ($timeout_expr)')
-  $lines = ($lines | append '    auth: {scheme: $auth.scheme, location: $auth.location}')
+  $lines ++= [
+    '  let req = {'
+    $'    method: "($cmd.method)"'
+    '    url: $full_url'
+    $'    query: ($dr_query_expr)'
+    $'    headers: ($req_headers_expr)'
+    $'    body: ($req_body_expr)'
+    $'    content_type: ($req_ct_expr)'
+    $'    timeout: ($timeout_expr)'
+    '    auth: {scheme: $auth.scheme, location: $auth.location}'
+  ]
   if (unix-socket-enabled $config) {
-    $lines = ($lines | append '    unix_socket: $sock')
+    $lines ++= ['    unix_socket: $sock']
   }
-  $lines = ($lines | append '  }')
-  $lines = ($lines | append '  if $dry_run { return ({dry_run: true} | merge $req) }')
+  $lines ++= ['  }' '  if $dry_run { return ({dry_run: true} | merge $req) }']
 
   # One sender, picked at generation time — no runtime `match $method`.
   let send_line = match $cmd.method {
@@ -974,7 +987,7 @@ export def build-body-code [cmd: record, config: record] {
     "patch" => $'  send-patch $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
     "delete" => $'  send-delete $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
   }
-  $lines = ($lines | append $send_line)
+  $lines ++= [$send_line]
 
   $lines | str join "\n"
 }
@@ -995,7 +1008,7 @@ def render-module-header [
   # base-url completer
   let per_op_urls = ($commands | where {|c| $c.base_url != null } | each {|c| $c.base_url } | uniq)
   let all_completer_urls = ($all_urls | append $per_op_urls | uniq)
-  let base_url_vals = $all_completer_urls | each {|u| $'"($u)"' } | str join ' '
+  let base_url_vals = $all_completer_urls | each {|u| $u | to nuon } | str join ' '
   let base_url_completer = $'def base-url-completer [] { [($base_url_vals)] }'
 
   # auth-scheme completer
@@ -1006,7 +1019,7 @@ def render-module-header [
     $auth_names_with_none | append "basic-credentials"
   } else { $auth_names_with_none }
   let auth_completer_vals = if ($auth_names_final | is-not-empty) {
-    $auth_names_final | each {|n| $'"($n)"' } | str join ' '
+    $auth_names_final | each {|n| $n | to nuon } | str join ' '
   } else {
     '"bearer"'
   }
@@ -1036,8 +1049,9 @@ def render-module-header [
     (if $has_single_auth { [$'# Auth: --token flag or $env.($token_env_var)'] } else { [] })
     | append ($and_schemes | each {|s| $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
   )
-  let and_token_flags = ($and_schemes | each {|s| $'"token-($s.flag_slug)"' } | str join ' ')
-  let and_token_flags = if ($and_token_flags | is-empty) { "" } else { $" ($and_token_flags)" }
+  # `help` is listed defensively: nushell 0.116's `scope` does not report it
+  # for custom commands, but hiding it costs nothing if a version does.
+  let hidden_flags = ($SIGNATURE_FLAGS ++ [help] ++ (if $unix_socket_enabled { [unix-socket] } else { [] }) ++ ($and_schemes | each {|s| $"token-($s.flag_slug)" }))
 
   # Only generate introspection command when not disabled. The command finds
   # its own module by the exact set of exported command names: a single name
@@ -1050,7 +1064,7 @@ def render-module-header [
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
-      (if $unix_socket_enabled { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"($and_token_flags)]' } else { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"($and_token_flags)]' })
+      $"  let builtin_flags = [($hidden_flags | each { to nuon } | str join ' ')]"
       $"  let mod_name = \(scope modules | where { \($in.commands | get name | sort\) == \([($cmd_names)] | sort\) } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)'
@@ -1081,7 +1095,7 @@ def render-module-header [
     $'# Source: ($spec_file)'
     ...$auth_lines
     ""
-    $'const BASE_URL = "($base_url)"'
+    $'const BASE_URL = ($base_url | to nuon)'
     ...$unix_socket_const
     ""
     $helpers_code
@@ -1107,19 +1121,19 @@ def render-command [cmd: record, mapping: record, config: record] {
   let endpoint_line = $"($cmd.method | str uppercase) ($cmd.path_template)($fixed_q)"
   let has_description = ($cmd.description | is-not-empty)
   let summary = if $has_description { flatten-description $cmd.description } else { $endpoint_line }
-  $cmd_lines = ($cmd_lines | append $"# ($summary)")
+  $cmd_lines ++= [$"# ($summary)"]
 
   mut extra = if $has_description { [$"# ($endpoint_line)"] } else { [] }
   if $cmd.deprecated {
-    $extra = ($extra | append "# DEPRECATED")
+    $extra ++= ["# DEPRECATED"]
   }
   if ($cmd.discriminator != null) {
     let d = $cmd.discriminator
     let mapping_keys = ($d.mapping | columns)
     if ($mapping_keys | is-not-empty) {
-      $extra = ($extra | append $"# Discriminator \(($d.context)\): ($d.propertyName) = ($mapping_keys | str join ', ')")
+      $extra ++= [$"# Discriminator \(($d.context)\): ($d.propertyName) = ($mapping_keys | str join ', ')"]
     } else {
-      $extra = ($extra | append $"# Discriminator \(($d.context)\): ($d.propertyName)")
+      $extra ++= [$"# Discriminator \(($d.context)\): ($d.propertyName)"]
     }
   }
   if ($cmd.external_docs != null) {
@@ -1127,18 +1141,18 @@ def render-command [cmd: record, mapping: record, config: record] {
     let edesc = ($cmd.external_docs.description? | default "")
     if ($url | is-not-empty) {
       if ($edesc | is-not-empty) {
-        $extra = ($extra | append $"# Docs: ($url) — ($edesc)")
+        $extra ++= [$"# Docs: ($url) — ($edesc)"]
       } else {
-        $extra = ($extra | append $"# Docs: ($url)")
+        $extra ++= [$"# Docs: ($url)"]
       }
     }
   }
   if ($cmd.operation_id | is-not-empty) {
-    $extra = ($extra | append $"# operationId: ($cmd.operation_id)")
+    $extra ++= [$"# operationId: ($cmd.operation_id)"]
   }
   if ($extra | is-not-empty) {
-    $cmd_lines = ($cmd_lines | append "#")
-    $cmd_lines = ($cmd_lines | append $extra)
+    $cmd_lines ++= ["#"]
+    $cmd_lines ++= $extra
   }
 
   let sig_result = (build-signature $cmd $mapping $config)
@@ -1146,43 +1160,44 @@ def render-command [cmd: record, mapping: record, config: record] {
   # Emit @deprecated attributes (must come immediately before export def)
   mut annotations = []
   if $cmd.deprecated {
-    $annotations = ($annotations | append '@deprecated')
+    $annotations ++= ['@deprecated']
   }
   for df in $sig_result.deprecated_flags {
-    $annotations = ($annotations | append $'@deprecated --flag ($df)')
+    $annotations ++= [$'@deprecated --flag ($df)']
   }
   if ($annotations | is-not-empty) {
-    $cmd_lines = ($cmd_lines | append $annotations)
+    $cmd_lines ++= $annotations
   }
 
-  $cmd_lines = ($cmd_lines | append $'export def "($cmd.name)" [')
-  $cmd_lines = ($cmd_lines | append $sig_result.signature)
+  $cmd_lines ++= [$'export def "($cmd.name)" [']
+  $cmd_lines ++= [$sig_result.signature]
   let input_type = if $cmd.has_body { "any" } else { "nothing" }
-  # A scalar-leaf response type (string/int/bool/...) is a parse-time lie — the
-  # command is polymorphic over its flags: it returns a *record* under
-  # --dry-run/--full, a *string* under --raw, *nothing* on 204, and the
-  # response type on a normal call. Nushell type-checks the downstream pipe
-  # against the declared output at parse time, so a scalar leaf makes
-  # `cmd | get/select/where` a parse error, while plain `any` erases the
-  # response type from `help` and the `commands` table. So emit a `oneof<...>`
-  # of the real flag-driven shapes: `record` makes structured piping parse,
-  # `string` keeps `--raw | str-op` parsing, `nothing` covers 204, and the
-  # scalar member preserves the documented response type. The senders are
-  # `nothing -> any`, so the annotation is never runtime-checked against the
-  # actual body — purely a parse-time + doc improvement. record/table/list/any
-  # outputs already pipe fine and keep their annotation.
+  # Any concrete response type is a parse-time lie: the command is polymorphic
+  # over its flags — a *record* under --dry-run/--full, a *string* under
+  # --raw, *nothing* on 204, and the response type on a normal call. Nushell
+  # type-checks the downstream pipe against the declared output at parse time,
+  # so a bare `-> string` makes `cmd | get …` a parse error and a bare
+  # `-> record<…>` makes `cmd --raw | from json` one, while plain `any` erases
+  # the response type from `help` and the `commands` table. So every non-`any`
+  # type is wrapped in a `oneof<…>` of the real flag-driven shapes: the
+  # documented type first, then `string` (--raw), `record` (--dry-run/--full)
+  # and `nothing` (204). A record-typed response already admits the dry-run
+  # record, and a bare `record` next to `record<…>` would make nushell widen
+  # the whole member to `record`, erasing the documented fields from `help`
+  # and `commands`; so it is left out there. The senders are `nothing -> any`,
+  # so the annotation is never runtime-checked against the actual body —
+  # purely a parse-time + doc improvement.
   let return_str = (nu-type-string $cmd.return_type)
-  let scalar_leaves = ["string" "int" "bool" "float"]
-  let output_type = if ($return_str in $scalar_leaves) {
-    let members = ([$return_str "string" "record" "nothing"] | uniq)
-    $"oneof<($members | str join ', ')>"
-  } else { $return_str }
-  $cmd_lines = ($cmd_lines | append $"]: ($input_type) -> ($output_type) {")
+  let output_type = if $return_str == "any" { "any" } else {
+    let record_member = if ($return_str | str starts-with "record") { [] } else { ["record"] }
+    $"oneof<([$return_str "string"] ++ $record_member ++ ["nothing"] | uniq | str join ', ')>"
+  }
+  $cmd_lines ++= [$"]: ($input_type) -> ($output_type) {"]
 
   let body_code = (build-body-code $cmd $config)
-  $cmd_lines = ($cmd_lines | append $body_code)
-  $cmd_lines = ($cmd_lines | append "}")
-  $cmd_lines = ($cmd_lines | append "")
+  $cmd_lines ++= [$body_code]
+  $cmd_lines ++= ["}"]
+  $cmd_lines ++= [""]
 
   $cmd_lines | str join "\n"
 }
@@ -1236,9 +1251,7 @@ export def client [spec_data: record, commands: table, spec_file: string, module
   # (Jira, Codat) have empty/array/bare-binary body schemas where the file-
   # field detector returns nothing, but the operation still needs to send a
   # well-formed multipart envelope at runtime.
-  let needs_multipart = ($commands | any {|c|
-    ($c.content_type? | default "") == "multipart/form-data" and ($c.has_body? | default false)
-  })
+  let needs_multipart = ($commands | any {|c| $c.body_kind == "multipart" })
 
   # Set of HTTP verbs across this client's operations — gates which per-verb
   # send-* helpers get emitted. A read-only client never ships post/put/etc.

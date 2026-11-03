@@ -25,7 +25,8 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # `name[k]=v`. Null members are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
   let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
@@ -47,8 +48,12 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -147,7 +152,7 @@ export def "create-tree" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string
   --children: list # item shape: {value?: string, children?: list}
-]: any -> record<value: string, children: list<any>> {
+]: any -> oneof<record<value: string, children: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -184,7 +189,7 @@ export def "get-aliased" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number (shared parameter ref).
-]: nothing -> record<name: string, count: int> {
+]: nothing -> oneof<record<name: string, count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -292,7 +297,7 @@ export def "get-pet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pet_id | is-empty) { error make --unspanned { msg: "path parameter 'petId' must be non-empty" } }
@@ -363,7 +368,7 @@ export def "list-clusters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   created_after: string # The creation date and time beginning value filter. (format: date-time)
   --cluster-states: list<string> # The cluster state filters to apply.
-]: any -> record<Clusters: list<string>, Marker: string> {
+]: any -> oneof<record<Clusters: list<string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -402,7 +407,7 @@ export def "create-outer" [
   leaf_field: string
   --mid-field: int
   --outer-field: oneof<nothing, bool>
-]: any -> record<leaf_field: string, mid_field: int, outer_field: bool> {
+]: any -> oneof<record<leaf_field: string, mid_field: int, outer_field: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +444,7 @@ export def "get-kinded" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<kind: string> {
+]: nothing -> oneof<record<kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kinded" $auth.query)
@@ -473,7 +478,7 @@ export def "create-deep" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   deep_field: string
-]: any -> record<deep_field: string> {
+]: any -> oneof<record<deep_field: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +515,7 @@ export def "create-kinded" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string> {
+]: nothing -> oneof<record<id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kinded-created" $auth.query)

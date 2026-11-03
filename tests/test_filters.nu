@@ -36,6 +36,15 @@ def "tags empty match" [] {
     assert ($result | is-empty) "non-existent tag should yield zero commands"
 }
 
+@test
+def "generation errors when filters leave no commands" [] {
+    let out = (mktemp --suffix .nu)
+    rm $out
+    let r = (try { mod $PETSTORE -o $out --tags [nonexistent]; "no error" } catch {|e| $e.msg })
+    assert ($r | str contains "yields no commands after filtering") $"expected an error, got: ($r)"
+    assert not ($out | path exists) "no file should be written"
+}
+
 # ── --prefixes ───────────────────────────────────────────────────────
 
 @test

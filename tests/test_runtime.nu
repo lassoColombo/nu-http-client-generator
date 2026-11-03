@@ -36,6 +36,12 @@ def "serialize-qp serializes records per OpenAPI object styles" [] {
 }
 
 @test
+def "serialize-qp treats a list of records as a list, each element as JSON" [] {
+    assert equal (rt 'serialize-qp "n" [{a: 1} {a: 2}] "multi"') ["n=%7B%22a%22%3A1%7D" "n=%7B%22a%22%3A2%7D"]
+    assert equal (rt 'serialize-qp "n" [{a: 1}] "csv"') ["n=%7B%22a%22%3A1%7D"]
+}
+
+@test
 def "serialize-qp drops null and empty-list values" [] {
     assert equal (rt 'serialize-qp "n" null "csv"') []
     assert equal (rt 'serialize-qp "n" [] "multi"') []

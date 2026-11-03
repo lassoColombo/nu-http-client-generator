@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Literal escaping
+  version: "1.0"
+  description: >
+    Param and field names containing `"` and `\` are spliced into emitted
+    string literals (the query serializer call, the missing-value error
+    messages); each must be quoted with `to nuon` or the module does not
+    parse. A query param typed array-of-object exercises the table branch of
+    serialize-qp.
+servers:
+  - url: https://example.com/api
+paths:
+  /things/{id"x}:
+    post:
+      operationId: quoteThings
+      parameters:
+        - name: id"x
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: q"uote
+          in: query
+          schema:
+            type: string
+        - name: back\slash
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: filters
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                k:
+                  type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input"x, ok]
+              properties:
+                input"x:
+                  type: boolean
+                ok:
+                  type: string
+      responses:
+        "200":
+          description: ok
+components:
+  securitySchemes:
+    quotedKey:
+      type: apiKey
+      in: query
+      name: k"ey
+security:
+  - quotedKey: []

@@ -75,13 +75,30 @@ def "scalar response type is preserved in the commands table" [] {
     assert ($rt | str contains "nothing") "oneof must include nothing (204)"
 }
 
-# ── Negative controls: non-scalar responses keep their existing annotation ──
+# ── Rich (record/table) responses: the documented type is kept AND wrapped ──
+# A bare `-> record<…>` makes `cmd --raw | from json` a parse error
+# (`nu::parser::input_type_mismatch`) because --raw returns a string.
 
 @test
-def "record response keeps its rich annotation, not a oneof" [] {
+def "record response keeps its rich annotation inside a oneof" [] {
     let rt = (run-cmd $in.client 'commands | where name == "get-profile" | get return_type.0')
-    assert ($rt | str starts-with "record<") $"record response must keep record<…>, got: ($rt)"
+    assert ($rt | str starts-with "oneof<record<") $"record response must be oneof<record<…>, …>, got: ($rt)"
+    assert ($rt | str contains "string") "oneof must include string (--raw)"
+    assert ($rt | str contains "id: int") $"documented fields must survive introspection, got: ($rt)"
+    let m = (run-cmd $in.client 'get-profile --dry-run | get method')
+    assert equal $m "get" "dry-run record must still be gettable"
 }
+
+@test
+def "record response command parses when --raw output is piped into from json" [] {
+    # Port 1 refuses the connection, so the call fails at runtime — the point
+    # is that it gets that far instead of failing to parse.
+    let r = (^nu --no-config-file -c $"use '($in.client)' *; get-profile --raw --base-url http://127.0.0.1:1 | from json" | complete)
+    assert not ($r.stderr | str contains "input_type_mismatch") $"--raw | from json must parse, got: ($r.stderr)"
+    assert not ($r.stderr | str contains "parser") $"no parse error expected, got: ($r.stderr)"
+}
+
+# ── Negative control: no schema means no type to keep ──
 
 @test
 def "schemaless response stays any" [] {

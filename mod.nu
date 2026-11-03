@@ -103,9 +103,11 @@ export def main [
     $"($loaded.data.info?.title? | default ($loaded.source | path parse | get stem))"
   }
   let result = (process-spec $loaded.data $config)
+  # An error, not a warning: the caller asked for a file and would otherwise
+  # get exit status 0 and no output. `preview` keeps returning [] since an
+  # empty preview is a legitimate answer.
   if ($result.commands | is-empty) {
-    log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to generate"
-    return null
+    error make --unspanned { msg: $"spec at ($loaded.source) yields no commands after filtering — nothing to generate" }
   }
   let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $result.all_urls $result.auth_schemes $config)
   let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }

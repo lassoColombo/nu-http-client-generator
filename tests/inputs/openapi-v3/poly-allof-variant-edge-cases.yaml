@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: Poly allOf variants
+  version: "1.0"
+  description: >
+    oneOf/anyOf variants that are themselves allOf compositions. The variant's
+    fields (and its required list) come from folding its allOf, so the command
+    exposes them as flags instead of degrading to a bare `--body: record`.
+servers:
+  - url: https://example.com/api
+paths:
+  /pets:
+    post:
+      operationId: createPet
+      summary: oneOf variant built with allOf over a base
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Cat'
+                - $ref: '#/components/schemas/Dog'
+              discriminator:
+                propertyName: kind
+                mapping:
+                  cat: '#/components/schemas/Cat'
+                  dog: '#/components/schemas/Dog'
+      responses:
+        "201":
+          description: created
+  /pets/any:
+    post:
+      operationId: createAnyPet
+      summary: anyOf twin of createPet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/Cat'
+                - $ref: '#/components/schemas/Dog'
+      responses:
+        "201":
+          description: created
+  /pets/deep:
+    post:
+      operationId: createDeepPet
+      summary: variant whose allOf member is itself an allOf chain
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Kitten'
+      responses:
+        "201":
+          description: created
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+    Cat:
+      allOf:
+        - $ref: '#/components/schemas/Pet'
+        - type: object
+          required: [lives]
+          properties:
+            meow:
+              type: boolean
+            lives:
+              type: integer
+    Dog:
+      allOf:
+        - $ref: '#/components/schemas/Pet'
+        - type: object
+          properties:
+            bark:
+              type: string
+              enum: [woof, yap]
+    Kitten:
+      allOf:
+        - $ref: '#/components/schemas/Cat'
+        - type: object
+          properties:
+            ageWeeks:
+              type: integer
