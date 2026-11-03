@@ -1,0 +1,50 @@
+swagger: "2.0"
+info:
+  title: Path Level Body Edge Cases
+  version: 1.0.0
+  description: |
+    Body and formData parameters declared on the path item are inherited by
+    every operation under it, exactly like path/query/header params. An
+    operation that redeclares the same name+location overrides the inherited one.
+host: api.example.com
+schemes: [https]
+paths:
+  /things:
+    parameters:
+      - name: payload
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            name: {type: string}
+    post:
+      operationId: createThing
+      summary: Inherits the path-level body param.
+      responses:
+        "200": {description: ok}
+    put:
+      operationId: replaceThing
+      summary: Overrides the path-level body param with its own.
+      parameters:
+        - name: payload
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              name: {type: string}
+              color: {type: string}
+      responses:
+        "200": {description: ok}
+  /forms:
+    parameters:
+      - {name: title, in: formData, type: string, required: true}
+    post:
+      operationId: submitForm
+      summary: Inherits a path-level formData param and adds its own.
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - {name: note, in: formData, type: string}
+      responses:
+        "200": {description: ok}

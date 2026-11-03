@@ -60,6 +60,20 @@ def "encode-path-array comma-joins elements encoded individually" [] {
 }
 
 @test
+def "list elements that are null are dropped, not crashed on" [] {
+    assert equal (rt 'serialize-qp "n" [1 null 2] "multi"') ["n=1" "n=2"]
+    assert equal (rt 'serialize-qp "n" [null] "csv"') [] "a list of only nulls sends nothing"
+    assert equal (rt 'encode-path-array [a null b]') "a,b"
+    assert equal (rt 'encode-path-segment null') ""
+}
+
+@test
+def "encode-path-greedy keeps slashes between encoded segments" [] {
+    assert equal (rt 'encode-path-greedy "dir/a b/c%.txt"') "dir/a%20b/c%25.txt"
+    assert equal (rt 'encode-path-greedy "single"') "single"
+}
+
+@test
 def "build-url joins base path, template path and query fragments" [] {
     assert equal (rt 'build-url "https://h.test/v1" "/pets" "a=1" "" "b=2"') "https://h.test/v1/pets?a=1&b=2" "empty fragments are dropped"
     assert equal (rt 'build-url "https://h.test/?k=v" "/pets" "a=1"') "https://h.test/pets?k=v&a=1" "a query on the base URL is kept first"

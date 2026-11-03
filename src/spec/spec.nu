@@ -167,7 +167,7 @@ export def resolve-ref [val: any, doc: record] {
 # value a completer can offer.
 export def clean-enum-values [vals: list]: nothing -> list {
   $vals | each {|v|
-    if (($v | describe) == "string") and ($v =~ "(?s)^\"(.*)\"$|^'(.*)'$") {
+    if (($v | describe) == "string") and ($v =~ "^\"[^\"]*\"$|^'[^']*'$") {
       $v | str substring 1..<(($v | str length) - 1)
     } else {
       $v

@@ -8,6 +8,8 @@
 # file — `runtime.nu` always, `runtime-multipart.nu` when an operation needs
 # the envelope builder — so they get highlighting and direct unit tests
 # (`tests/test_runtime.nu`). render only splices their lines into the module.
+use names.nu [SIGNATURE_FLAGS]
+
 const RUNTIME_DIR = (path self | path dirname)
 def runtime-source [file: string]: nothing -> list<string> {
   open --raw ($RUNTIME_DIR | path join $file) | lines
@@ -129,14 +131,6 @@ def unix-socket-enabled [config: record]: nothing -> bool {
 # (`--qp-`, `--hdr-`, `--ck-`, `--body-`) or, for positionals, the `_arg`
 # suffix. Nushell accepts a duplicate binding silently (the later one wins),
 # so this list is the only thing keeping a value from being dropped.
-# The flags `build-signature` gives every command besides its spec params.
-# Two per-client additions are not listed: the gated `--unix-socket` and the
-# AND-form `--token-<scheme>` flags. The `commands` introspection hides these
-# (plus nushell's own `--help` and the per-client ones) from the param list,
-# and RESERVED_VARS keeps spec params off their variables, so a flag added to
-# the signature must be added here. `tests/test_signature.nu` checks it.
-const SIGNATURE_FLAGS = [base-url token auth-scheme insecure max-time raw allow-errors full dry-run accept]
-
 const RESERVED_VARS = (
   # built-in variables
   [in nu env]
@@ -332,7 +326,7 @@ def render-param-record [params: list] {
   $params | each {|p|
     let var = $p.flag_var
     let value_expr = if (($p.items_type? | default null) != null) {
-      $"\(if \($($var) | describe | str starts-with \"list\"\) { $($var) | each { into string } | str join \",\" } else { $($var) }\)"
+      $"\(if \($($var) | describe | str starts-with \"list\"\) { $($var) | compact | each { into string } | str join \",\" } else { $($var) }\)"
     } else {
       $"$($var)"
     }
@@ -489,12 +483,9 @@ export def build-signature [cmd: record, mapping: record, config: record] {
 
   # Accept header flag (only when multiple response content types)
   if ($cmd.accept_types | length) > 1 {
+    # collect-completers always registers this enum, so the lookup cannot miss.
     let cname = resolve-completer {name: "accept", enum: $cmd.accept_types} $mapping
-    if ($cname | is-not-empty) {
-      $parts ++= [$'  --accept: string@($cname) # Response content type']
-    } else {
-      $parts ++= ['  --accept: string # Response content type']
-    }
+    $parts ++= [$'  --accept: string@($cname) # Response content type']
   }
 
   for group in [$cmd.query_params $cmd.header_params $cmd.cookie_params] {
@@ -622,34 +613,26 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
   let sig_get = 'req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>'
   let sig_body = 'req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>'
   # One row per verb. `call` is the `http <verb>` expression with `@SOCK@`
-  # marking where the socket flag goes; `mode` picks how the response is
-  # bound: "pipe" (pipe straight into handle-response when socket-less),
-  # "head" (HEAD's header unwrap), "resp" (body verbs bind `let resp`).
+  # marking where the socket flag goes. Every sender binds `let resp` and
+  # unwraps it; HEAD first surfaces just the headers on success.
   let with_body = {|verb, flags, empty_arg| 'if ($body | is-empty) { http ' + $verb + ' ' + $f_get + '@SOCK@ $req.url' + $empty_arg + ' } else { http ' + $verb + ' ' + $flags + '@SOCK@ $req.url' + (if $verb == 'delete' { '' } else { ' $body' }) + ' }' }
   let senders = [
-    {verb: 'get', doc: 'GET — bodyless, honours --raw', sig: $sig_get, mode: 'pipe', call: ('http get ' + $f_get + '@SOCK@ $req.url')}
-    {verb: 'head', doc: 'HEAD — bodyless; default surfaces just the headers on success', sig: $sig_bodyless, mode: 'head', call: ('http head ' + $f_base + '@SOCK@ $req.url')}
-    {verb: 'options', doc: 'OPTIONS — bodyless', sig: $sig_bodyless, mode: 'pipe', call: ('http options ' + $f_base + '@SOCK@ $req.url')}
-    {verb: 'post', doc: 'POST — body + content-type', sig: $sig_body, mode: 'resp', call: (do $with_body 'post' $f_body ' ""')}
-    {verb: 'put', doc: 'PUT — body + content-type', sig: $sig_body, mode: 'resp', call: (do $with_body 'put' $f_body ' ""')}
-    {verb: 'patch', doc: 'PATCH — body + content-type', sig: $sig_body, mode: 'resp', call: (do $with_body 'patch' $f_body ' ""')}
-    {verb: 'delete', doc: 'DELETE — body via --data', sig: $sig_body, mode: 'resp', call: (do $with_body 'delete' $f_del_body '')}
+    {verb: 'get', doc: 'GET — bodyless, honours --raw', sig: $sig_get, call: ('http get ' + $f_get + '@SOCK@ $req.url')}
+    {verb: 'head', doc: 'HEAD — bodyless; default surfaces just the headers on success', sig: $sig_bodyless, call: ('http head ' + $f_base + '@SOCK@ $req.url')}
+    {verb: 'options', doc: 'OPTIONS — bodyless', sig: $sig_bodyless, call: ('http options ' + $f_base + '@SOCK@ $req.url')}
+    {verb: 'post', doc: 'POST — body + content-type', sig: $sig_body, call: (do $with_body 'post' $f_body ' ""')}
+    {verb: 'put', doc: 'PUT — body + content-type', sig: $sig_body, call: (do $with_body 'put' $f_body ' ""')}
+    {verb: 'patch', doc: 'PATCH — body + content-type', sig: $sig_body, call: (do $with_body 'patch' $f_body ' ""')}
+    {verb: 'delete', doc: 'DELETE — body via --data', sig: $sig_body, call: (do $with_body 'delete' $f_del_body '')}
   ]
-  let unwrap = '  $resp | handle-response $allow_errors $full $ok_codes'
   let head_unwrap = '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }'
   let sender_block = ($senders | where verb in $methods_used | each {|s|
     let nosock = ($s.call | str replace --all '@SOCK@' '')
-    let sock = ($s.call | str replace --all '@SOCK@' ' --unix-socket $req.unix_socket')
-    let body = if $needs_unix_socket {
-      let resp_line = '  let resp = if ($req.unix_socket | is-empty) { ' + $nosock + ' } else { ' + $sock + ' }'
-      if $s.mode == 'head' { [$resp_line $head_unwrap $unwrap] } else { [$resp_line $unwrap] }
-    } else if $s.mode == 'pipe' {
-      [('  ' + $nosock + ' | handle-response $allow_errors $full $ok_codes')]
-    } else if $s.mode == 'head' {
-      [('  let resp = (' + $nosock + ')') $head_unwrap $unwrap]
-    } else {
-      [('  let resp = ' + $nosock) $unwrap]
-    }
+    let call = if $needs_unix_socket {
+      let sock = ($s.call | str replace --all '@SOCK@' ' --unix-socket $req.unix_socket')
+      'if ($req.unix_socket | is-empty) { ' + $nosock + ' } else { ' + $sock + ' }'
+    } else { $nosock }
+    let body = [('  let resp = ' + $call)] ++ (if $s.verb == 'head' { [$head_unwrap] } else { [] }) ++ ['  $resp | handle-response $allow_errors $full $ok_codes']
     ['' $"# ($s.doc)" $"def send-($s.verb) [($s.sig)]: nothing -> any {"] ++ $body ++ ['}']
   } | flatten)
 
@@ -748,8 +731,9 @@ export def build-body-code [cmd: record, config: record] {
       # the URL and break routing. The path-template literal (the `/{x}/{y}/`
       # structure) stays intact; only the substituted values get encoded.
       # Array-typed path params (OA3 style:simple / Swagger2
-      # collectionFormat:csv) comma-join their elements within the segment.
-      let encoder = if ($p.type == "array") { "encode-path-array" } else { "encode-path-segment" }
+      # collectionFormat:csv) comma-join their elements within the segment;
+      # a greedy label (`{Key+}`) keeps its `/` between encoded segments.
+      let encoder = if ($p.type == "array") { "encode-path-array" } else if ($p.greedy? | default false) { "encode-path-greedy" } else { "encode-path-segment" }
       $"($p.var_name): \(($encoder) $($p.var_name)\)"
     } | str join ", ")
     $"\({($record_fields)} | format pattern ($pattern | to nuon)\)"
@@ -797,7 +781,7 @@ export def build-body-code [cmd: record, config: record] {
         # the list. Only form bodies (urlencoded or multipart) carry a style.
         let sep = match ($f.collection_style? | default null) { "csv" => ",", "ssv" => " ", "tsv" => "\t", "pipes" => "|", _ => null }
         let value_expr = if ($sep != null) and ($cmd.body_kind in ["form" "multipart"]) {
-          $"\(if \(($var_ref) | describe | str starts-with \"list\"\) { ($var_ref) | each { into string } | str join ($sep | to nuon) } else { ($var_ref) }\)"
+          $"\(if \(($var_ref) | describe | str starts-with \"list\"\) { ($var_ref) | compact | each { into string } | str join ($sep | to nuon) } else { ($var_ref) }\)"
         } else { $var_ref }
         $'($key | to nuon): ($value_expr)'
       })
@@ -993,29 +977,26 @@ export def build-body-code [cmd: record, config: record] {
 }
 
 # Render the module header: comment header, constants, helpers, completers, introspection command.
-def render-module-header [
-  title: string, version_str: string, spec_file: string, token_env_var: string,
-  base_url: string, all_urls: list, commands: list,
-  auth_schemes: list, completers: record, helpers_code: string,
-  config: record
-] {
-  let completers_code = if ($completers | is-not-empty) {
-    $"# Completers for enum parameters\n(render-completers $completers)\n"
+# `ctx` is {title, version_str, spec_file, token_env_var, base_url, all_urls,
+# commands, auth_schemes, completers, helpers_code}, built by `client`.
+def render-module-header [ctx: record, config: record] {
+  let completers_code = if ($ctx.completers | is-not-empty) {
+    $"# Completers for enum parameters\n(render-completers $ctx.completers)\n"
   } else {
     ""
   }
 
   # base-url completer
-  let per_op_urls = ($commands | where {|c| $c.base_url != null } | each {|c| $c.base_url } | uniq)
-  let all_completer_urls = ($all_urls | append $per_op_urls | uniq)
+  let per_op_urls = ($ctx.commands | where {|c| $c.base_url != null } | each {|c| $c.base_url } | uniq)
+  let all_completer_urls = ($ctx.all_urls | append $per_op_urls | uniq)
   let base_url_vals = $all_completer_urls | each {|u| $u | to nuon } | str join ' '
   let base_url_completer = $'def base-url-completer [] { [($base_url_vals)] }'
 
   # auth-scheme completer
-  let has_public = ($commands | where {|c| $c.default_auth == "none" } | is-not-empty)
-  let auth_names = $auth_schemes | each {|s| $s.name } | uniq
+  let has_public = ($ctx.commands | where {|c| $c.default_auth == "none" } | is-not-empty)
+  let auth_names = $ctx.auth_schemes | each {|s| $s.name } | uniq
   let auth_names_with_none = if $has_public { $auth_names | append "none" } else { $auth_names }
-  let auth_names_final = if (offers-basic-credentials $auth_schemes) and (not ("basic-credentials" in $auth_names_with_none)) {
+  let auth_names_final = if (offers-basic-credentials $ctx.auth_schemes) and (not ("basic-credentials" in $auth_names_with_none)) {
     $auth_names_with_none | append "basic-credentials"
   } else { $auth_names_with_none }
   let auth_completer_vals = if ($auth_names_final | is-not-empty) {
@@ -1043,10 +1024,10 @@ def render-module-header [
 
   # Auth header lines: the shared `--token` only when some command has it;
   # AND-form ops (one `--token-<scheme>` per required scheme) list theirs.
-  let and_schemes = ($commands | each {|c| $c.auth_required? | default [] } | flatten | uniq-by flag_slug)
-  let has_single_auth = ($commands | any {|c| (($c.auth_required? | default []) | length) <= 1 })
+  let and_schemes = ($ctx.commands | each {|c| $c.auth_required? | default [] } | flatten | uniq-by flag_slug)
+  let has_single_auth = ($ctx.commands | any {|c| (($c.auth_required? | default []) | length) <= 1 })
   let auth_lines = (
-    (if $has_single_auth { [$'# Auth: --token flag or $env.($token_env_var)'] } else { [] })
+    (if $has_single_auth { [$'# Auth: --token flag or $env.($ctx.token_env_var)'] } else { [] })
     | append ($and_schemes | each {|s| $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
   )
   # `help` is listed defensively: nushell 0.116's `scope` does not report it
@@ -1060,7 +1041,7 @@ def render-module-header [
   # sorted at runtime so the comparison never depends on the generating
   # nushell's `sort` order.
   let introspection_code = if not $config.no_introspection {
-    let cmd_names = ($commands | get name | append "commands" | each {|n| $n | to nuon } | str join ' ')
+    let cmd_names = ($ctx.commands | get name | append "commands" | each {|n| $n | to nuon } | str join ' ')
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
@@ -1091,14 +1072,14 @@ def render-module-header [
   }
 
   [
-    $'# Auto-generated client for ($title) (if ($version_str =~ "^[vV]") { "" } else { "v" })($version_str)'
-    $'# Source: ($spec_file)'
+    $'# Auto-generated client for ($ctx.title) (if ($ctx.version_str =~ "^[vV]") { "" } else { "v" })($ctx.version_str)'
+    $'# Source: ($ctx.spec_file)'
     ...$auth_lines
     ""
-    $'const BASE_URL = ($base_url | to nuon)'
+    $'const BASE_URL = ($ctx.base_url | to nuon)'
     ...$unix_socket_const
     ""
-    $helpers_code
+    $ctx.helpers_code
     ""
     $base_url_completer
     $auth_completer
@@ -1203,11 +1184,14 @@ def render-command [cmd: record, mapping: record, config: record] {
 }
 
 # Render the full client module file
-export def client [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, spec_urls: list<string>, auth_schemes: list, config: record] {
+# `loaded` is `spec load-spec`'s {data, source}; `spec` is mod.nu's
+# `process-spec` result {commands, auth_schemes, base_url, all_urls}.
+export def client [loaded: record, module_name: string, spec: record, config: record] {
+  let auth_schemes = $spec.auth_schemes
   # Interpolated, not `into string`: unquoted YAML `version: 1.0` is a float,
   # and `into string` would render it `1`.
-  let title = $"($spec_data.info?.title? | default $module_name)"
-  let version_str = $"($spec_data.info?.version? | default '0.0.0')"
+  let title = $"($loaded.data.info?.title? | default $module_name)"
+  let version_str = $"($loaded.data.info?.version? | default '0.0.0')"
   let token_env_var = if ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {
@@ -1221,16 +1205,16 @@ export def client [spec_data: record, commands: table, spec_file: string, module
     # No explicit default but completion URLs were given: bake the first as default.
     $completion_urls | first
   } else {
-    $base_url
+    $spec.base_url
   }
-  let all_urls = ([$base_url] | append $completion_urls | append $spec_urls | uniq)
+  let all_urls = ([$base_url] | append $completion_urls | append $spec.all_urls | uniq)
 
   # Enrich AND-form auth requirements with the per-scheme flag slug (derived
   # from the scheme's spec_name) and the per-scheme env-var fallback name
   # (derived from the module token env-var base). Done here, not in model,
   # because the env-var base is only known at render time.
   let and_env_base = ($token_env_var | str replace --regex '_TOKEN$' '')
-  let commands = ($commands | each {|c|
+  let commands = ($spec.commands | each {|c|
     let ar = ($c.auth_required? | default [])
     if ($ar | length) > 1 {
       $c | update auth_required ($ar | each {|s|
@@ -1260,7 +1244,11 @@ export def client [spec_data: record, commands: table, spec_file: string, module
   let needs_unix_socket = (unix-socket-enabled $config)
   let helpers_code = render-helpers $token_env_var $auth_schemes $needs_multipart $needs_and_auth $methods_used $needs_unix_socket
 
-  let header = render-module-header $title $version_str $spec_file $token_env_var $base_url $all_urls $commands $auth_schemes $completers $helpers_code $config
+  let header = render-module-header {
+    title: $title, version_str: $version_str, spec_file: $loaded.source, token_env_var: $token_env_var
+    base_url: $base_url, all_urls: $all_urls, commands: $commands, auth_schemes: $auth_schemes
+    completers: $completers, helpers_code: $helpers_code
+  } $config
 
   let command_sections = ($commands | each {|cmd| render-command $cmd $mapping $config })
 

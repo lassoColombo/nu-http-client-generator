@@ -22,11 +22,12 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # A record value follows OpenAPI object serialization: "multi" (form +
 # explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
 # `name=k,v,k,v` with that delimiter, anything else is deepObject
-# `name[k]=v`. Null members are skipped.
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
   # A list of records describes as `table<…>`, not `list<…>`.
   let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
   let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
@@ -50,8 +51,9 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
 # A record or list (an array-of-object query param's element) has no scalar
 # form, so it is sent as compact JSON, the convention the multipart builder
-# uses for structured text parts.
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
+  if $v == null { return "" }
   let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
   $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
@@ -64,7 +66,13 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+def encode-path-greedy [v: any]: nothing -> string {
+  $"($v)" | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -99,7 +107,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -162,7 +171,7 @@ export def "perform-analysis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/analysis" $auth.query)
-  let req_body = {"picture": $picture, "storeResult": $store_result, "tags": (if ($tags | describe | str starts-with "list") { $tags | each { into string } | str join "," } else { $tags })} | compact
+  let req_body = {"picture": $picture, "storeResult": $store_result, "tags": (if ($tags | describe | str starts-with "list") { $tags | compact | each { into string } | str join "," } else { $tags })} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,7 +212,7 @@ export def "marketstat" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/marketstat" $auth.query)
-  let req_body = {"typeid": (if ($typeid | describe | str starts-with "list") { $typeid | each { into string } | str join "," } else { $typeid }), "regionlimit": $regionlimit, "usesystem": $usesystem} | compact
+  let req_body = {"typeid": (if ($typeid | describe | str starts-with "list") { $typeid | compact | each { into string } | str join "," } else { $typeid }), "regionlimit": $regionlimit, "usesystem": $usesystem} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

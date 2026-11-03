@@ -10,14 +10,10 @@ use std/assert
 use std/testing *
 
 use ../mod.nu
+use ../src/names.nu [EMITTED_DEF_NAMES]
 
-const EMITTED = [
-  main commands
-  build-auth merge-auth serialize-qp encode-path-segment encode-path-array build-url status-ok
-  handle-response build-multipart-body
-  send-get send-post send-put send-patch send-delete send-head send-options
-  base-url-completer auth-scheme-completer unix-socket-completer status-completer
-]
+# The module's own defs plus one enum-completer name.
+const EMITTED = ($EMITTED_DEF_NAMES ++ [status-completer])
 
 @before-all
 def setup []: nothing -> record {
@@ -81,4 +77,16 @@ def "every command dry-runs" [] {
         | compact
     )
     assert equal $failures [] $"dry-run failures: ($failures)"
+}
+
+@test
+def "every helper def a client emits is a reserved name" [] {
+    # A def the module emits but EMITTED_DEF_NAMES misses is a name an
+    # operationId could take, which is a duplicate_command_def. Every golden
+    # together covers the optional helpers (merge-auth, multipart, all verbs).
+    let emitted = (glob tests/expected/**/*.nu
+        | each {|f| open --raw $f | parse --regex '(?m)^def (?<n>[^ ]+) ' | get n }
+        | flatten | uniq)
+    let missing = ($emitted | where {|n| ($n not-in $EMITTED_DEF_NAMES) and ($n !~ '-completer(-\d+)?$') })
+    assert ($missing | is-empty) $"defs missing from EMITTED_DEF_NAMES: ($missing | str join ', ')"
 }

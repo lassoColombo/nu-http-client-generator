@@ -1,0 +1,25 @@
+openapi: 3.0.3
+info:
+  title: Greedy Path Edge Cases
+  version: 1.0.0
+  description: |
+    AWS-style greedy path labels. `{Key+}` matches the rest of the path, slashes
+    included, so the value is encoded per segment and its `/` survive. The `+`
+    is not part of the parameter name: the spec declares `Key`.
+servers:
+  - url: https://s3.example.com
+paths:
+  /{Bucket}/{Key+}:
+    get:
+      operationId: GetObject
+      parameters:
+        - {name: Bucket, in: path, required: true, schema: {type: string}}
+        - {name: Key, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: ok}
+  /archive/{Prefix+}:
+    get:
+      operationId: ListArchive
+      summary: Greedy label with no declared parameter (synthesized positional).
+      responses:
+        "200": {description: ok}

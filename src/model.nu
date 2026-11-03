@@ -6,6 +6,7 @@
 
 use spec/spec.nu
 use log.nu
+use names.nu [EMITTED_DEF_NAMES]
 
 # ── Private helpers ────────────────────────────────────────────────
 
@@ -74,7 +75,10 @@ def normalize-discriminator [disc: any] {
 }
 
 # Merge properties from a body schema, handling allOf/oneOf/anyOf/discriminator.
-# Returns {props: record, required: list<string>}.
+# Returns {props: record, required: list<string>, has_array_variant: bool}.
+# `has_array_variant` is true when a oneOf/anyOf variant is a bare array: the
+# per-field flags only cover the object variants, so render accepts a piped
+# list as the whole body (GitHub's branch-protection contexts).
 def merge-body-props [schema: record, doc: record] {
   # allOf is folded by spec's merge-all-of — recursively, so a chain of
   # allOf-only wrappers (`Base: allOf [Mid]`, `Mid: allOf [Leaf, {props}]`)
@@ -115,8 +119,13 @@ def merge-body-props [schema: record, doc: record] {
   } else {
     $merged_props
   }
+  # Plain `type: array` or an OAS 3.1 list-typed union containing "array".
+  let has_array_variant = ($poly_resolved | any {|v|
+    let t = ($v.type? | default null)
+    ($t == "array") or ((($t | describe) | str starts-with "list") and ("array" in $t))
+  })
 
-  {props: $props, required: $required}
+  {props: $props, required: $required, has_array_variant: $has_array_variant}
 }
 
 # Body field info for a request body schema: merge, resolve, extract.
@@ -237,9 +246,9 @@ def schema-discriminator [schema: any, context: string] {
 #      input-only builtins like `is-not-empty`). Every single-word builtin of
 #      nushell 0.116 is listed; the set rarely changes and the cost of an
 #      unneeded entry is one slug-named command, not a broken client.
-#   3. The module's own defs: the static helper library (`send-post`,
-#      `build-url`, …), the completers (`*-completer`) and `main`/`commands`.
-#      A collision is `nu::parser::duplicate_command_def`.
+#   3. The module's own defs (`EMITTED_DEF_NAMES` in `names.nu`) and the enum
+#      completers (`*-completer`). A collision is
+#      `nu::parser::duplicate_command_def`.
 # An unusable operationId falls back to the method+path slug; an unusable slug
 # (`GET /` → `get`) gets an `-op` suffix. NOT the flag/variable reserved list
 # — that one lives in render and is about variables, not commands.
@@ -261,20 +270,15 @@ const NU_BUILTIN_COMMANDS = [
   union uniq uniq-by unlet update upsert url values version view watch which whoami window with-env
   wrap zip
 ]
-const EMITTED_DEF_NAMES = [
-  main commands
-  build-auth merge-auth serialize-qp encode-path-segment encode-path-array build-url status-ok
-  handle-response build-multipart-body
-  send-get send-post send-put send-patch send-delete send-head send-options
-  base-url-completer auth-scheme-completer unix-socket-completer
-]
 const UNUSABLE_NAMES = ($PARSER_KEYWORDS ++ $NU_BUILTIN_COMMANDS ++ $EMITTED_DEF_NAMES)
 
 # Is this a name the generated module cannot export? See UNUSABLE_NAMES; the
 # `-completer` suffix is reserved because every enum param gets a
 # `<flag>-completer` def of its own.
 def name-unusable [name: string]: nothing -> bool {
-  ($name in $UNUSABLE_NAMES) or ($name | str ends-with "-completer")
+  # Completers are `<flag>-completer`, and `<flag>-completer-<n>` when two
+  # enum sets share a flag name.
+  ($name in $UNUSABLE_NAMES) or ($name =~ '-completer(-\d+)?$')
 }
 
 # Sanitize an arbitrary string to a valid `def "<name>"`: drop path
@@ -388,13 +392,15 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   let path_level_params = ($methods.parameters? | default [] | each $resolve)
   let op_params = ($op.parameters? | default [] | each $resolve)
 
-  # merge path-level params with operation params (op overrides path-level)
+  # merge path-level params with operation params (op overrides path-level).
+  # The merged list keeps every location: Swagger 2 `body`/`formData` params
+  # are inherited from the path item too, and the body helper reads them here.
   let op_param_keys = $op_params | each {|p| $"($p.name? | default ''):($p.in? | default '')" }
-  let resolved_params = ($path_level_params | where {|p|
+  let all_params = ($path_level_params | where {|p|
     let key = $"($p.name? | default ''):($p.in? | default '')"
     not ($key in $op_param_keys)
-  } | append $op_params
-  ) | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] }
+  } | append $op_params)
+  let resolved_params = ($all_params | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] })
 
   # Path params keep the spec name, the (items) type and the enum: render
   # derives the positional variable name from the spec name, types an array
@@ -406,6 +412,7 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p $h } }
 
   {
+    all_params: $all_params
     path_params: $path_params
     query_params: (do $in_location "query")
     header_params: (do $in_location "header")
@@ -448,34 +455,15 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   let body_kind = if not $has_body { "none" } else if ($content_type | str starts-with "application/json") { "json" } else if $content_type == $spec.CT_FORM { "form" } else if $content_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
   let has_schema = (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
   let expand_fields = $has_schema and ($body_kind in ["json" "form" "multipart"])
-  let merged = if $expand_fields { merge-body-props $body_schema $doc } else { {props: {}, required: []} }
-  let resolved = (resolve-body-props $merged.props $doc)
+  # Merged for every schema-bearing body (an opaque one still reports its
+  # array variant); its fields only become flags when they can be encoded.
+  let merged = if $has_schema { merge-body-props $body_schema $doc } else { {props: {}, required: [], has_array_variant: false} }
+  let resolved = if $expand_fields { resolve-body-props $merged.props $doc } else { [] }
   let body_fields = (body-fields-from-resolved $resolved $merged.required $doc)
   let field_shapes = (field-shapes-from-resolved $resolved $doc)
 
   # The request-side discriminator; the response side is extract-response-info's.
   let discriminator = (schema-discriminator $body_schema "request")
-
-  # Detect polymorphic body schemas where one oneOf/anyOf variant is a bare
-  # array. The per-field signature only covers object variants; the array
-  # variant is unreachable through any flag. We flag the command so the
-  # renderer can accept a list pipeline input and pass it straight through as
-  # the request body (e.g. GitHub branch-protection contexts).
-  let body_polymorphic_array = if (($body_schema | describe) | str starts-with "record") {
-    let variants = ($body_schema.oneOf? | default ($body_schema.anyOf? | default []))
-    $variants | any {|v|
-      let resolved = (spec resolve-ref $v $doc)
-      if (($resolved | describe) | str starts-with "record") {
-        let t = ($resolved.type? | default null)
-        # Plain "array" or OAS 3.1 list-typed union containing "array".
-        ($t == "array") or ((($t | describe) | str starts-with "list") and ("array" in ($t | default [])))
-      } else {
-        false
-      }
-    }
-  } else {
-    false
-  }
 
   # Determine the body schema's scalar type so the renderer can emit a typed
   # `--body: <type>` flag (and accept matching pipeline input) when the body
@@ -488,7 +476,7 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
     if ($normalized == null) or ($normalized == "object") { "any" } else { $normalized }
   }
 
-  {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
+  {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $merged.has_array_variant, body_scalar_type: $body_scalar_type}
 }
 
 # Extract response info: accept_types, return_type, success_codes, discriminator.
@@ -571,17 +559,19 @@ def apply-name-fn [
 # not cosmetics. It rarely fires: operationIds are unique per spec and the path
 # slug is unique per (method, path), so only two things reach it — distinct
 # operationIds that kebab to the same string, and whatever a `--name-fn`
-# returns. `taken` is seeded with UNUSABLE_NAMES so a closure returning `let`
-# can never produce an unparseable module.
+# returns. An unusable name (a closure returning `let` or `status-completer`)
+# first takes the same `-op` suffix `derive-command-name` gives an unusable
+# slug, so the module always parses.
 def deduplicate-commands []: list -> list {
-  mut taken = ($UNUSABLE_NAMES | reduce --fold {} {|n, acc| $acc | upsert $n true })
+  mut taken = {}
   mut out = []
   mut renamed = []
   for cmd in $in {
-    mut name = $cmd.name
+    let base = if (name-unusable $cmd.name) { $"($cmd.name)-op" } else { $cmd.name }
+    mut name = $base
     mut n = 1
-    while (($taken | get -o $name) != null) {
-      $name = $"($cmd.name)-($n)"
+    while (($taken | get -o $name) != null) or (name-unusable $name) {
+      $name = $"($base)-($n)"
       $n = $n + 1
     }
     if $name != $cmd.name {
@@ -591,7 +581,7 @@ def deduplicate-commands []: list -> list {
     $out ++= [($cmd | update name $name)]
   }
   if ($renamed | is-not-empty) {
-    log info $"($renamed | uniq | length) command name\(s\) disambiguated with a numeric suffix: ($renamed | uniq | str join ', ')"
+    log info $"($renamed | uniq | length) command name\(s\) renamed to stay unique and legal: ($renamed | uniq | str join ', ')"
   }
   $out
 }
@@ -645,6 +635,12 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       # join it with `&` instead of a second `?`.
       let fixed_query = ($clean_path | split row '?' | get -o 1 | default "")
       let clean_path = ($clean_path | split row '?' | first)
+      # AWS greedy labels (`/{Bucket}/{Key+}`) match the rest of the path,
+      # slashes included. The `+` is not part of the name (the spec declares
+      # `Key`), so the template is normalized to `{Key}` and the param is
+      # marked greedy: render encodes it per segment, keeping its `/`.
+      let greedy_names = ($clean_path | parse --regex '\{(?P<n>[^{}]+)\+\}' | get n)
+      let clean_path = ($clean_path | str replace --all --regex '\{([^{}]+)\+\}' '{${1}}')
 
       let params = (classify-params $op $methods $doc $h)
       # Synthesize path params for undeclared URL template placeholders
@@ -661,8 +657,8 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       let params = $params | update path_params ($params.path_params | append $extra_path_params | sort-by {|p|
         let idx = ($clean_path | str index-of $"{($p.name)}")
         if $idx < 0 { 999999 } else { $idx }
-      })
-      let body = (extract-body-info $method $op $doc $h $"($method | str uppercase) ($path_entry.path)")
+      } | each {|p| $p | insert greedy ($p.name in $greedy_names) })
+      let body = (extract-body-info $method ($op | upsert parameters $params.all_params) $doc $h $"($method | str uppercase) ($path_entry.path)")
       let resp = (extract-response-info $method $op $doc $h)
       let derived_name = (derive-command-name $op $method (if ($fixed_query | is-empty) { $clean_path } else { $"($clean_path)?($fixed_query)" }))
       let cmd_name = if ($config.name_fn? == null) {

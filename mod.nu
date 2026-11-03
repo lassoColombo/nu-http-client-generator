@@ -59,6 +59,14 @@ def filter-config [tags: any, prefixes: any, methods: any, exclude_deprecated: b
   }
 }
 
+# The default output file stem for a title: lowercased, every run of
+# characters outside `[a-z0-9._-]` collapsed to `-`. A raw title such as
+# `Pets / Store API` would otherwise make `save` write into a `Pets ` directory.
+def default-file-stem [title: string]: nothing -> string {
+  let stem = ($title | str lowercase | str replace --all --regex '[^a-z0-9._-]+' '-' | str trim --char '-')
+  if ($stem | is-empty) or ($stem =~ '^\.+$') { "client" } else { $stem }
+}
+
 # Generate a Nushell HTTP client module from an OpenAPI/Swagger spec
 export def main [
   source: string                # OpenAPI/Swagger spec file path or URL
@@ -109,8 +117,8 @@ export def main [
   if ($result.commands | is-empty) {
     error make --unspanned { msg: $"spec at ($loaded.source) yields no commands after filtering — nothing to generate" }
   }
-  let output_content = (render client $loaded.data $result.commands $loaded.source $title $result.base_url $result.all_urls $result.auth_schemes $config)
-  let out_path = if ($output | is-not-empty) { $output } else { $"./($title).nu" }
+  let output_content = (render client $loaded $title $result $config)
+  let out_path = if ($output | is-not-empty) { $output } else { $"./(default-file-stem $title).nu" }
   $output_content | save --force $out_path
 }
 

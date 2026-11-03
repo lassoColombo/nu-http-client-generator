@@ -140,8 +140,34 @@ def "name-fn sanitizes def-breaking chars" [] {
 }
 
 @test
+def "name-fn cannot take the name of a completer" [] {
+    # Completers are `<flag>-completer` and `<flag>-completer-<n>`; a command
+    # with either name is a duplicate def next to an enum param's completer.
+    let names = mod preview $PETSTORE --name-fn {|ctx| "status-completer" } | get name
+    assert ($names | all {|n| not ($n =~ '-completer(-\d+)?$') }) $"a completer name reached the module: ($names | str join ', ')"
+    assert equal ($names | length) ($names | uniq | length) "names must stay globally unique"
+}
+
+@test
 def "name-fn cannot produce a name nushell refuses" [] {
     let names = mod preview $PETSTORE --name-fn {|ctx| "let" } | get name
     assert ("let" not-in $names) "a parser keyword must never reach the emitted module"
     assert equal ($names | length) ($names | uniq | length) "names must stay globally unique"
+}
+
+@test
+def "the default output file is a flat, sanitized name" [] {
+    # Without -o the file is named after the spec title. A title with `/`
+    # must not turn into a directory path.
+    let temp = mktemp --directory
+    let spec = ($temp | path join "spec.json")
+    {
+        openapi: "3.0.3"
+        info: {title: "Pets / Store API", version: "1"}
+        paths: {/pets: {get: {operationId: listPets, responses: {"200": {description: ok}}}}}
+    } | to json | save $spec
+    do { cd $temp; mod $spec }
+    let made = (ls $temp | get name | path basename | sort)
+    rm --recursive $temp
+    assert equal $made ["pets-store-api.nu" "spec.json"]
 }
