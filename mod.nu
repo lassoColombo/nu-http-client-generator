@@ -5,10 +5,7 @@
 #   http-gen ./spec.yaml -o ./client.nu
 #   http-gen preview ./spec.yaml
 
-use src/spec
-# nu 0.114 stopped exposing a directory module's submodules through the parent
-# namespace (`spec oa3 ...` no longer resolves after `use src/spec`), so import
-# the version-specific helper submodules directly.
+use src/spec/spec.nu
 use src/spec/oa3.nu
 use src/spec/swagger2.nu
 use src/render.nu

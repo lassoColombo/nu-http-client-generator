@@ -34,27 +34,29 @@ def build-param [p: record, h: record] {
     items_type: (do $h.get-param-items-type $p)
     required: $required
     required_default: $required_default
-    description: (spec build-description ($p.description? | default "") [
-      (if $required { "required" } else { null })
-      (if $deprecated { "DEPRECATED" } else { null })
-      (if $nullable { "nullable" } else { null })
-      (if ($format != null) { $"format: ($format)" } else { null })
-      (default-note $default_val)
-      (if ($example != null) { $"e.g. ($example)" } else { null })
-      (if $allow_empty { "allows empty value" } else { null })
-    ])
+    description: (spec build-description ($p.description? | default "") (
+      [(if $required { "required" } else { null })]
+      ++ (value-notes $deprecated $nullable $format $default_val $example)
+      ++ [(if $allow_empty { "allows empty value" } else { null })]
+    ))
     enum: $enum
     collection_style: (do $h.get-param-collection-style $p)
     deprecated: $deprecated
   }
 }
 
-# `default: X` description note; an empty-string default is shown as `""`
-# rather than vanishing into `(default: , e.g. NONE)`.
-def default-note [default_val: any]: nothing -> any {
-  if ($default_val == null) { return null }
-  let text = $"($default_val)"
-  if ($text | is-empty) { 'default: ""' } else { $"default: ($text)" }
+# The description annotations a param and a body field share, in display
+# order; null entries are dropped by `build-description`. An empty-string
+# default is shown as `""` rather than vanishing into `(default: , e.g. NONE)`.
+def value-notes [deprecated: bool, nullable: bool, format: any, default_val: any, example: any]: nothing -> list {
+  let default_text = $"($default_val)"
+  [
+    (if $deprecated { "DEPRECATED" } else { null })
+    (if $nullable { "nullable" } else { null })
+    (if ($format != null) { $"format: ($format)" } else { null })
+    (if ($default_val == null) { null } else if ($default_text | is-empty) { 'default: ""' } else { $"default: ($default_text)" })
+    (if ($example != null) { $"e.g. ($example)" } else { null })
+  ]
 }
 
 # Normalize a discriminator into {propertyName, mapping}. OAS 3.x discriminators
@@ -156,13 +158,7 @@ def body-fields-from-resolved [resolved: list, required: list, doc: record] {
     let format = ($field.spec.format? | default null)
     let example = ($field.spec.example? | default null)
     let deprecated = ($field.spec.deprecated? | default false)
-    let desc = (spec build-description ($field.spec.description? | default "") [
-      (if $deprecated { "DEPRECATED" } else { null })
-      (if $nullable { "nullable" } else { null })
-      (if ($format != null) { $"format: ($format)" } else { null })
-      (default-note $default_val)
-      (if ($example != null) { $"e.g. ($example)" } else { null })
-    ])
+    let desc = (spec build-description ($field.spec.description? | default "") (value-notes $deprecated $nullable $format $default_val $example))
     # Swagger 2 formData arrays carry a `collectionFormat` (synthesized onto
     # the property by spec/swagger2); render joins csv/ssv/tsv/pipes lists
     # before the form body is url-encoded. Null means "repeat the key".
@@ -199,7 +195,7 @@ def field-shapes-from-resolved [resolved: list, doc: record] {
         if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: true} }
       } else { null }
     } else { null }
-  } | compact
+  }
 }
 
 # A schema's discriminator as the command-model record {context, propertyName,
@@ -503,7 +499,7 @@ def extract-response-info [method: string, op: record, doc: record, h: record] {
     accept_types: $accept_types
     return_type: $return_type
     success_codes: (spec get-success-codes $op)
-    discriminator: ($schemas | each {|s| schema-discriminator (spec resolve-ref $s $doc) "response" } | compact | get -o 0)
+    discriminator: ($schemas | each {|s| schema-discriminator (spec resolve-ref $s $doc) "response" } | get -o 0)
   }
 }
 
@@ -706,5 +702,5 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
         return_type: $resp.return_type
       }
     }
-  } | flatten | compact | deduplicate-commands
+  } | flatten | deduplicate-commands
 }

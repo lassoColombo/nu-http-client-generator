@@ -65,3 +65,34 @@ paths:
                     field: {type: string}
       responses:
         '200': {description: ok}
+  # Three spellings of one name: the third's `-body` candidate is already
+  # taken, so it gets the numeric sweep (`--user-id-body-2`) instead of a
+  # second `--user-id-body` that nushell would silently collapse.
+  /triple:
+    post:
+      operationId: tripleSpelling
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: {type: string}
+                userId: {type: string}
+                user-id: {type: string}
+      responses:
+        '200': {description: ok}
+  # Two reserved names differing only by case both want `--body-input`.
+  /reserved-twice:
+    post:
+      operationId: reservedTwice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input: {type: string}
+                Input: {type: string}
+      responses:
+        '200': {description: ok}

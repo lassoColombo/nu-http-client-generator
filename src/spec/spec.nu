@@ -133,7 +133,7 @@ def ref-target [ref_path: string, doc: record]: nothing -> any {
   [
     $doc.components?.schemas? $doc.components?.parameters? $doc.components?.responses? $doc.components?.requestBodies?
     $doc.definitions? $doc.parameters? $doc.responses?
-  ] | where {|t| ($t | describe) | str starts-with "record" } | each {|t| $t | get -o $ref_path } | compact | get -o 0
+  ] | where {|t| ($t | describe) | str starts-with "record" } | each {|t| $t | get -o $ref_path } | get -o 0
 }
 
 # Resolve a `$ref` against the spec document. Follows chains (A → B → C) to
@@ -220,7 +220,7 @@ export def detect [spec: record] {
 export def requirement-schemes [security: any, auth_schemes: list]: nothing -> record {
   let first_req = ($security | default [] | get -o 0)
   let declared = if (($first_req | describe) | str starts-with "record") { $first_req | columns } else { [] }
-  let schemes = ($declared | each {|n| $auth_schemes | where {|s| $s.spec_name == $n } | get -o 0 } | compact | collapse-wire-identical)
+  let schemes = ($declared | each {|n| $auth_schemes | where {|s| $s.spec_name == $n } | get -o 0 } | collapse-wire-identical)
   {declared: $declared, schemes: $schemes}
 }
 
@@ -370,7 +370,6 @@ export def merge-all-of [schema: any, doc: record, --visited: list<string> = []]
       let seen = if $is_ref { $visited | append $ref_path } else { $visited }
       merge-all-of (resolve-ref $sub $doc) $doc --visited $seen
     }
-    | compact
     | where {|sub| ($sub | describe) | str starts-with "record" })
   if ($members | is-empty) { return $schema }
   let base = ($schema | reject allOf)

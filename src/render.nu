@@ -3,6 +3,16 @@
 # All functions in this file take the command model (built by mod.nu + spec.nu)
 # and produce Nushell source code strings.
 
+# The config-independent helpers every client carries (`serialize-qp`,
+# `build-url`, `handle-response`, …) live as real Nushell source next to this
+# file — `runtime.nu` always, `runtime-multipart.nu` when an operation needs
+# the envelope builder — so they get highlighting and direct unit tests
+# (`tests/test_runtime.nu`). render only splices their lines into the module.
+const RUNTIME_DIR = (path self | path dirname)
+def runtime-source [file: string]: nothing -> list<string> {
+  open --raw ($RUNTIME_DIR | path join $file) | lines
+}
+
 # Build a NUON-like shape description from a list of body-field-like records.
 # Example output: {name: string, tag?: string, status: "active"|"inactive"}
 #
@@ -251,8 +261,13 @@ def decorate-body-fields [body_fields: list, path_vars: list<string>, seen: list
     } else {
       {flag_name: $flag, collision: ""}
     }
-    let var_name = (flag-var $decided.flag_name)
-    $items = ($items | append ($f | merge {is_positional: $is_positional, flag_name: $decided.flag_name, var_name: $var_name, collision: $decided.collision}))
+    # The prefixed/suffixed candidate can itself be bound already (three
+    # spellings of one name, two reserved names differing only by case), so a
+    # flag goes through the same numeric sweep the param groups use; a
+    # positional is unbound by construction.
+    let flag_name = if $is_positional { $decided.flag_name } else { (disambiguate-flag-name $decided.flag_name false $body_seen).flag_name }
+    let var_name = (flag-var $flag_name)
+    $items = ($items | append ($f | merge {is_positional: $is_positional, flag_name: $flag_name, var_name: $var_name, collision: $decided.collision}))
     $body_seen = ($body_seen | append $var_name)
   }
   {items: $items, seen: $body_seen}
@@ -643,111 +658,8 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '}'
     ...$merge_auth_block
     ''
-    '# Serialize a single query parameter based on collection style.'
-    '# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars'
-    '# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
-    '# A record value follows OpenAPI object serialization: "multi" (form +'
-    '# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is'
-    '# `name=k,v,k,v` with that delimiter, anything else is deepObject'
-    '# `name[k]=v`. Null members are skipped.'
-    'def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {'
-    '  if ($value == null) { return [] }'
-    '  let is_list = ($value | describe | str starts-with "list")'
-    '  if $is_list and ($value | is-empty) { return [] }'
-    '  let n = (encode-path-segment $name)'
-    '  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })'
-    '  if ($value | describe | str starts-with "record") {'
-    '    let pairs = ($value | transpose k v | where v != null)'
-    '    return (match $style {'
-    '      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }'
-    '      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }'
-    '      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }'
-    '    })'
-    '  }'
-    '  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }'
-    '  match $style {'
-    '    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }'
-    '    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }'
-    '    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }'
-    '  }'
-    '}'
-    ''
-    '# Percent-encode a path-segment value per RFC 3986.'
-    '# Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
-    'def encode-path-segment [v: any]: nothing -> string {'
-    '  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"'
-    '}'
-    ''
-    '# Serialize an array-typed path parameter. OpenAPI 3 `style: simple`'
-    '# (the default for path params) and Swagger 2 `collectionFormat: csv` both join'
-    '# the elements with a literal comma WITHIN the single path segment, each element'
-    '# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without'
-    '# this a `list` positional would render as the Nushell debug form `[a, b]`,'
-    '# producing a guaranteed-404 URL. The else-branch keeps scalar values on the'
-    '# historical encode-path-segment path (defensive against a bare string).'
-    'def encode-path-array [v: any]: nothing -> string {'
-    '  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }'
-    '}'
-    ''
-    '# Build the request URL from base, path, and any number of pre-encoded query'
-    '# fragments (param serializer output and/or the auth query). Each fragment is an'
-    '# `&`-joinable `key=value` string already percent-encoded by its producer; empty'
-    '# fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no'
-    '# delimiters are hand-spliced — and any query already on the base URL is merged in.'
-    'def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {'
-    '  let parsed = ($base | url parse | reject params)'
-    "  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join \"/\" | str replace --all --regex '/+' '/' }"
-    '  let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")'
-    '  $parsed | upsert path $full_path | upsert query $query | url join'
-    '}'
-    ''
-    '# Success policy: did this response succeed? Single source of truth, consulted by'
-    '# handle-response and the HEAD header-unwrap. Empty ok_codes means the spec listed'
-    '# none, so fall back to < 400. Otherwise: any 2xx, plus documented success codes.'
-    'def status-ok [status: int, ok_codes: list<int>]: nothing -> bool {'
-    '  if ($ok_codes | is-empty) { $status < 400 } else { ($status >= 200 and $status < 300) or ($status in $ok_codes) }'
-    '}'
-    ''
-    '# Unwrap a `--full` HTTP response into the user-facing value. Response arrives'
-    '# via pipeline; ok_codes gates the error throw (see status-ok).'
-    'def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: record -> any {'
-    '  let resp = $in'
-    '  if $allow_errors { return $resp }'
-    '  if not (status-ok $resp.status $ok_codes) { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } }'
-    '  if $full { return {status: $resp.status, headers: $resp.headers, body: $resp.body} }'
-    '  if $resp.status == 204 { return null }'
-    '  $resp.body'
-    '}'
-  ] | append $sender_block | append (if $needs_multipart { [
-    ''
-    '# Build a `multipart/form-data` envelope per RFC 7578. `file_fields` lists'
-    '# the field names whose value should be read from disk as bytes; every'
-    '# other field is sent as a text part (records/lists JSON-stringified).'
-    '# Returns {content_type, body}.'
-    '# When `$dry_run` is true, file fields are NOT read from disk — they emit'
-    '# an empty-bytes placeholder so callers can inspect the request shape'
-    '# without the file existing on disk.'
-    'def build-multipart-body [parts: record, file_fields: list<string>, dry_run: bool = false]: nothing -> record {'
-    '  let boundary = $"----nu-(random chars --length 24)"'
-    '  let crlf = "\r\n"'
-    '  let chunks = ($parts | items {|name, val|'
-    '    if $val == null { null } else if $name in $file_fields {'
-    '      let filename = ($val | into string | path basename)'
-    '      let bytes = if $dry_run { (0x[] | into binary) } else { (open --raw $val | into binary | collect) }'
-    '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"; filename=\"($filename)\"($crlf)Content-Type: application/octet-stream($crlf)($crlf)" | into binary)'
-    '      $head ++ $bytes ++ ($crlf | into binary)'
-    '    } else {'
-    '      let dt = ($val | describe)'
-    '      let s = if (($dt | str starts-with "record") or ($dt | str starts-with "list") or ($dt | str starts-with "table")) { ($val | to json --raw) } else { ($val | into string) }'
-    '      let head = ($"--($boundary)($crlf)Content-Disposition: form-data; name=\"($name)\"($crlf)($crlf)" | into binary)'
-    '      $head ++ ($"($s)($crlf)" | into binary)'
-    '    }'
-    '  } | compact)'
-    '  let trailer = ($"--($boundary)--($crlf)" | into binary)'
-    '  let body = ($chunks | reduce --fold (0x[] | into binary) {|chunk, acc| $acc ++ $chunk }) ++ $trailer'
-    '  {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}'
-    '}'
-  ] } else { [] }) | str join "\n"
+    ...(runtime-source "runtime.nu")
+  ] | append $sender_block | append (if $needs_multipart { [''] ++ (runtime-source "runtime-multipart.nu") } else { [] }) | str join "\n"
 }
 
 # Build the body code for a decorated command (see `decorate-command`).
@@ -1260,7 +1172,7 @@ def render-command [cmd: record, mapping: record, config: record] {
   # actual body — purely a parse-time + doc improvement. record/table/list/any
   # outputs already pipe fine and keep their annotation.
   let return_str = (nu-type-string $cmd.return_type)
-  let scalar_leaves = ["string" "int" "bool" "float" "number" "datetime" "binary" "duration"]
+  let scalar_leaves = ["string" "int" "bool" "float"]
   let output_type = if ($return_str in $scalar_leaves) {
     let members = ([$return_str "string" "record" "nothing"] | uniq)
     $"oneof<($members | str join ', ')>"

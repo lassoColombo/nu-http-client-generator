@@ -145,7 +145,7 @@ def get-response-schemas-impl [op: record, doc: record] {
     } else {
       $content | values | each {|m| $m | get -o schema } | get -o 0
     }
-  } | compact
+  }
 }
 
 def get-auth-schemes-impl [spec_data: record] {

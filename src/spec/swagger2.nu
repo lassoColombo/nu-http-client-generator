@@ -144,7 +144,7 @@ def get-response-schemas-impl [op: record, doc: record] {
   spec success-response-codes $responses | each {|code|
     let resp = (spec resolve-ref ($responses | get -o $code) $doc)
     if (($resp | describe) | str starts-with "record") { $resp | get -o schema } else { null }
-  } | compact
+  }
 }
 
 def get-auth-schemes-impl [spec_data: record] {
