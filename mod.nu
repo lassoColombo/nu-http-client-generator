@@ -42,10 +42,8 @@ def process-spec [doc: record, config: record] {
     "swagger" => (swagger2 helpers)
   }
   let auth_schemes = (do $h.get-auth-schemes $doc)
-  let default_auth = (spec get-default-auth $doc $auth_schemes)
-  let default_auth_required = (spec get-default-auth-required $doc $auth_schemes)
   {
-    commands: (model command-list $doc $h $auth_schemes $default_auth $default_auth_required $config)
+    commands: (model command-list $doc $h $auth_schemes (spec root-auth $doc $auth_schemes) $config)
     auth_schemes: $auth_schemes
     base_url: (do $h.get-base-url $doc)
     all_urls: (do $h.get-all-urls $doc)
@@ -88,16 +86,18 @@ export def main [
 ] {
   let loaded = (spec load-spec $source ($spec_headers | default {}))
   check-spec-generatable $loaded
+  # The three optional strings stay null when unset; render tests them with
+  # `is-not-empty`, which treats null and "" alike.
   let config = (filter-config $tags $prefixes $methods $exclude_deprecated $name_fn) | merge {
-    token_env_var: (if ($token_env_var | is-empty) { null } else { $token_env_var })
+    token_env_var: $token_env_var
     default_timeout: $default_timeout
     default_headers: ($default_headers | default {})
     body_threshold: $body_threshold
     no_introspection: $no_introspection
     no_descriptions: $no_descriptions
-    default_base_url: (if ($default_base_url | is-empty) { null } else { $default_base_url })
+    default_base_url: $default_base_url
     autocompletion_base_urls: ($autocompletion_base_urls | default [])
-    default_unix_socket: (if ($default_unix_socket | is-empty) { null } else { $default_unix_socket })
+    default_unix_socket: $default_unix_socket
     autocompletion_unix_sockets: ($autocompletion_unix_sockets | default [])
   }
 

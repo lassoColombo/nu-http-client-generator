@@ -122,17 +122,18 @@ export def "search-by-env" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-env: string
+  --qp-in: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "env" $qp_env "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "env" $qp_env "scalar") (serialize-qp "in" $qp_in "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"env": $qp_env} | compact)
+    query: ({"env": $qp_env, "in": $qp_in} | compact)
     headers: $auth.headers
     body: null
     content_type: null

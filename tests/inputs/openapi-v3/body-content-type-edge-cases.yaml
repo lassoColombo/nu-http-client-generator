@@ -166,6 +166,9 @@ paths:
       responses:
         '200': {description: ok}
   # oneOf object|array: polymorphic array passthrough (pipeline list input).
+  # The required bool (declared beside the oneOf, so it is required globally —
+  # a variant's own `required` is not) is checked only when the body is a
+  # record: a piped list of scalars must pass through, not crash on `get -o`.
   /poly-array:
     post:
       operationId: createPolyArray
@@ -174,6 +177,8 @@ paths:
         content:
           application/json:
             schema:
+              required: [strict]
+              properties: {strict: {type: boolean}}
               oneOf:
                 - type: object
                   properties: {name: {type: string}}

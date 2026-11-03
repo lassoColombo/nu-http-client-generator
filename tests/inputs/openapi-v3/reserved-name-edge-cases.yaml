@@ -15,6 +15,13 @@ paths:
           required: false
           schema:
             type: string
+        # `in` and `env` are the builtin variables a flag may not bind; both
+        # take the group prefix (`--qp-in`, `--qp-env`).
+        - name: in
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: ok

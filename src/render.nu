@@ -48,8 +48,6 @@ export def openapi-to-nu-type [t: string] {
     "array" => "list"
     "object" => "record"
     "file" => "path"
-    "record" => "record"
-    "list" => "list"
     _ => "any"
   }
 }
@@ -113,10 +111,6 @@ def unix-socket-enabled [config: record]: nothing -> bool {
   (($config.default_unix_socket? | default null) | is-not-empty) or (($config.autocompletion_unix_sockets? | default []) | is-not-empty)
 }
 
-# Flag names nushell refuses outright: `--in` and `--nu` would bind the
-# built-in `$in` / `$nu` (`nu::parser::name_is_builtin_var`).
-const RESERVED_NAMES = [in nu]
-
 # Variable names a generated command must not bind for a spec-side param or
 # body field. Anything else — `sort`, `from`, `to`, `get`, `if`, `let`,
 # `null`, `true`, … — is a legal flag or positional in nushell (variables and
@@ -145,24 +139,17 @@ const RESERVED_VARS = [
 # a field named `body` only gets a flag when `--body` itself is not emitted.
 const RESERVED_FLAG_VARS = ($RESERVED_VARS ++ [body])
 
-# Convert param names to valid nushell flag names
+# Convert a param name to a nushell flag name. A name nothing survives of
+# (`:`) becomes `param`; reserved names are the caller's business
+# (`effective-flag-name`, `decorate-body-fields`, `effective-positional-var`).
 export def to-flag-name [name: string] {
   let cleaned = ($name | str kebab-case)
-  if ($cleaned in $RESERVED_NAMES) or ($cleaned | is-empty) {
-    $"($cleaned)-param" | str trim --char '-'
-  } else {
-    $cleaned
-  }
-}
-
-# Sanitize a field name to a valid nushell variable name (underscores, no special chars)
-def to-var-name [name: string] {
-  $name | str snake-case
+  if ($cleaned | is-empty) { "param" } else { $cleaned }
 }
 
 # Convert a parameter name to a nushell variable name (flag-style then underscored)
 def to-flag-var [name: string] {
-  to-flag-name $name | str replace --all '-' '_'
+  flag-var (to-flag-name $name)
 }
 
 # Flag name with collision prefix for query/header/cookie params
@@ -192,19 +179,8 @@ def disambiguate-flag-name [proposed: string, is_array: bool, seen_vars: list<st
     let candidate = $"($proposed)-list"
     if not ((flag-var $candidate) in $seen_vars) { return {flag_name: $candidate, suffix: "-list"} }
   }
-  mut n = 2
-  mut result: record<flag_name: string, suffix: string> = {flag_name: "", suffix: ""}
-  mut done = false
-  while not $done {
-    let candidate = $"($proposed)-($n)"
-    if not ((flag-var $candidate) in $seen_vars) {
-      $result = {flag_name: $candidate, suffix: $"-($n)"}
-      $done = true
-    } else {
-      $n = $n + 1
-    }
-  }
-  $result
+  let n = (2.. | where {|n| not ((flag-var $"($proposed)-($n)") in $seen_vars) } | first)
+  {flag_name: $"($proposed)-($n)", suffix: $"-($n)"}
 }
 
 # Walk a list of params (query/header/cookie) and assign each a
@@ -251,30 +227,29 @@ def decorate-body-fields [body_fields: list, path_vars: list<string>, seen: list
   mut items = []
   mut body_seen = $seen
   for f in $body_fields {
-    let sanitized_name = (to-var-name $f.name)
-    let flag_var = (to-flag-var $f.name)
-    let proposed_flag = (to-flag-name $f.name)
-    # Reserved-word collision (path positional / language keyword / body-code
-    # internal): the field becomes a `body-` prefixed flag.
-    let reserved_collision = ($sanitized_name in $path_vars) or ($sanitized_name in $RESERVED_VARS) or ($flag_var in $RESERVED_VARS) or ($sanitized_name | is-empty)
+    let flag = (to-flag-name $f.name)
+    let var = (flag-var $flag)
+    # Reserved-word collision (path positional / builtin variable / body-code
+    # internal) or a name nothing survives of (`:`): the field becomes a
+    # `body-` prefixed flag.
+    let reserved_collision = ($var in $path_vars) or ($var in $RESERVED_VARS) or ($f.name | str kebab-case | is-empty)
     # A body field whose variable is already bound — by a query/header/cookie
     # flag or by an earlier body field (`user_id` next to `userId`) — is a
     # separate collision class: suffix with `-body`.
-    let cross_group_collision = (not $reserved_collision) and ((flag-var $proposed_flag) in $body_seen)
+    let cross_group_collision = (not $reserved_collision) and ($var in $body_seen)
     let collides = $reserved_collision or $cross_group_collision
     # Only `!= "bool"` matters here; nu-type-for and openapi-to-nu-type agree on
     # bool-ness, so the cheaper mapping is enough for the positional decision.
-    let nu_type = (openapi-to-nu-type $f.type)
-    let is_nullable = ($f.nullable? | default false)
-    let is_positional = $f.required and (not $collides) and ($nu_type != "bool") and (not $is_nullable)
+    let is_bool = ((openapi-to-nu-type $f.type) == "bool")
+    let is_positional = $f.required and (not $collides) and (not $is_bool) and (not ($f.nullable? | default false))
     let decided = if $is_positional {
-      {flag_name: $sanitized_name, collision: ""}
+      {flag_name: $var, collision: ""}
     } else if $cross_group_collision {
-      {flag_name: $"($proposed_flag)-body", collision: "cross-group"}
+      {flag_name: $"($flag)-body", collision: "cross-group"}
     } else if $reserved_collision {
-      {flag_name: $"body-($proposed_flag)", collision: "reserved"}
+      {flag_name: $"body-($flag)", collision: "reserved"}
     } else {
-      {flag_name: $proposed_flag, collision: ""}
+      {flag_name: $flag, collision: ""}
     }
     let var_name = (flag-var $decided.flag_name)
     $items = ($items | append ($f | merge {is_positional: $is_positional, flag_name: $decided.flag_name, var_name: $var_name, collision: $decided.collision}))
@@ -288,9 +263,8 @@ def decorate-body-fields [body_fields: list, path_vars: list<string>, seen: list
 # `_arg` so the placeholder name stays at the front — the user reading
 # `<input_arg>` can map it to URL `{input}` at a glance.
 export def effective-positional-var [name: string] {
-  let sanitized = (to-var-name $name)
-  let cleaned = if ($sanitized | is-empty) { "param" } else { $sanitized }
-  if ($cleaned in $RESERVED_VARS) { $"($cleaned)_arg" } else { $cleaned }
+  let var = (to-flag-var $name)
+  if ($var in $RESERVED_VARS) { $"($var)_arg" } else { $var }
 }
 
 # Resolve every parameter's flag and variable name once, before emission.
@@ -930,10 +904,13 @@ export def build-body-code [cmd: record, config: record] {
     # A required body field that could not be a positional (it collides with a
     # reserved name, or is a bool) is still required: refuse an empty value
     # once flags and pipeline input are merged. Nullable fields are exempt —
-    # `null` is a legal value for them and `compact` would drop it anyway.
+    # `null` is a legal value for them and `compact` would drop it anyway. A
+    # polymorphic body may be a list by now (the array variant was piped in),
+    # and `get -o` on a list of scalars errors, so the check is record-only.
     if $has_per_field {
+      let only_record = if ($cmd.body_polymorphic_array? | default false) { '($req_body | describe | str starts-with "record") and ' } else { "" }
       for f in ($cmd.body_fields | where {|f| ($f.required? | default false) and (not $f.is_positional) and (not ($f.nullable? | default false)) }) {
-        $lines = ($lines | append $"  if \(\($req_body | get -o ($f.name | to nuon)\) == null\) { error make --unspanned { msg: \"required body field '($f.name)' missing: pass --($f.flag_name) or pipe a record\" } }")
+        $lines = ($lines | append $"  if ($only_record)\(\($req_body | get -o ($f.name | to nuon)\) == null\) { error make --unspanned { msg: \"required body field '($f.name)' missing: pass --($f.flag_name) or pipe a record\" } }")
       }
     }
   }
@@ -1018,9 +995,9 @@ export def build-body-code [cmd: record, config: record] {
   # no value shouldn't appear. $req_body is guarded against a non-record: the
   # `--body` fallback binds it straight from `--body`, so it is null when
   # omitted and a string/list for `--body: string|list`, and `transpose` only
-  # accepts a record/table. record → transpose+build-query; null → "" (empty
+  # accepts a record/table. record → compact+build-query; null → "" (empty
   # form body); else → `into string` (the caller already supplied the wire form).
-  let form_encode = 'if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }'
+  let form_encode = 'if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }'
   let emitted_wire_body = $has_ct_override or ($cmd.has_body and ($cmd.content_type == "application/x-www-form-urlencoded"))
   if $has_ct_override {
     # Effective content-type for body serialization and the request. When the

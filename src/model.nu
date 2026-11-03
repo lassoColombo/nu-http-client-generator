@@ -89,26 +89,25 @@ def merge-body-props [schema: record, doc: record] {
     | each {|v| spec resolve-ref $v $doc }
     | where {($in | describe) | str starts-with "record"})
 
-  let merged_props_pre_disc = ($poly_resolved | reduce -f $props_after_allof {|v, acc|
-    let v_props = ($v.properties? | default {})
-    $v_props | items {|col, val|
+  # Variant properties join in document order; a name the base (or an earlier
+  # variant) already has keeps its first definition.
+  let merged_props = ($poly_resolved | reduce -f $props_after_allof {|v, acc|
+    ($v.properties? | default {}) | items {|col, val|
       if $col in ($acc | columns) { null } else { {col: $col, val: $val} }
     } | compact | reduce -f $acc {|kv, a| $a | insert $kv.col $kv.val }
   })
-  let merged_required_pre_disc = $required_after_allof
 
-  let merged_required = if ($disc_prop in ($merged_props_pre_disc | columns)) {
-    $merged_required_pre_disc | append $disc_prop | uniq
+  # The discriminator property is implicitly required, and its mapping keys
+  # are its enum.
+  let has_disc = ($disc_prop in ($merged_props | columns))
+  let required = if $has_disc { $required_after_allof | append $disc_prop | uniq } else { $required_after_allof }
+  let props = if $has_disc and ($disc_mapping | is-not-empty) {
+    $merged_props | upsert $disc_prop ($merged_props | get $disc_prop | upsert enum ($disc_mapping | columns))
   } else {
-    $merged_required_pre_disc
-  }
-  let merged_props = if ($disc_prop in ($merged_props_pre_disc | columns)) and ($disc_mapping | is-not-empty) {
-    $merged_props_pre_disc | upsert $disc_prop ($merged_props_pre_disc | get $disc_prop | upsert enum ($disc_mapping | columns))
-  } else {
-    $merged_props_pre_disc
+    $merged_props
   }
 
-  {props: $merged_props, required: $merged_required}
+  {props: $props, required: $required}
 }
 
 # Body field info for a request body schema: merge, resolve, extract.
@@ -325,7 +324,7 @@ def resolve-path-item [path_entry: record, doc: record] {
 }
 
 # Extract operation-level metadata: description, auth, server override, etc.
-def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, methods: record, h: record] {
+def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, methods: record, h: record] {
   let operation_id = ($op.operationId? | default "")
   let summary = ($op.summary? | default "")
   let description_text = ($op.description? | default "")
@@ -343,15 +342,15 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   let op_security = $op.security?
   let req = if ($op_security == null) { null } else { spec requirement-schemes $op_security $auth_schemes }
   let default_auth = if ($req == null) {
-    $root_default_auth
+    $root_auth.default
   } else if ($req.declared | is-empty) {
     "none"
   } else if ($req.schemes | is-empty) {
-    $root_default_auth
+    $root_auth.default
   } else {
     $req.schemes | first | get name
   }
-  let auth_required = if ($req == null) { $root_auth_required } else if ($req.schemes | length) > 1 { $req.schemes } else { [] }
+  let auth_required = if ($req == null) { $root_auth.required } else if ($req.schemes | length) > 1 { $req.schemes } else { [] }
 
   # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
   let chosen_server = ($op.servers?.0? | default $methods.servers?.0?)
@@ -590,7 +589,7 @@ def deduplicate-commands []: list -> list {
 }
 
 # Build the command model list from a parsed+resolved REST spec.
-export def command-list [doc: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
+export def command-list [doc: record, h: record, auth_schemes: list, root_auth: record, config: record] {
   ($doc.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {
@@ -620,7 +619,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
         if not $has_match { return null }
       }
 
-      let meta = (extract-op-metadata $op $auth_schemes $root_default_auth $root_auth_required $methods $h)
+      let meta = (extract-op-metadata $op $auth_schemes $root_auth $methods $h)
 
       # DEPRECATED FILTER
       if $config.exclude_deprecated and $meta.deprecated {

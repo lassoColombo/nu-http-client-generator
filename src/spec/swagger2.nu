@@ -19,18 +19,11 @@ def resolve-parameterized-host [spec_data: record] {
   let tmpl = ($pham | get -o hostTemplate | default "")
   if ($tmpl | is-empty) { return null }
   let use_scheme = ($pham | get -o useSchemePrefix | default true)
-  # Resolve each {var} placeholder by looking up its parameter in the
-  # spec-level `parameters` table and reading the parameter's `default:`.
-  # Parameters without defaults stay as `{var}` so `url parse` errors loudly.
-  let params = ($pham | get -o parameters | default [])
-  let spec_params = ($spec_data | get -o parameters | default {})
-  let defaults = ($params | reduce -f {} {|p, acc|
-    let resolved = if (($p | describe) | str starts-with "record") and ("$ref" in ($p | columns)) {
-      let ref_path = ($p | get "$ref")
-      let parts = ($ref_path | split row '/')
-      let key = ($parts | last)
-      ($spec_params | get -o $key | default {})
-    } else { $p }
+  # Resolve each {var} placeholder from its parameter's `default:` (the
+  # parameters are usually `$ref`s into the spec-level table). Parameters
+  # without defaults stay as `{var}` so `url parse` errors loudly.
+  let defaults = ($pham | get -o parameters | default [] | reduce -f {} {|p, acc|
+    let resolved = (spec resolve-ref $p $spec_data)
     let name = ($resolved.name? | default null)
     let def = ($resolved.default? | default null)
     if ($name != null) and ($def != null) { $acc | upsert $name ($def | into string) } else { $acc }
@@ -53,13 +46,12 @@ def resolve-parameterized-host [spec_data: record] {
 # One URL per declared scheme (https when none); a parameterized host yields
 # a single URL. The first one is the base URL.
 def get-all-urls-impl [spec_data: record] {
+  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let parameterized = (resolve-parameterized-host $spec_data)
   if ($parameterized != null) {
-    let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
     return [($"($parameterized)($base_path)" | str trim --right --char '/')]
   }
   let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
-  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
   let raw_schemes = ($spec_data.schemes? | default [])
   let schemes = (if ($raw_schemes | is-empty) { ["https"] } else { $raw_schemes })
   $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }

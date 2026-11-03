@@ -162,24 +162,17 @@ export def resolve-ref [val: any, doc: record] {
 # included (e.g. value `"\"Ashburn, VA\""` whose payload is the 13-character
 # `"Ashburn, VA"`). Tab-completion would then offer the quoted form and the
 # API would reject it. This strips exactly one matching outer pair; values
-# like `"weird"middle"` (no matching outer pair) are left untouched.
+# like `"weird"middle"` (no matching outer pair) are left untouched. A `null`
+# member (the OAS 3.0 way to spell a nullable enum) is dropped: it is not a
+# value a completer can offer.
 export def clean-enum-values [vals: list]: nothing -> list {
-  # `each` drops nulls; wrap each item in a record so nulls survive, then unwrap.
-  $vals | each {|v| {v: $v} } | each {|w|
-    let v = $w.v
-    if (($v | describe) == "string") and (($v | str length) >= 2) {
-      let n = ($v | str length)
-      let first = ($v | str substring 0..<1)
-      let last = ($v | str substring ($n - 1)..<$n)
-      if (($first == '"') and ($last == '"')) or (($first == "'") and ($last == "'")) {
-        {v: ($v | str substring 1..<($n - 1))}
-      } else {
-        $w
-      }
+  $vals | each {|v|
+    if (($v | describe) == "string") and ($v =~ "(?s)^\"(.*)\"$|^'(.*)'$") {
+      $v | str substring 1..<(($v | str length) - 1)
     } else {
-      $w
+      $v
     }
-  } | get v
+  }
 }
 
 # Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
@@ -216,8 +209,8 @@ export def detect [spec: record] {
 
 # The schemes named by a security requirement list's FIRST requirement object,
 # resolved against the parsed auth schemes. Shared by the root-level
-# `security` (`get-default-auth`, `get-default-auth-required`) and the per-op
-# override in model, so the three read the same thing. Returns
+# `security` (`root-auth`) and the per-op override in model, so the two read
+# the same thing. Returns
 # {declared: list<string>, schemes: list<record>}: `declared` is the raw
 # scheme names (empty when the first requirement is `{}` or not a record);
 # `schemes` is the resolved records, unknown names dropped, wire-identical
@@ -243,26 +236,22 @@ def collapse-wire-identical []: list -> list {
   }
 }
 
-# Default auth scheme name: the first scheme the root-level `security` names,
-# else the first declared scheme, else "bearer".
-export def get-default-auth [spec: record, auth_schemes: list] {
+# What an operation without its own `security` sends: {default, required}.
+# `default` is the scheme name — the first the root-level `security` names,
+# else the first declared scheme, else "bearer". `required` is the global
+# AND-form set: when the root `security` names >1 scheme in one requirement
+# object (VTEX's `[{appKey: [], appToken: []}]`) every such op must send ALL of
+# them, so it holds the resolved scheme records (length >1), else [].
+export def root-auth [spec: record, auth_schemes: list]: nothing -> record {
   let named = (requirement-schemes $spec.security? $auth_schemes).schemes
-  if ($named | is-not-empty) {
+  let default = if ($named | is-not-empty) {
     $named | first | get name
   } else if ($auth_schemes | is-not-empty) {
     $auth_schemes | first | get name
   } else {
     "bearer"
   }
-}
-
-# The GLOBAL AND-form security set. When the root-level `security` names >1
-# scheme in one requirement object (VTEX's `[{appKey: [], appToken: []}]`),
-# every op that does not override `security` must send ALL of them. Returns
-# the resolved scheme records (length >1) or [] when there is no global AND-form.
-export def get-default-auth-required [spec: record, auth_schemes: list] {
-  let named = (requirement-schemes $spec.security? $auth_schemes).schemes
-  if ($named | length) > 1 { $named } else { [] }
+  {default: $default, required: (if ($named | length) > 1 { $named } else { [] })}
 }
 
 # The response codes to consult, in order, when picking the success schema:
