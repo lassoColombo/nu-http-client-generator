@@ -96,6 +96,14 @@ export def nu-type-string [td: any]: nothing -> string {
   }
 }
 
+# A duration as Nushell source: the unit form when it is a single unit
+# (`30min`), else the nuon nanosecond form — `into string` renders `90sec` as
+# `1min 30sec`, which is not a literal.
+def duration-literal [d: duration]: nothing -> string {
+  let text = ($d | into string)
+  if ($text =~ '^\d+[a-z]+$') { $text } else { $d | to nuon }
+}
+
 # Whether the generated client should carry Unix-socket transport logic. Gated:
 # emitted only when the user baked a default socket (--default-unix-socket) or
 # supplied completion sockets (--autocompletion-unix-sockets) at generation time.
@@ -130,6 +138,13 @@ const RESERVED_VARS = [
   input sock auth base qp full_url req_body req_body_wire effective_ct extra_headers cookie_str accept_val mp req
 ]
 
+# Variables a query/header/cookie flag must not bind: the reserved set plus
+# `body`, the fallback flag a command declares when its body has no per-field
+# flags. A spec-side `?body=` would otherwise emit a second `--body` and
+# nushell keeps the first, dropping the value. Body FIELDS stay off this list:
+# a field named `body` only gets a flag when `--body` itself is not emitted.
+const RESERVED_FLAG_VARS = ($RESERVED_VARS ++ [body])
+
 # Convert param names to valid nushell flag names
 export def to-flag-name [name: string] {
   let cleaned = ($name | str kebab-case)
@@ -154,7 +169,7 @@ def to-flag-var [name: string] {
 def effective-flag-name [name: string, prefix: string] {
   let raw = (to-flag-name $name)
   let var = (to-flag-var $name)
-  if ($var in $RESERVED_VARS) { $"($prefix)-($raw)" } else { $raw }
+  if ($var in $RESERVED_FLAG_VARS) { $"($prefix)-($raw)" } else { $raw }
 }
 
 # The variable a flag binds: `--user-id` → `$user_id`. Every collision check
@@ -315,7 +330,7 @@ def flatten-description [text: string]: nothing -> string {
 # headers can't repeat. The runtime check handles `null` (compact-friendly) and
 # scalar values unchanged, so this is safe even when the user passes a single
 # string into a list-typed flag.
-def render-param-record [params: list, --quote-keys] {
+def render-param-record [params: list] {
   $params | each {|p|
     let var = $p.flag_var
     let value_expr = if (($p.items_type? | default null) != null) {
@@ -323,12 +338,18 @@ def render-param-record [params: list, --quote-keys] {
     } else {
       $"$($var)"
     }
-    if $quote_keys {
-      $'($p.name | to nuon): ($value_expr)'
-    } else {
-      $'($p.name): ($value_expr)'
-    }
+    $'($p.name | to nuon): ($value_expr)'
   } | str join ", "
+}
+
+# The identity of a param's enum completer: {flag_name, vals, fingerprint}.
+# Two params share one completer def when their flag name and (sorted,
+# stringified) values match. `collect-completers` registers under the
+# fingerprint; `resolve-completer` looks it up.
+def completer-key [q: record]: nothing -> record {
+  let flag_name = (to-flag-name $q.name)
+  let vals = ($q.enum | each { $"($in)" } | sort)
+  {flag_name: $flag_name, vals: $vals, fingerprint: $"($flag_name):($vals | str join ',')"}
 }
 
 # Collect all unique enum sets and map each (flag_name, enum_values) to a completer name.
@@ -343,10 +364,9 @@ export def collect-completers [commands: list] {
       | append $cmd.header_params | append $cmd.cookie_params | append $accept_source)
     $enum_sources | reduce -f $state {|q, st|
       if ($q.enum | is-empty) { return $st }
-      let flag_name = (to-flag-name $q.name)
-      let vals = ($q.enum | each { $"($in)" } | sort)
-      let fingerprint = $"($flag_name):($vals | str join ',')"
-      if ($fingerprint in ($st.mapping | columns)) { return $st }
+      let key = (completer-key $q)
+      let flag_name = $key.flag_name
+      if ($key.fingerprint in ($st.mapping | columns)) { return $st }
       let count = ($st.name_counts | get -o $flag_name | default 0)
       let cname = if $count == 0 {
         $"($flag_name)-completer"
@@ -355,8 +375,8 @@ export def collect-completers [commands: list] {
       }
       $st | merge {
         name_counts: ($st.name_counts | upsert $flag_name ($count + 1))
-        completers: ($st.completers | insert $cname $vals)
-        mapping: ($st.mapping | insert $fingerprint $cname)
+        completers: ($st.completers | insert $cname $key.vals)
+        mapping: ($st.mapping | insert $key.fingerprint $cname)
       }
     }
   })
@@ -376,32 +396,25 @@ def render-completers [completers: record] {
 
 # Resolve the completer name for a param given the mapping
 export def resolve-completer [q: record, mapping: record] {
-  let flag_name = (to-flag-name $q.name)
-  let vals = ($q.enum | each { $"($in)" } | sort)
-  let fingerprint = $"($flag_name):($vals | str join ',')"
-  $mapping | get -o $fingerprint
+  $mapping | get -o (completer-key $q).fingerprint
 }
 
 # Render a single flag/positional line for the signature.
 # Used by query, header, cookie params and body fields to avoid duplication.
 def render-param-sig [flag_name: string, nu_type: string, desc: string, cname?: string, --positional] {
+  let completer = if ($cname | is-not-empty) { $"@($cname)" } else { "" }
   if $positional {
-    if ($cname | is-not-empty) {
-      $'  ($flag_name): ($nu_type)@($cname)($desc)'
-    } else {
-      $'  ($flag_name): ($nu_type)($desc)'
-    }
+    $'  ($flag_name): ($nu_type)($completer)($desc)'
   } else if $nu_type == "bool" {
     $'  --($flag_name): oneof<nothing, bool>($desc)'
-  } else if ($cname | is-not-empty) {
-    $'  --($flag_name): ($nu_type)@($cname)($desc)'
   } else {
-    $'  --($flag_name): ($nu_type)($desc)'
+    $'  --($flag_name): ($nu_type)($completer)($desc)'
   }
 }
 
 # Render a group of decorated query/header/cookie params for the signature.
-# Returns {parts: list<string>, dep_flags: list<record>}.
+# Returns {parts: list<string>, dep_flags: list<string>} — dep_flags are the
+# flag names that get an `@deprecated --flag` attribute.
 def render-param-group [params: list, mapping: record, config: record] {
   mut parts = []
   mut dep_flags = []
@@ -419,7 +432,7 @@ def render-param-group [params: list, mapping: record, config: record] {
     let cname = if ($q.enum | is-not-empty) { resolve-completer $q $mapping } else { null }
     $parts = ($parts | append (render-param-sig $q.flag_name $nu_type $desc $cname))
     if ($q.deprecated? | default false) {
-      $dep_flags = ($dep_flags | append {flag_name: $q.flag_name, reason: $q.description})
+      $dep_flags = ($dep_flags | append $q.flag_name)
     }
   }
   {parts: $parts, dep_flags: $dep_flags}
@@ -436,7 +449,7 @@ def lookup-shape [flag: string, shapes: list] {
 }
 
 # Build the signature string for a decorated command (see `decorate-command`).
-# Returns {signature: string, deprecated_flags: list<record {flag_name: string, reason: string}>}.
+# Returns {signature: string, deprecated_flags: list<string>}.
 export def build-signature [cmd: record, mapping: record, config: record] {
   mut parts = []
   mut dep_flags = []
@@ -453,32 +466,22 @@ export def build-signature [cmd: record, mapping: record, config: record] {
   # is nothing to choose — all schemes are sent together). Single-scheme and
   # OR-form ops keep the standard `--token` + `--auth-scheme` pair.
   let auth_req = ($cmd.auth_required? | default [])
-  if ($auth_req | length) > 1 {
-    $parts = ($parts | append '  --base-url(-b): string@base-url-completer # API base URL')
-    for s in $auth_req {
-      $parts = ($parts | append $"  --token-($s.flag_slug): string # Auth token for ($s.spec_name) \(($s.header_name)\)")
-    }
-    $parts = ($parts | append [
-      '  --insecure(-k) # Skip TLS verification'
-      '  --max-time(-m): duration # Timeout'
-      '  --raw(-r) # Fetch as text'
-      '  --allow-errors(-e) # Return full response without error handling'
-      '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
-      '  --dry-run(-n) # Return the request that would be sent without executing it'
-    ])
+  let token_flags = if ($auth_req | length) > 1 {
+    $auth_req | each {|s| $"  --token-($s.flag_slug): string # Auth token for ($s.spec_name) \(($s.header_name)\)" }
   } else {
-    $parts = ($parts | append [
-      '  --base-url(-b): string@base-url-completer # API base URL'
+    [
       '  --token(-t): string # Auth token'
       '  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme'
-      '  --insecure(-k) # Skip TLS verification'
-      '  --max-time(-m): duration # Timeout'
-      '  --raw(-r) # Fetch as text'
-      '  --allow-errors(-e) # Return full response without error handling'
-      '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
-      '  --dry-run(-n) # Return the request that would be sent without executing it'
-    ])
+    ]
   }
+  $parts = ($parts | append '  --base-url(-b): string@base-url-completer # API base URL' | append $token_flags | append [
+    '  --insecure(-k) # Skip TLS verification'
+    '  --max-time(-m): duration # Timeout'
+    '  --raw(-r) # Fetch as text'
+    '  --allow-errors(-e) # Return full response without error handling'
+    '  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx'
+    '  --dry-run(-n) # Return the request that would be sent without executing it'
+  ])
 
   # Unix-socket transport flag (gated): completes from the baked default plus any
   # --autocompletion-unix-sockets. Default $UNIX_SOCKET is applied in the body.
@@ -524,7 +527,7 @@ export def build-signature [cmd: record, mapping: record, config: record] {
           let desc = if $config.no_descriptions { "" } else if ($desc_with_note | is-not-empty) { $" # ($desc_with_note)" } else { "" }
           $parts = ($parts | append (render-param-sig $f.flag_name $nu_type $desc $cname))
           if ($f.deprecated? | default false) {
-            $dep_flags = ($dep_flags | append {flag_name: $f.flag_name, reason: ($f.description? | default "")})
+            $dep_flags = ($dep_flags | append $f.flag_name)
           }
         }
       }
@@ -538,18 +541,22 @@ export def build-signature [cmd: record, mapping: record, config: record] {
         # them pass either a record or a string. JSON-family records keep the
         # `--body: record` typing.
         let scalar = ($cmd.body_scalar_type? | default "any")
-        let ct = ($cmd.content_type? | default "")
-        let body_t = if ($scalar == "any") {
-          if ($ct | str starts-with "application/json") or ($ct == "multipart/form-data") or ($ct == "application/x-www-form-urlencoded") or ($ct | is-empty) { "record" } else { "any" }
-        } else {
-          (nu-type-for $scalar)
-        }
+        let body_t = if ($scalar != "any") { nu-type-for $scalar } else if $cmd.body_encodable { "record" } else { "any" }
         $parts = ($parts | append $"  --body: ($body_t)")
       }
     }
   }
 
   {signature: ($parts | str join "\n"), deprecated_flags: $dep_flags}
+}
+
+# When the spec advertises HTTP Basic, the client exposes a sibling
+# `basic-credentials` scheme that base64-encodes the token per RFC 7617.
+# `basic` itself stays the literal-prefix path for users who pre-encode; pick
+# `basic-credentials` to pass `user:pass` raw. Consulted by the `build-auth`
+# match arms and the `auth-scheme-completer`.
+def offers-basic-credentials [auth_schemes: list]: nothing -> bool {
+  $auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" }
 }
 
 # Render the helper functions that go into every generated client.
@@ -573,16 +580,10 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
       }
     }
   }
-  # When the spec advertises HTTP Basic, expose a sibling `basic-credentials`
-  # scheme that base64-encodes the token per RFC 7617. `basic` itself stays as
-  # the literal-prefix path for users who already pre-encode (no behaviour
-  # change). Pick `basic-credentials` when you'd rather pass `user:pass` raw.
-  let has_basic = ($auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" })
-  if $has_basic and (not ("basic-credentials" in $seen_names)) {
+  if (offers-basic-credentials $auth_schemes) and (not ("basic-credentials" in $seen_names)) {
     $seen_names = ($seen_names | append "basic-credentials")
     $match_arms = ($match_arms | append '    "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }')
   }
-  $match_arms = ($match_arms | append '    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }')
   $match_arms = ($match_arms | append '    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }')
   let match_body = $match_arms | str join "\n"
 
@@ -668,22 +669,30 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '}'
     ...$merge_auth_block
     ''
-    '# Serialize a single query parameter based on collection style'
+    '# Serialize a single query parameter based on collection style.'
     '# Uses encode-path-segment for keys and values: RFC 3986 unreserved chars'
     '# ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.'
+    '# A record value follows OpenAPI object serialization: "multi" (form +'
+    '# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is'
+    '# `name=k,v,k,v` with that delimiter, anything else is deepObject'
+    '# `name[k]=v`. Null members are skipped.'
     'def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {'
     '  if ($value == null) { return [] }'
     '  let is_list = ($value | describe | str starts-with "list")'
     '  if $is_list and ($value | is-empty) { return [] }'
     '  let n = (encode-path-segment $name)'
-    '  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }'
+    '  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })'
+    '  if ($value | describe | str starts-with "record") {'
+    '    let pairs = ($value | transpose k v | where v != null)'
+    '    return (match $style {'
+    '      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }'
+    '      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }'
+    '      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }'
+    '    })'
+    '  }'
     '  if not $is_list { return [$"($n)=(encode-path-segment $value)"] }'
     '  match $style {'
-    '    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }'
-    '    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }'
-    '    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }'
-    '    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }'
-    '    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }'
+    '    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }'
     '    "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }'
     '    _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }'
     '  }'
@@ -910,12 +919,10 @@ export def build-body-code [cmd: record, config: record] {
     # so callers can `"text" | op` without a flag. Nushell's `http` only
     # auto-encodes records for content-types matching `application/json*`; for
     # everything else the wire format is the user's responsibility.
-    let ct = ($cmd.content_type? | default "")
-    let priority_ct = ($ct | str starts-with "application/json") or ($ct == "multipart/form-data") or ($ct == "application/x-www-form-urlencoded") or ($ct | is-empty)
     let non_record_body = (($cmd.body_scalar_type? | default "any") != "any")
     if ($cmd.body_polymorphic_array? | default false) {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }')
-    } else if (not $priority_ct) or $non_record_body {
+    } else if (not $cmd.body_encodable) or $non_record_body {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }')
     } else {
       $lines = ($lines | append '  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }')
@@ -945,13 +952,13 @@ export def build-body-code [cmd: record, config: record] {
   $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))')
 
   if ($cmd.header_params | is-not-empty) {
-    let hp_record = (render-param-record $cmd.header_params --quote-keys)
+    let hp_record = (render-param-record $cmd.header_params)
     $lines = ($lines | append ($"  let extra_headers = {($hp_record)} | compact"))
     $lines = ($lines | append '  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))')
   }
 
   if ($cmd.cookie_params | is-not-empty) {
-    let cp_record = (render-param-record $cmd.cookie_params --quote-keys)
+    let cp_record = (render-param-record $cmd.cookie_params)
     $lines = ($lines | append ($"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""))
     $lines = ($lines | append '  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }')
   }
@@ -1051,7 +1058,7 @@ export def build-body-code [cmd: record, config: record] {
   } else { '$auth.headers' }
   # ok_codes: the spec's declared success codes; [] falls back to < 400 at runtime.
   let ok_codes_expr = $"[($cmd.success_codes? | default [] | each {|c| $c | into string } | str join ' ')]"
-  let timeout_expr = $"\($max_time | default ($config.default_timeout))"
+  let timeout_expr = $"\($max_time | default (duration-literal $config.default_timeout))"
 
   $lines = ($lines | append '  let req = {')
   $lines = ($lines | append $'    method: "($cmd.method)"')
@@ -1077,7 +1084,6 @@ export def build-body-code [cmd: record, config: record] {
     "put" => $'  send-put $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
     "patch" => $'  send-patch $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
     "delete" => $'  send-delete $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
-    _ => $'  send-($cmd.method) $req ($wire_body_expr) $insecure $raw $allow_errors $full ($ok_codes_expr)'
   }
   $lines = ($lines | append $send_line)
 
@@ -1107,11 +1113,7 @@ def render-module-header [
   let has_public = ($commands | where {|c| $c.default_auth == "none" } | is-not-empty)
   let auth_names = $auth_schemes | each {|s| $s.name } | uniq
   let auth_names_with_none = if $has_public { $auth_names | append "none" } else { $auth_names }
-  # If the spec offers HTTP Basic, expose `basic-credentials` as a completion
-  # option too — it base64-encodes `user:pass` per RFC 7617 (vs. `basic` which
-  # treats the token literally).
-  let has_basic = ($auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" })
-  let auth_names_final = if $has_basic and (not ("basic-credentials" in $auth_names_with_none)) {
+  let auth_names_final = if (offers-basic-credentials $auth_schemes) and (not ("basic-credentials" in $auth_names_with_none)) {
     $auth_names_with_none | append "basic-credentials"
   } else { $auth_names_with_none }
   let auth_completer_vals = if ($auth_names_final | is-not-empty) {
@@ -1148,16 +1150,21 @@ def render-module-header [
   let and_token_flags = ($and_schemes | each {|s| $'"token-($s.flag_slug)"' } | str join ' ')
   let and_token_flags = if ($and_token_flags | is-empty) { "" } else { $" ($and_token_flags)" }
 
-  # Only generate introspection command when not disabled
+  # Only generate introspection command when not disabled. The command finds
+  # its own module by the exact set of exported command names: a single name
+  # is ambiguous when two generated clients share an operationId, while two
+  # modules with the same whole set are the same client. Both sides are
+  # sorted at runtime so the comparison never depends on the generating
+  # nushell's `sort` order.
   let introspection_code = if not $config.no_introspection {
-    let first_cmd_name = ($commands | first | get name)
+    let cmd_names = ($commands | get name | append "commands" | each {|n| $n | to nuon } | str join ' ')
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
       (if $unix_socket_enabled { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"($and_token_flags)]' } else { $'  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"($and_token_flags)]' })
-      $"  let mod_name = \(scope modules | where { $in.commands | any { $in.name == \"($first_cmd_name)\" } } | get name | first\)"
+      $"  let mod_name = \(scope modules | where { \($in.commands | get name | sort\) == \([($cmd_names)] | sort\) } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
-      '  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)'
+      '  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)'
       '  scope commands | where decl_id in $cmd_ids | each {|cmd|'
       '    let sig = $cmd.signatures | values | first'
       '    let params = $sig'
@@ -1240,13 +1247,6 @@ def render-command [cmd: record, mapping: record, config: record] {
   if ($cmd.operation_id | is-not-empty) {
     $extra = ($extra | append $"# operationId: ($cmd.operation_id)")
   }
-  # Shape docs for complex-typed flags (record/list with known sub-structure)
-  if not $config.no_descriptions {
-    for shape in ($cmd.field_shapes? | default []) {
-      let label = if ($shape.is_item? | default false) { "item shape" } else { "shape" }
-      $extra = ($extra | append $"# --($shape.flag) ($label): (build-shape-doc $shape.fields)")
-    }
-  }
   if ($extra | is-not-empty) {
     $cmd_lines = ($cmd_lines | append "#")
     $cmd_lines = ($cmd_lines | append $extra)
@@ -1260,7 +1260,7 @@ def render-command [cmd: record, mapping: record, config: record] {
     $annotations = ($annotations | append '@deprecated')
   }
   for df in $sig_result.deprecated_flags {
-    $annotations = ($annotations | append $'@deprecated --flag ($df.flag_name)')
+    $annotations = ($annotations | append $'@deprecated --flag ($df)')
   }
   if ($annotations | is-not-empty) {
     $cmd_lines = ($cmd_lines | append $annotations)
@@ -1300,8 +1300,10 @@ def render-command [cmd: record, mapping: record, config: record] {
 
 # Render the full client module file
 export def client [spec_data: record, commands: table, spec_file: string, module_name: string, base_url: string, spec_urls: list<string>, auth_schemes: list, config: record] {
-  let title = ($spec_data.info?.title? | default $module_name)
-  let version_str = ($spec_data.info?.version? | default "0.0.0")
+  # Interpolated, not `into string`: unquoted YAML `version: 1.0` is a float,
+  # and `into string` would render it `1`.
+  let title = $"($spec_data.info?.title? | default $module_name)"
+  let version_str = $"($spec_data.info?.version? | default '0.0.0')"
   let token_env_var = if ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {

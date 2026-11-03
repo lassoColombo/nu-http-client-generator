@@ -44,6 +44,31 @@ paths:
           schema: {type: object, additionalProperties: {type: string}}
           style: deepObject
           explode: true
+        # form + explode object (the OAS default for objects): a=1&b=2
+        - name: opts
+          in: query
+          schema: {type: object, additionalProperties: {type: string}}
+          style: form
+          explode: true
+        # form + no-explode object: range=min,1,max,9
+        - name: range
+          in: query
+          schema: {type: object, additionalProperties: {type: integer}}
+          style: form
+          explode: false
+        # spaceDelimited object: dims=w%20100%20h%2050 (OAS 3 §4.8.12.4),
+        # not the deepObject `dims[w]=100` it used to fall through to.
+        - name: dims
+          in: query
+          schema: {type: object, additionalProperties: {type: integer}}
+          style: spaceDelimited
+          explode: false
+        # pipeDelimited object: bounds=lo|1|hi|9
+        - name: bounds
+          in: query
+          schema: {type: object, additionalProperties: {type: integer}}
+          style: pipeDelimited
+          explode: false
         # boolean query -> oneof<nothing, bool>
         - name: verbose
           in: query

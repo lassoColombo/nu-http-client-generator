@@ -76,7 +76,7 @@ export def main [
   --exclude-deprecated          # Filter: skip deprecated operations
   --name-fn: closure            # Naming: override command names (receives raw/params/derived context, returns a name or null)
   --token-env-var: string       # Override auto-derived token env var name
-  --default-timeout: string = "30min"  # Override default request timeout
+  --default-timeout: duration = 30min  # Override default request timeout
   --default-headers: record     # Static headers added to every request
   --body-threshold: int = 0     # Collapse body fields to --body:record above this count (0 = never)
   --no-introspection            # Omit the commands subcommand
@@ -101,8 +101,9 @@ export def main [
     autocompletion_unix_sockets: ($autocompletion_unix_sockets | default [])
   }
 
+  # Interpolated: an unquoted YAML title such as `title: 2024` is a number.
   let title = if ($name | is-not-empty) { $name } else {
-    $loaded.data.info?.title? | default ($loaded.source | path parse | get stem)
+    $"($loaded.data.info?.title? | default ($loaded.source | path parse | get stem))"
   }
   let result = (process-spec $loaded.data $config)
   if ($result.commands | is-empty) {

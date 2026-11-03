@@ -12,27 +12,34 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
   let is_list = ($value | describe | str starts-with "list")
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -113,19 +120,23 @@ export def "search" [
   --fields: list<string>
   --cols: list<string>
   --filter: record
+  --opts: record
+  --range: record
+  --dims: record
+  --bounds: record
   --verbose: oneof<nothing, bool>
   --q: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "multi") (serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "ssv") (serialize-qp "cols" $cols "pipes") (serialize-qp "filter" $filter "deepObject") (serialize-qp "verbose" $verbose "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tags" $tags "multi") (serialize-qp "ids" $ids "csv") (serialize-qp "fields" $fields "ssv") (serialize-qp "cols" $cols "pipes") (serialize-qp "filter" $filter "deepObject") (serialize-qp "opts" $opts "multi") (serialize-qp "range" $range "csv") (serialize-qp "dims" $dims "ssv") (serialize-qp "bounds" $bounds "pipes") (serialize-qp "verbose" $verbose "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"tags": $tags, "ids": $ids, "fields": $fields, "cols": $cols, "filter": $filter, "verbose": $verbose, "q": $q} | compact)
+    query: ({"tags": $tags, "ids": $ids, "fields": $fields, "cols": $cols, "filter": $filter, "opts": $opts, "range": $range, "dims": $dims, "bounds": $bounds, "verbose": $verbose, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null

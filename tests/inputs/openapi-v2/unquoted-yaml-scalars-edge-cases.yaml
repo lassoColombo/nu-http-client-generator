@@ -1,0 +1,20 @@
+# Unquoted: YAML parses both as floats. Format detection must still read
+# "2" as the major version and the header must show `v1.0`.
+swagger: 2.0
+info:
+  title: Unquoted YAML Scalars Edge Cases
+  version: 1.0
+host: api.example.com
+basePath: /v1
+schemes: [https]
+paths:
+  /things:
+    get:
+      operationId: listThings
+      produces: [application/json]
+      responses:
+        '200':
+          description: ok
+          schema:
+            type: array
+            items: {type: string}

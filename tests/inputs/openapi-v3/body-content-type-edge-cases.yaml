@@ -113,6 +113,9 @@ paths:
       responses:
         '200': {description: ok}
   # Content-type priority: json > multipart > form. Should pick application/json.
+  # Several media types: JSON wins by priority even when declared last, and
+  # the body fields come from the JSON schema (`--b`), not the first-declared
+  # form schema.
   /multi-ct:
     post:
       operationId: createMultiCt
@@ -123,7 +126,7 @@ paths:
           multipart/form-data:
             schema: {type: object, properties: {a: {type: string}}}
           application/json:
-            schema: {type: object, properties: {a: {type: string}}}
+            schema: {type: object, properties: {a: {type: string}, b: {type: string}}}
       responses:
         '200': {description: ok}
   # allOf: merge Base properties with inline extras.

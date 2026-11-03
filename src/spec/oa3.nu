@@ -103,7 +103,10 @@ def get-body-info-impl [op: record, doc: record] {
     # An empty media-type key (spoonacular writes `content: {"": {schema}}`) or
     # a bare `*/*` is no content type a request can carry: fall back to JSON.
     let ct = ($preferred | default (if ($declared | is-empty) or ($declared == "*/*") { $spec.CT_JSON } else { $declared }))
-    let s = ($content | get -o $declared | default {} | get -o schema)
+    # The schema must come from the media type the client will send, not the
+    # first one declared: `application/xml` listed before `application/json`
+    # would otherwise expose the XML schema's fields on a JSON request.
+    let s = ($content | get -o $ct | default ($content | get -o $declared | default {}) | get -o schema)
     let schema = if ($s | is-not-empty) { spec resolve-ref $s $doc } else { {} }
     {has_body: true, body_schema: $schema, content_type: $ct}
   }
@@ -111,7 +114,7 @@ def get-body-info-impl [op: record, doc: record] {
 
 # A response may be a `$ref` into `#/components/responses` (apideck, chompthis
 # do this for every operation), so each one is resolved before its `content`
-# is read — here and in get-response-type-impl.
+# is read — here and in get-response-schemas-impl.
 def get-response-content-types-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
   $responses | transpose code resp | where {|r|
@@ -121,32 +124,28 @@ def get-response-content-types-impl [op: record, doc: record] {
   } | flatten | uniq | if ($in | is-empty) { [$spec.CT_JSON] } else { $in }
 }
 
-def get-response-type-impl [op: record, doc: record] {
+# The success responses' schemas (unresolved — model resolves and walks
+# them), best candidate first (see `spec success-response-codes`); responses
+# without a schema are skipped. The first entry is the return type; the
+# others still contribute a discriminator.
+def get-response-schemas-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
-  mut found_schema: any = null
-  for code in (spec response-type-candidates $responses) {
-    if ($found_schema == null) {
-      let resp = (spec resolve-ref ($responses | get -o $code) $doc)
-      if ($resp | is-not-empty) {
-        let content = ($resp.content? | default {})
-        # Prefer application/json's schema; if this response has no JSON media
-        # (e.g. text/plain, application/xml, a vendor +json variant), fall back
-        # to the first media type that declares a schema. Without this, a
-        # non-JSON scalar response (`text/plain` `{type: string}`) derives `any`
-        # and loses the typed `oneof<…>` output annotation.
-        let json_schema = ($content | get -o "application/json" | default {} | get -o schema)
-        let s = if ($json_schema | is-not-empty) {
-          $json_schema
-        } else {
-          let with_schema = ($content | values | each {|m| $m | get -o schema | default null } | compact)
-          if ($with_schema | is-not-empty) { $with_schema | first } else { null }
-        }
-        if ($s | is-not-empty) { $found_schema = $s }
-      }
+  spec success-response-codes $responses | each {|code|
+    let resp = (spec resolve-ref ($responses | get -o $code) $doc)
+    if ($resp | is-empty) { return null }
+    let content = ($resp.content? | default {})
+    # Prefer application/json's schema; if this response has no JSON media
+    # (e.g. text/plain, application/xml, a vendor +json variant), fall back
+    # to the first media type that declares a schema. Without this, a
+    # non-JSON scalar response (`text/plain` `{type: string}`) derives `any`
+    # and loses the typed `oneof<…>` output annotation.
+    let json_schema = ($content | get -o "application/json" | default {} | get -o schema)
+    if ($json_schema | is-not-empty) {
+      $json_schema
+    } else {
+      $content | values | each {|m| $m | get -o schema } | get -o 0
     }
-  }
-  if ($found_schema == null) { return "any" }
-  spec schema-to-type-descriptor $found_schema $doc
+  } | compact
 }
 
 def get-auth-schemes-impl [spec_data: record] {
@@ -205,6 +204,8 @@ export def helpers [] {
         let style = ($param.style? | default "form")
         if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
           let explode = ($param.explode? | default ($style == "form"))
+          # For an object value the emitted serializer reads "multi" as
+          # exploded `k=v` pairs and "csv" as `name=k,v,k,v` (OAS 3 §4.8.12.4).
           match $style {
             "form" => { if $explode { "multi" } else { "csv" } }
             "spaceDelimited" => "ssv"
@@ -216,7 +217,7 @@ export def helpers [] {
     }
     get-body-info: {|op, doc| get-body-info-impl $op $doc }
     get-response-content-types: {|op, doc| get-response-content-types-impl $op $doc }
-    get-response-type: {|op, doc| get-response-type-impl $op $doc }
+    get-response-schemas: {|op, doc| get-response-schemas-impl $op $doc }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }
 }

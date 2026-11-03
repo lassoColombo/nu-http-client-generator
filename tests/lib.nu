@@ -87,7 +87,7 @@ export def variants [] {
         {
             name: "default-timeout"
             gen: {|spec, out|
-                mod $spec -o $out --default-timeout "5min"
+                mod $spec -o $out --default-timeout 5min
             }
         }
         {

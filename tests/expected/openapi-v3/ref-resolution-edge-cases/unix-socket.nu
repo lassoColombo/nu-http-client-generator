@@ -13,27 +13,34 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
   let is_list = ($value | describe | str starts-with "list")
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -108,9 +115,9 @@ def status-completer [] { ["available" "sold"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-tree" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-tree" "get-aliased" "create-aliased" "list-pets" "get-pet" "list-pet-photos" "list-clusters" "create-outer" "get-kinded" "create-deep" "create-kinded" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -131,7 +138,6 @@ export def commands []: nothing -> table {
 # POST /trees
 #
 # operationId: createTree
-# --children item shape: {value?: string, children?: list}
 export def "create-tree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,4 +408,160 @@ export def "list-clusters" [
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
   send-post $req $req_body $insecure $raw $allow_errors $full [200]
+}
+
+# POST /outer
+#
+# operationId: createOuter
+export def "create-outer" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+  leaf_field: string
+  --mid-field: int
+  --outer-field: oneof<nothing, bool>
+]: any -> record<leaf_field: string, mid_field: int, outer_field: bool> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let sock = ($unix_socket | default $UNIX_SOCKET)
+  let full_url = (build-url $base "/outer" $auth.query)
+  let req_body = {"leaf_field": $leaf_field, "mid_field": $mid_field, "outer_field": $outer_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+    unix_socket: $sock
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+}
+
+# GET /kinded
+#
+# Discriminator (response): kind = cat, dog
+# operationId: getKinded
+export def "get-kinded" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> record<kind: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let sock = ($unix_socket | default $UNIX_SOCKET)
+  let full_url = (build-url $base "/kinded" $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+    unix_socket: $sock
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}
+
+# POST /deep
+#
+# operationId: createDeep
+export def "create-deep" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+  deep_field: string
+]: any -> record<deep_field: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let sock = ($unix_socket | default $UNIX_SOCKET)
+  let full_url = (build-url $base "/deep" $auth.query)
+  let req_body = {"deep_field": $deep_field} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+    unix_socket: $sock
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req $req_body $insecure $raw $allow_errors $full [200]
+}
+
+# POST /kinded-created
+#
+# Discriminator (response): kind = cat, dog
+# operationId: createKinded
+export def "create-kinded" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> record<id: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let sock = ($unix_socket | default $UNIX_SOCKET)
+  let full_url = (build-url $base "/kinded-created" $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "post"
+    url: $full_url
+    query: {}
+    headers: $auth.headers
+    body: null
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+    unix_socket: $sock
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-post $req null $insecure $raw $allow_errors $full [200 201]
 }

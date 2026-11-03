@@ -12,7 +12,12 @@ info:
     percent-encoded JSON Pointer (`%7B`/`%7D`, the openSUSE OBS shape) walks
     the document, and an AWS-style `allOf: [{$ref: Scalar}, {description}]`
     property wrapper yields the member's type plus the description — in body
-    fields and in the response type alike.
+    fields and in the response type alike. A two-level allOf chain (an
+    allOf-only wrapper whose member is itself allOf) surfaces the leaf's
+    fields as body flags, and a response given as a $ref still contributes
+    its schema's discriminator. A SIX-level allOf-only chain (deeper than
+    the old depth cap of three) still reaches the leaf, and a discriminator
+    declared only on a `201` next to a plain `200` is still documented.
 servers:
   - url: https://api.example.com
 components:
@@ -22,6 +27,11 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Pet'}
+    KindedPetResponse:
+      description: A pet with a discriminator, behind a response ref
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/KindedPet'}
   parameters:
     PageParam:
       name: page
@@ -29,6 +39,48 @@ components:
       schema: {type: integer}
       description: Page number (shared parameter ref).
   schemas:
+    # Two-level allOf chain: Outer -> Mid -> Leaf, every level allOf-only
+    # except the leaf. Body flags and the response type must both carry
+    # leaf_field, mid_field and outer_field.
+    Leaf:
+      type: object
+      properties:
+        leaf_field: {type: string}
+      required: [leaf_field]
+    Mid:
+      allOf:
+        - {$ref: '#/components/schemas/Leaf'}
+        - type: object
+          properties:
+            mid_field: {type: integer}
+    Outer:
+      allOf:
+        - {$ref: '#/components/schemas/Mid'}
+        - type: object
+          properties:
+            outer_field: {type: boolean}
+    # Six-level allOf-only chain: D0 -> D1 -> ... -> D5, only the last has
+    # properties. `deep_field` must surface as a required body positional and
+    # in the response type.
+    D0: {allOf: [{$ref: '#/components/schemas/D1'}]}
+    D1: {allOf: [{$ref: '#/components/schemas/D2'}]}
+    D2: {allOf: [{$ref: '#/components/schemas/D3'}]}
+    D3: {allOf: [{$ref: '#/components/schemas/D4'}]}
+    D4: {allOf: [{$ref: '#/components/schemas/D5'}]}
+    D5:
+      type: object
+      properties:
+        deep_field: {type: string}
+      required: [deep_field]
+    KindedPet:
+      type: object
+      discriminator:
+        propertyName: kind
+        mapping:
+          cat: '#/components/schemas/Pet'
+          dog: '#/components/schemas/Pet'
+      properties:
+        kind: {type: string}
     # Self-referential: a tree node references itself.
     TreeNode:
       type: object
@@ -161,3 +213,52 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ListClustersOutput'}
+  # Two-level allOf chain in the body and the response.
+  /outer:
+    post:
+      operationId: createOuter
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Outer'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Outer'}
+  # Response $ref whose schema carries a discriminator.
+  /kinded:
+    get:
+      operationId: getKinded
+      responses:
+        '200': {$ref: '#/components/responses/KindedPetResponse'}
+  # Six-level allOf-only chain in the body and the response.
+  /deep:
+    post:
+      operationId: createDeep
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/D0'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/D0'}
+  # Discriminator only on the 201; the 200 (the return type) has none.
+  /kinded-created:
+    post:
+      operationId: createKinded
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object, properties: {id: {type: string}}}
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KindedPet'}

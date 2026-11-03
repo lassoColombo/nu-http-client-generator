@@ -143,21 +143,16 @@ def get-response-content-types-impl [op: record, doc: record] {
   if ($types | is-empty) { [$spec.CT_JSON] } else { $types | uniq }
 }
 
-def get-response-type-impl [op: record, doc: record] {
+# The success responses' schemas (unresolved — model resolves and walks
+# them), best candidate first (see `spec success-response-codes`); responses
+# without a schema are skipped. `#/responses/…` refs are resolved before
+# reading `.schema`.
+def get-response-schemas-impl [op: record, doc: record] {
   let responses = ($op.responses? | default {})
-  mut found_schema: any = null
-  for code in (spec response-type-candidates $responses) {
-    if ($found_schema == null) {
-      # `#/responses/…` refs are resolved before reading `.schema`
-      let resp = (spec resolve-ref ($responses | get -o $code) $doc)
-      if ($resp | is-not-empty) {
-        let s = ($resp.schema? | default null)
-        if ($s | is-not-empty) { $found_schema = $s }
-      }
-    }
-  }
-  if ($found_schema == null) { return "any" }
-  spec schema-to-type-descriptor $found_schema $doc
+  spec success-response-codes $responses | each {|code|
+    let resp = (spec resolve-ref ($responses | get -o $code) $doc)
+    if (($resp | describe) | str starts-with "record") { $resp | get -o schema } else { null }
+  } | compact
 }
 
 def get-auth-schemes-impl [spec_data: record] {
@@ -204,7 +199,7 @@ export def helpers [] {
     }
     get-body-info: {|op, doc| get-body-info-impl $op $doc }
     get-response-content-types: {|op, doc| get-response-content-types-impl $op $doc }
-    get-response-type: {|op, doc| get-response-type-impl $op $doc }
+    get-response-schemas: {|op, doc| get-response-schemas-impl $op $doc }
     get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
   }
 }

@@ -74,16 +74,12 @@ def normalize-discriminator [disc: any] {
 # Merge properties from a body schema, handling allOf/oneOf/anyOf/discriminator.
 # Returns {props: record, required: list<string>}.
 def merge-body-props [schema: record, doc: record] {
-  let all_of_resolved = (($schema.allOf? | default [])
-    | each {|sub| spec resolve-ref $sub $doc }
-    | where {($in | describe) | str starts-with "record"})
-
-  let props_after_allof = ($all_of_resolved | reduce -f ($schema.properties? | default {}) {|s, acc|
-    $acc | merge ($s.properties? | default {})
-  })
-  let required_after_allof = ($all_of_resolved | reduce -f ($schema.required? | default []) {|s, acc|
-    $acc | append ($s.required? | default [])
-  })
+  # allOf is folded by spec's merge-all-of — recursively, so a chain of
+  # allOf-only wrappers (`Base: allOf [Mid]`, `Mid: allOf [Leaf, {props}]`)
+  # still surfaces the leaf's properties and `required`.
+  let schema = (spec merge-all-of $schema $doc)
+  let props_after_allof = ($schema.properties? | default {})
+  let required_after_allof = ($schema.required? | default [])
 
   let disc = (normalize-discriminator ($schema.discriminator? | default null))
   let disc_prop = if ($disc != null) { $disc.propertyName } else { null }
@@ -115,31 +111,28 @@ def merge-body-props [schema: record, doc: record] {
   {props: $merged_props, required: $merged_required}
 }
 
-# Extract body field info from a resolved request body schema
+# Body field info for a request body schema: merge, resolve, extract.
 def extract-body-fields [schema: record, doc: record] {
-  body-fields-from-props (merge-body-props $schema $doc) $doc
+  let merged = (merge-body-props $schema $doc)
+  body-fields-from-resolved (resolve-body-props $merged.props $doc) $merged.required $doc
 }
 
-# Body field info from an already-merged {props, required} (see merge-body-props).
-def body-fields-from-props [merged: record, doc: record] {
-  let props = $merged.props
-  let required = $merged.required
-  # Filter out malformed entries where a property value isn't a schema record
-  # (e.g. meilisearch's open-api.yaml uses `$ref` as a property name, leaving
-  # a bare string sibling that would crash subsequent cell-path accesses).
-  $props | items {|name, field_spec|
-    if (($field_spec | describe) | str starts-with "record") {
-      # resolve, then fold allOf so a `{allOf: [{$ref}, {description}]}`
-      # wrapper (every AWS property) yields the member's type + the description
-      {name: $name, field_spec: (spec merge-all-of (spec resolve-ref $field_spec $doc) $doc)}
-    } else {
-      {name: $name, field_spec: $field_spec}
-    }
-  } | where {|field|
-    ($field.field_spec | describe | str starts-with "record")
-  } | where {|field|
-    not ($field.field_spec.readOnly? | default false)
-  } | each {|field|
+# Resolve every property of a merged props record ONCE: `$ref` followed, allOf
+# folded (so an AWS-style `{allOf: [{$ref}, {description}]}` wrapper yields the
+# member's type), readOnly and malformed entries dropped (meilisearch uses
+# `$ref` as a property name, leaving a bare string sibling that would crash
+# cell-path access). Both the body fields and the shape docs derive from this
+# list. Returns list<{name, spec}>.
+def resolve-body-props [props: record, doc: record]: nothing -> list {
+  $props | items {|name, field_spec| {name: $name, spec: $field_spec} }
+    | where {|f| ($f.spec | describe) | str starts-with "record" }
+    | each {|f| {name: $f.name, spec: (spec merge-all-of (spec resolve-ref $f.spec $doc) $doc)} }
+    | where {|f| (($f.spec | describe) | str starts-with "record") and (not ($f.spec.readOnly? | default false)) }
+}
+
+# Body field records from resolved props (see resolve-body-props).
+def body-fields-from-resolved [resolved: list, required: list, doc: record] {
+  $resolved | each {|field|
     # Defensive guard: a malformed spec may leave `.type` as a record (e.g.
     # codat.io/accounting nests `definitions.itemType` one level too deep, so
     # the JSON-Pointer resolves to `{type: {description, enum, type}}` instead
@@ -147,26 +140,24 @@ def body-fields-from-props [merged: record, doc: record] {
     # string, so fall back to "any". OAS 3.1 list-typed unions (e.g.
     # `[string, null]`) are still handled by `normalize-type`. Logged as a
     # warning so a legitimate generator regression doesn't degrade silently.
-    let raw_type = ($field.field_spec.type? | default "any")
-    let raw_type_desc = ($raw_type | describe)
-    let field_type = if ($raw_type_desc | str starts-with "record") {
+    let raw_type = ($field.spec.type? | default "any")
+    let field_type = if (($raw_type | describe) | str starts-with "record") {
       log warn $"field ($field.name): record-typed `.type` \(malformed spec\) → coerced to any"
       "any"
     } else {
       spec normalize-type $raw_type
     }
     let items_type = if $field_type == "array" {
-      let items = (spec resolve-ref ($field.field_spec.items? | default {}) $doc)
+      let items = (spec resolve-ref ($field.spec.items? | default {}) $doc)
       spec normalize-type ($items.type? | default null)
     } else { null }
-    let enum_vals = (spec clean-enum-values ($field.field_spec.enum? | default []))
-    let nullable = (spec is-nullable $field.field_spec)
-    let desc_base = ($field.field_spec.description? | default "")
-    let default_val = ($field.field_spec.default? | default null)
-    let format = ($field.field_spec.format? | default null)
-    let example = ($field.field_spec.example? | default null)
-    let deprecated = ($field.field_spec.deprecated? | default false)
-    let desc = (spec build-description $desc_base [
+    let enum_vals = (spec clean-enum-values ($field.spec.enum? | default []))
+    let nullable = (spec is-nullable $field.spec)
+    let default_val = ($field.spec.default? | default null)
+    let format = ($field.spec.format? | default null)
+    let example = ($field.spec.example? | default null)
+    let deprecated = ($field.spec.deprecated? | default false)
+    let desc = (spec build-description ($field.spec.description? | default "") [
       (if $deprecated { "DEPRECATED" } else { null })
       (if $nullable { "nullable" } else { null })
       (if ($format != null) { $"format: ($format)" } else { null })
@@ -176,7 +167,7 @@ def body-fields-from-props [merged: record, doc: record] {
     # Swagger 2 formData arrays carry a `collectionFormat` (synthesized onto
     # the property by spec/swagger2); render joins csv/ssv/tsv/pipes lists
     # before the form body is url-encoded. Null means "repeat the key".
-    let collection_style = if $field_type == "array" { $field.field_spec.collectionFormat? | default null } else { null }
+    let collection_style = if $field_type == "array" { $field.spec.collectionFormat? | default null } else { null }
     {
       name: $field.name
       type: $field_type
@@ -192,33 +183,32 @@ def body-fields-from-props [merged: record, doc: record] {
   }
 }
 
-# Build shape documentation entries for complex-typed body fields (record/list)
-# from an already-merged props record (see merge-body-props).
+# Shape documentation entries for the complex-typed (record / list-of-record)
+# fields among resolved props (see resolve-body-props).
 # Returns list of {flag: string, fields: list, is_item: bool}.
-def build-field-shapes [props: record, doc: record] {
-  $props | items {|name, field_spec|
-    if (not (($field_spec | describe) | str starts-with "record")) {
-      null
-    } else {
-      let fs = (spec merge-all-of (spec resolve-ref $field_spec $doc) $doc)
-      let ft = (spec normalize-type ($fs.type? | default ""))
-      if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
-        let sub_fields = (extract-body-fields $fs $doc)
-        if ($sub_fields | is-empty) { null } else {
-          {flag: $name, fields: $sub_fields, is_item: false}
-        }
-      } else if $ft == "array" {
-        let items = ($fs.items? | default {})
-        let resolved_items = (spec resolve-ref $items $doc)
-        if ($resolved_items.properties? | is-not-empty) or ($resolved_items.allOf? | is-not-empty) {
-          let sub_fields = (extract-body-fields $resolved_items $doc)
-          if ($sub_fields | is-empty) { null } else {
-            {flag: $name, fields: $sub_fields, is_item: true}
-          }
-        } else { null }
+def field-shapes-from-resolved [resolved: list, doc: record] {
+  $resolved | each {|f|
+    let fs = $f.spec
+    let ft = (spec normalize-type ($fs.type? | default ""))
+    if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
+      let sub_fields = (extract-body-fields $fs $doc)
+      if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: false} }
+    } else if $ft == "array" {
+      let items = (spec resolve-ref ($fs.items? | default {}) $doc)
+      if ($items.properties? | is-not-empty) or ($items.allOf? | is-not-empty) {
+        let sub_fields = (extract-body-fields $items $doc)
+        if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: true} }
       } else { null }
-    }
+    } else { null }
   } | compact
+}
+
+# A schema's discriminator as the command-model record {context, propertyName,
+# mapping}, or null when the schema has none (or is not a record).
+def schema-discriminator [schema: any, context: string] {
+  if not (($schema | describe) | str starts-with "record") { return null }
+  let d = (normalize-discriminator ($schema.discriminator? | default null))
+  if ($d == null) { null } else { {context: $context, propertyName: $d.propertyName, mapping: $d.mapping} }
 }
 
 # ── Command naming ─────────────────────────────────────────────────
@@ -343,59 +333,25 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
   let deprecated = ($op.deprecated? | default false)
   let external_docs = ($op.externalDocs? | default null)
 
-  # per-operation security override.
-  # OAS3 §4.8.30: `security: []` (empty array) removes the top-level security
-  # declaration for this operation. Use `!= null` (not `is-not-empty`) so
-  # an empty array enters the override branch and yields "none". The legacy
-  # `[{}]` form (one empty record meaning "no auth required") also yields
-  # "none".
-  let op_security = ($op.security?)
-  let default_auth = if ($op_security != null) {
-    if ($op_security | is-empty) {
-      "none"
-    } else {
-      let first_req = ($op_security | first)
-      if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
-        let ref_name = ($first_req | columns | first)
-        let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
-        if ($matched | is-not-empty) { $matched | first | get name } else { $root_default_auth }
-      } else {
-        "none"
-      }
-    }
-  } else {
+  # per-operation security override. OAS3 §4.8.30: `security: []` removes the
+  # top-level requirement (a public op); the legacy `[{}]` form means the same.
+  # Otherwise the first requirement object decides: one resolved scheme is the
+  # op's default; more than one is the AND-form (every scheme sent together —
+  # render emits one `--token-<scheme>` flag per scheme and merges their
+  # headers/query); an unknown name keeps the root default. No override
+  # inherits the root answer, including the global AND-set (the VTEX shape).
+  let op_security = $op.security?
+  let req = if ($op_security == null) { null } else { spec requirement-schemes $op_security $auth_schemes }
+  let default_auth = if ($req == null) {
     $root_default_auth
-  }
-
-  # AND-form security. A SINGLE requirement object listing MULTIPLE schemes
-  # means ALL of them must be sent together on every request
-  # (OA3 §4.8.30 / Swagger 2.0). The `default_auth` above keeps only the first
-  # scheme — correct for the OR-form OUTER array (where each object is an
-  # alternative), but wrong for the inner AND-set. Detect AND-form as the first
-  # requirement object having >1 column and resolve EVERY named scheme to its
-  # record. Downstream render emits one `--token-<scheme>` flag per scheme and
-  # merges all their headers/query. A single-column object (including the
-  # `basic` -> `basic-credentials` render-time expansion, which is still ONE
-  # column at the requirement level) stays on the single-scheme path with an
-  # empty list here. An op with NO `security` override inherits the GLOBAL
-  # AND-set (`root_auth_required`) — this is the VTEX shape, where the AND-form
-  # lives at the top level. `security: []` (public) overrides to no auth.
-  let auth_required = if ($op_security == null) {
-    $root_auth_required
-  } else if ($op_security | is-empty) {
-    []
+  } else if ($req.declared | is-empty) {
+    "none"
+  } else if ($req.schemes | is-empty) {
+    $root_default_auth
   } else {
-    let first_req = ($op_security | first)
-    if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
-      let cols = ($first_req | columns)
-      if ($cols | length) > 1 {
-        collapse-wire-identical ($cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact)
-      } else { [] }
-    } else { [] }
+    $req.schemes | first | get name
   }
-  # An AND-set that collapsed to one wire credential is a single-scheme op.
-  let default_auth = if ($auth_required | length) == 1 { $auth_required | first | get name } else { $default_auth }
-  let auth_required = if ($auth_required | length) == 1 { [] } else { $auth_required }
+  let auth_required = if ($req == null) { $root_auth_required } else if ($req.schemes | length) > 1 { $req.schemes } else { [] }
 
   # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
   let chosen_server = ($op.servers?.0? | default $methods.servers?.0?)
@@ -409,18 +365,6 @@ def extract-op-metadata [op: record, auth_schemes: list, root_default_auth: stri
     default_auth: $default_auth
     auth_required: $auth_required
     base_url: $base_url
-  }
-}
-
-# Drop AND-set members that put the same credential in the same place.
-# Google declares `{Oauth2: [...], Oauth2c: [...]}` — two oauth2 schemes that
-# both become `Authorization: Bearer` — so two `--token-*` flags would write
-# one header and the second would silently win. Keyed on the wire facts
-# (location, header/param name, prefix), first occurrence kept.
-def collapse-wire-identical [schemes: list]: nothing -> list {
-  $schemes | reduce --fold [] {|s, acc|
-    let same = ($acc | any {|a| ($a.in == $s.in) and ($a.header_name == $s.header_name) and ($a.prefix == $s.prefix) })
-    if $same { $acc } else { $acc | append $s }
   }
 }
 
@@ -467,7 +411,7 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   }
 }
 
-# Extract body info: has_body, content_type, body_fields, discriminator.
+# Extract body info: has_body, content_type, body_fields, request discriminator.
 #
 # GET/HEAD/OPTIONS cannot carry a request body — Nushell's `http get`/`head`/
 # `options` builtins take no body argument — so for those methods every body
@@ -492,36 +436,18 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   # <record>` auto-encodes correctly. Multipart and form-urlencoded also
   # expand — the renderer has dedicated `build-multipart-body` and
   # `url build-query` codecs for them.
-  let priority_ct = ($content_type | str starts-with "application/json") or ($content_type == "multipart/form-data") or ($content_type == "application/x-www-form-urlencoded")
+  # `body_encodable` is the one place this is decided: render reads it to
+  # type the fallback `--body` flag and to choose the pipeline-input merge.
+  let body_encodable = ($content_type | str starts-with "application/json") or ($content_type == $spec.CT_MULTIPART) or ($content_type == $spec.CT_FORM)
   let has_schema = (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
-  let expand_fields = $has_body and $has_schema and $priority_ct
+  let expand_fields = $has_body and $has_schema and $body_encodable
   let merged = if $expand_fields { merge-body-props $body_schema $doc } else { {props: {}, required: []} }
-  let body_fields = (body-fields-from-props $merged $doc)
-  let field_shapes = (build-field-shapes $merged.props $doc)
+  let resolved = (resolve-body-props $merged.props $doc)
+  let body_fields = (body-fields-from-resolved $resolved $merged.required $doc)
+  let field_shapes = (field-shapes-from-resolved $resolved $doc)
 
-  # discriminator info
-  let body_disc = (normalize-discriminator (if (($body_schema | describe) | str starts-with "record") { $body_schema.discriminator? | default null } else { null }))
-  let responses = ($op.responses? | default {})
-  let resp_discs = $responses | transpose code resp | where {|r|
-    ($r.code | str starts-with "2") or ($r.code == "default") or ($r.code =~ '^[12][xX]{2}$')
-  } | each {|r|
-    let content = ($r.resp.content? | default {})
-    let json_schema = ($content | get -o "application/json" | default {} | get -o schema | default {})
-    let resolved = (spec resolve-ref $json_schema $doc)
-    if (($resolved | describe) | str starts-with "record") {
-      normalize-discriminator ($resolved.discriminator? | default null)
-    } else {
-      null
-    }
-  } | compact
-  let resp_disc = if ($resp_discs | is-not-empty) { $resp_discs | first } else { null }
-  let discriminator = if ($body_disc != null) {
-    {context: "request", propertyName: $body_disc.propertyName, mapping: $body_disc.mapping}
-  } else if ($resp_disc != null) {
-    {context: "response", propertyName: $resp_disc.propertyName, mapping: $resp_disc.mapping}
-  } else {
-    null
-  }
+  # The request-side discriminator; the response side is extract-response-info's.
+  let discriminator = (schema-discriminator $body_schema "request")
 
   # Detect polymorphic body schemas where one oneOf/anyOf variant is a bare
   # array. The per-field signature only covers object variants; the array
@@ -551,33 +477,35 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   let body_scalar_type = if (not $has_schema) {
     "any"
   } else {
-    let raw = ($body_schema.type? | default null)
-    let normalized = (spec normalize-type $raw)
-    if ($normalized == null) or ($normalized == "object") {
-      "any"
-    } else if (($normalized | describe) | str starts-with "record") {
-      "any"
-    } else {
-      $normalized
-    }
+    let normalized = (spec normalize-type ($body_schema.type? | default null))
+    if ($normalized == null) or ($normalized == "object") { "any" } else { $normalized }
   }
 
-  {has_body: $has_body, content_type: $content_type, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
+  {has_body: $has_body, content_type: $content_type, body_encodable: $body_encodable, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $body_polymorphic_array, body_scalar_type: $body_scalar_type}
 }
 
-# Extract response info: accept_types, return_type, success_codes.
+# Extract response info: accept_types, return_type, success_codes, discriminator.
 def extract-response-info [method: string, op: record, doc: record, h: record] {
   let accept_types = (do $h.get-response-content-types $op $doc)
-
+  # Best candidate first; the return type is the first schema, the
+  # discriminator the first one any success response declares (a `201` next
+  # to a plain `200` still documents its discriminator).
+  let schemas = (do $h.get-response-schemas $op $doc)
   let return_type = if ($method in ["head" "options"]) {
     "record"
+  } else if ($schemas | is-empty) {
+    "any"
   } else {
-    do $h.get-response-type $op $doc
+    spec schema-to-type-descriptor ($schemas | first) $doc
   }
-
   # Spec-declared success codes (2xx/3xx) gate handle-response's error throw.
   # Empty list → spec enumerated none → the client falls back to `< 400`.
-  {accept_types: $accept_types, return_type: $return_type, success_codes: (spec get-success-codes $op)}
+  {
+    accept_types: $accept_types
+    return_type: $return_type
+    success_codes: (spec get-success-codes $op)
+    discriminator: ($schemas | each {|s| schema-discriminator (spec resolve-ref $s $doc) "response" } | compact | get -o 0)
+  }
 }
 
 # Apply a user `--name-fn` closure to override the derived command name.
@@ -663,10 +591,6 @@ def deduplicate-commands []: list -> list {
 
 # Build the command model list from a parsed+resolved REST spec.
 export def command-list [doc: record, h: record, auth_schemes: list, root_default_auth: string, root_auth_required: list, config: record] {
-  # The global AND-set collapses the same way the per-op one does.
-  let root_auth_required = (collapse-wire-identical $root_auth_required)
-  let root_default_auth = if ($root_auth_required | length) == 1 { $root_auth_required | first | get name } else { $root_default_auth }
-  let root_auth_required = if ($root_auth_required | length) == 1 { [] } else { $root_auth_required }
   ($doc.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {
@@ -764,6 +688,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
         cookie_params: $params.cookie_params
         has_body: $body.has_body
         content_type: $body.content_type
+        body_encodable: $body.body_encodable
         body_fields: $body.body_fields
         body_polymorphic_array: $body.body_polymorphic_array
         body_scalar_type: $body.body_scalar_type
@@ -778,7 +703,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_defaul
         base_url: $meta.base_url
         accept_types: $resp.accept_types
         success_codes: $resp.success_codes
-        discriminator: $body.discriminator
+        discriminator: ($body.discriminator | default $resp.discriminator)
         return_type: $resp.return_type
       }
     }

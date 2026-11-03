@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Body Flag Collision Edge Cases
+  version: "1.0.0"
+  description: |
+    Spec-side params named `body` next to the client's own `--body` flag. A
+    query/header/cookie `body` always takes its group prefix (`--qp-body`,
+    `--hdr-body`, `--ck-body`): when the command's body has no per-field
+    flags it declares `--body` itself, and nushell keeps the FIRST of two
+    same-named flags, so the caller's value was silently dropped. A body
+    FIELD named `body` keeps the bare `--body` flag — it only gets one when
+    the record-level `--body` is not emitted.
+servers:
+  - url: https://api.example.com
+paths:
+  # query `body` + scalar text body: `--qp-body` and `--body: string`.
+  /search:
+    post:
+      operationId: searchText
+      parameters:
+        - {name: body, in: query, schema: {type: string}}
+      requestBody:
+        content:
+          text/plain:
+            schema: {type: string}
+      responses:
+        '200': {description: ok}
+  # query `body` + schemaless JSON body: `--qp-body` and `--body: record`.
+  /notes:
+    post:
+      operationId: createNote
+      parameters:
+        - {name: body, in: query, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200': {description: ok}
+  # header + cookie `body` on a bodyless GET: prefixed for consistency even
+  # though no `--body` is emitted here.
+  /echo:
+    get:
+      operationId: echoBody
+      parameters:
+        - {name: body, in: header, schema: {type: string}}
+        - {name: body, in: cookie, schema: {type: string}}
+      responses:
+        '200': {description: ok}
+  # body FIELD `body` (the GitHub comment shape): bare `--body: string`.
+  /comments:
+    post:
+      operationId: createComment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body: {type: string}
+                author: {type: string}
+      responses:
+        '201': {description: created}

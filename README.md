@@ -137,7 +137,7 @@ These flags control the behaviour of the *generated* commands. They don't affect
 | Flag                            | Default     | Description                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `--token-env-var: string`       | `<NAME>_TOKEN` | The env-var the generated `build-auth` helper falls back to when `--token` is not passed. Derived from `--name` by default. |
-| `--default-timeout: string`     | `"30min"`   | Default request timeout. Overridable per-call via `--max-time`.                                                            |
+| `--default-timeout: duration`   | `30min`     | Default request timeout. Overridable per-call via `--max-time`.                                                            |
 | `--default-headers: record`     | `{}`        | Headers merged into every request the client makes (e.g. `{X-Tenant-Id: "acme"}`).                                          |
 
 ### Module behaviour

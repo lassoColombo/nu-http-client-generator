@@ -201,63 +201,79 @@ export def is-nullable [schema: record] {
 
 # Detect schema type and major version from a parsed spec.
 export def detect [spec: record] {
+  # Interpolated, not `into string`: an unquoted YAML `swagger: 2.0` parses
+  # as a float, and `into string` would render it `2`.
   if ($spec.openapi? | is-not-empty) {
-    let major = ($spec.openapi | split row '.' | first)
+    let major = ($"($spec.openapi)" | split row '.' | first)
     {schema: "openapi", version: $major}
   } else if ($spec.swagger? | is-not-empty) {
-    let major = ($spec.swagger | split row '.' | first)
+    let major = ($"($spec.swagger)" | split row '.' | first)
     {schema: "swagger", version: $major}
   } else {
     error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }
 }
 
-# Determine default auth scheme from root-level security + parsed auth schemes
-export def get-default-auth [spec: record, auth_schemes: list] {
-  let security = ($spec.security? | default [])
-  if ($security | is-not-empty) {
-    let first_req = ($security | first)
-    if (($first_req | describe) | str starts-with "record") {
-      let ref_name = ($first_req | columns | first)
-      let matched = $auth_schemes | where {|s| $s.spec_name == $ref_name }
-      if ($matched | is-not-empty) {
-        return ($matched | first | get name)
-      }
-    }
+# The schemes named by a security requirement list's FIRST requirement object,
+# resolved against the parsed auth schemes. Shared by the root-level
+# `security` (`get-default-auth`, `get-default-auth-required`) and the per-op
+# override in model, so the three read the same thing. Returns
+# {declared: list<string>, schemes: list<record>}: `declared` is the raw
+# scheme names (empty when the first requirement is `{}` or not a record);
+# `schemes` is the resolved records, unknown names dropped, wire-identical
+# duplicates collapsed. A list longer than one is the AND-form (every scheme
+# must be sent together); the OR-form outer array only contributes its first
+# alternative.
+export def requirement-schemes [security: any, auth_schemes: list]: nothing -> record {
+  let first_req = ($security | default [] | get -o 0)
+  let declared = if (($first_req | describe) | str starts-with "record") { $first_req | columns } else { [] }
+  let schemes = ($declared | each {|n| $auth_schemes | where {|s| $s.spec_name == $n } | get -o 0 } | compact | collapse-wire-identical)
+  {declared: $declared, schemes: $schemes}
+}
+
+# Drop AND-set members that put the same credential in the same place.
+# Google declares `{Oauth2: [...], Oauth2c: [...]}` — two oauth2 schemes that
+# both become `Authorization: Bearer` — so two `--token-*` flags would write
+# one header and the second would silently win. Keyed on the wire facts
+# (location, header/param name, prefix), first occurrence kept.
+def collapse-wire-identical []: list -> list {
+  reduce --fold [] {|s, acc|
+    let same = ($acc | any {|a| ($a.in == $s.in) and ($a.header_name == $s.header_name) and ($a.prefix == $s.prefix) })
+    if $same { $acc } else { $acc | append $s }
   }
-  if ($auth_schemes | is-not-empty) {
+}
+
+# Default auth scheme name: the first scheme the root-level `security` names,
+# else the first declared scheme, else "bearer".
+export def get-default-auth [spec: record, auth_schemes: list] {
+  let named = (requirement-schemes $spec.security? $auth_schemes).schemes
+  if ($named | is-not-empty) {
+    $named | first | get name
+  } else if ($auth_schemes | is-not-empty) {
     $auth_schemes | first | get name
   } else {
     "bearer"
   }
 }
 
-# The GLOBAL (top-level) AND-form security set, mirroring the
-# per-op detection in `extract-op-metadata`. When the spec's top-level
-# `security` is a single requirement object listing >1 scheme (e.g. VTEX's
-# `[{appKey: [], appToken: []}]`), EVERY op that does not override `security`
-# inherits the requirement to send ALL of them. Returns the resolved scheme
-# records (length >1) or [] when there is no global AND-form.
+# The GLOBAL AND-form security set. When the root-level `security` names >1
+# scheme in one requirement object (VTEX's `[{appKey: [], appToken: []}]`),
+# every op that does not override `security` must send ALL of them. Returns
+# the resolved scheme records (length >1) or [] when there is no global AND-form.
 export def get-default-auth-required [spec: record, auth_schemes: list] {
-  let security = ($spec.security? | default [])
-  if ($security | is-empty) { return [] }
-  let first_req = ($security | first)
-  if (($first_req | describe) | str starts-with "record") and ($first_req | is-not-empty) {
-    let cols = ($first_req | columns)
-    if ($cols | length) > 1 {
-      return ($cols | each {|rn| $auth_schemes | where {|s| $s.spec_name == $rn } | first } | compact)
-    }
-  }
-  []
+  let named = (requirement-schemes $spec.security? $auth_schemes).schemes
+  if ($named | length) > 1 { $named } else { [] }
 }
 
-# The response codes to consult, in order, when picking the success schema.
-# `default` is the error envelope in practice (Azure ARM: `200` without a
-# schema + `default: ErrorResponse`), so it is only a candidate when the
-# operation declares NO 2xx response at all.
-export def response-type-candidates [responses: record]: nothing -> list<string> {
-  let has_2xx = ($responses | columns | any {|c| $c =~ '^2' })
-  if $has_2xx { $RESPONSE_CODE_PRIORITY | where {|c| $c != "default" } } else { $RESPONSE_CODE_PRIORITY }
+# The response codes to consult, in order, when picking the success schema:
+# the priority codes first, then every other 2xx the operation declares, in
+# document order. `default` is the error envelope in practice (Azure ARM:
+# `200` without a schema + `default: ErrorResponse`), so it is only a
+# candidate when the operation declares NO 2xx response at all.
+export def success-response-codes [responses: record]: nothing -> list<string> {
+  let declared_2xx = ($responses | columns | where {|c| $c =~ '^2' })
+  let priority = if ($declared_2xx | is-empty) { $RESPONSE_CODE_PRIORITY } else { $RESPONSE_CODE_PRIORITY | where {|c| $c != "default" } }
+  $priority | append $declared_2xx | uniq
 }
 
 # Explicit success status codes (2xx/3xx numerics) declared by the operation.
@@ -349,14 +365,24 @@ export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0
 # `default`, `nullable`, `description`) is taken from the first member that
 # has it when the outer schema does not. This is what makes the AWS shape
 # `{allOf: [{$ref: '#/…/Date'}, {description: …}]}` a `string` field with a
-# description instead of an untyped `any`. Members' own allOf fold too, to a
-# small depth so a self-referencing schema cannot loop. A schema without
-# allOf comes back unchanged.
-export def merge-all-of [schema: any, doc: record, --depth: int = 0]: nothing -> any {
+# description instead of an untyped `any`. Members' own allOf fold too, all
+# the way down: `visited` carries the `$ref`s on the current path, and a
+# member that refers back to one of them is skipped, so a self-referencing
+# schema cannot loop and a long chain of allOf-only wrappers still reaches
+# the leaf. A schema without allOf comes back unchanged.
+export def merge-all-of [schema: any, doc: record, --visited: list<string> = []]: nothing -> any {
   if not (($schema | describe) | str starts-with "record") { return $schema }
-  let members = ($schema.allOf? | default [] | each {|sub| resolve-ref $sub $doc }
+  let members = ($schema.allOf? | default []
     | where {|sub| ($sub | describe) | str starts-with "record" }
-    | each {|sub| if $depth < 3 { merge-all-of $sub $doc --depth ($depth + 1) } else { $sub } })
+    | each {|sub|
+      let ref_path = ($sub | get -o "$ref")
+      let is_ref = (($ref_path | describe) == "string")
+      if $is_ref and ($ref_path in $visited) { return null }
+      let seen = if $is_ref { $visited | append $ref_path } else { $visited }
+      merge-all-of (resolve-ref $sub $doc) $doc --visited $seen
+    }
+    | compact
+    | where {|sub| ($sub | describe) | str starts-with "record" })
   if ($members | is-empty) { return $schema }
   let base = ($schema | reject allOf)
   $members | reduce --fold $base {|m, acc|

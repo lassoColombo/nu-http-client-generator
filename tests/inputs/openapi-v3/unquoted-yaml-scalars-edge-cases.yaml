@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Unquoted YAML Scalars Edge Cases
+  # Unquoted: YAML parses this as the float 1.0. The header must read
+  # `v1.0`, not fail with "can't convert float to string" or render `v1`.
+  version: 1.0
+servers:
+  - url: https://api.example.com
+paths:
+  /things:
+    get:
+      operationId: listThings
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {type: string}
