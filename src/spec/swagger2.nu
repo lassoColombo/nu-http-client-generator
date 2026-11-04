@@ -98,7 +98,11 @@ def get-body-info-impl [op: record, doc: record] {
     }
     {has_body: true, body_schema: {type: "object", properties: $props, required: $required}, content_type: $ct}
   } else {
-    let body_param = $params | where {|p| ($p.in? | default "") == "body" } | first
+    let body_params = ($params | where {|p| ($p.in? | default "") == "body" })
+    if ($body_params | length) > 1 {
+      log warn $"operation ($op.operationId? | default '<no operationId>') declares ($body_params | length) body params; Swagger 2 allows one, using '($body_params | first | get -o name)'"
+    }
+    let body_param = ($body_params | first)
     if ($body_param | is-empty) {
       {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
     } else {

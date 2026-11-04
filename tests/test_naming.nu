@@ -158,16 +158,31 @@ def "name-fn cannot produce a name nushell refuses" [] {
 @test
 def "the default output file is a flat, sanitized name" [] {
     # Without -o the file is named after the spec title. A title with `/`
-    # must not turn into a directory path.
-    let temp = mktemp --directory
-    let spec = ($temp | path join "spec.json")
-    {
-        openapi: "3.0.3"
-        info: {title: "Pets / Store API", version: "1"}
-        paths: {/pets: {get: {operationId: listPets, responses: {"200": {description: ok}}}}}
-    } | to json | save $spec
-    do { cd $temp; mod $spec }
-    let made = (ls $temp | get name | path basename | sort)
-    rm --recursive $temp
-    assert equal $made ["pets-store-api.nu" "spec.json"]
+    # must not turn into a directory path, and leading/trailing dots must not
+    # make a hidden file or a doubled extension.
+    let cases = [
+        {title: "Pets / Store API", file: "pets-store-api.nu"}
+        {title: "Foo Inc.", file: "foo-inc.nu"}
+        {title: ".internal", file: "internal.nu"}
+        {title: "Client.nu", file: "client.nu"}
+        {title: "...", file: "client.nu"}
+    ]
+    for c in $cases {
+        let temp = mktemp --directory
+        let made = try {
+            let spec = ($temp | path join "spec.json")
+            {
+                openapi: "3.0.3"
+                info: {title: $c.title, version: "1"}
+                paths: {/pets: {get: {operationId: listPets, responses: {"200": {description: ok}}}}}
+            } | to json | save $spec
+            do { cd $temp; mod $spec }
+            ls --all $temp | get name | path basename | where {|f| $f != "spec.json" }
+        } catch {|e|
+            rm --recursive $temp
+            error make --unspanned { msg: $"title ($c.title | to nuon): ($e.msg)" }
+        }
+        rm --recursive $temp
+        assert equal $made [$c.file] $"title ($c.title | to nuon)"
+    }
 }

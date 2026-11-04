@@ -5,7 +5,9 @@ info:
   description: |
     AWS-style greedy path labels. `{Key+}` matches the rest of the path, slashes
     included, so the value is encoded per segment and its `/` survive. The `+`
-    is not part of the parameter name: the spec declares `Key`.
+    is not part of the parameter name: the spec declares `Key`. API Gateway
+    exports instead declare the name WITH the `+` (`name: proxy+`); it still
+    becomes one greedy positional named `proxy`.
 servers:
   - url: https://s3.example.com
 paths:
@@ -21,5 +23,13 @@ paths:
     get:
       operationId: ListArchive
       summary: Greedy label with no declared parameter (synthesized positional).
+      responses:
+        "200": {description: ok}
+  /proxy/{proxy+}:
+    get:
+      operationId: ProxyGet
+      summary: API Gateway shape, the declared name carries the `+`.
+      parameters:
+        - {name: proxy+, in: path, required: true, schema: {type: string}}
       responses:
         "200": {description: ok}

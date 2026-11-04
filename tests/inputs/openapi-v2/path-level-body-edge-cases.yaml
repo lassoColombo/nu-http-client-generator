@@ -37,6 +37,19 @@ paths:
               color: {type: string}
       responses:
         "200": {description: ok}
+    patch:
+      operationId: patchThing
+      summary: Declares its own body under a different name; it still replaces the inherited one (one body per operation).
+      parameters:
+        - name: changes
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              size: {type: integer}
+      responses:
+        "200": {description: ok}
   /forms:
     parameters:
       - {name: title, in: formData, type: string, required: true}

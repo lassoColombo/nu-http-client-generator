@@ -71,8 +71,11 @@ def encode-path-array [v: any]: nothing -> string {
 
 # Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
 # each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
 def encode-path-greedy [v: any]: nothing -> string {
-  $"($v)" | split row "/" | each { encode-path-segment $in } | str join "/"
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -117,6 +120,12 @@ def send-put [req: record, body: any, insecure: bool, raw: bool, allow_errors: b
   $resp | handle-response $allow_errors $full $ok_codes
 }
 
+# PATCH — body + content-type
+def send-patch [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
+  let resp = if ($body | is-empty) { http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
+  $resp | handle-response $allow_errors $full $ok_codes
+}
+
 def base-url-completer [] { ["https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
@@ -124,7 +133,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-thing" "replace-thing" "submit-form" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-thing" "replace-thing" "patch-thing" "submit-form" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -219,6 +228,44 @@ export def "replace-thing" [
   }
   if $dry_run { return ({dry_run: true} | merge $req) }
   send-put $req $req_body $insecure $raw $allow_errors $full [200]
+}
+
+# Declares its own body under a different name; it still replaces the inherited one (one body per operation).
+#
+# PATCH /things
+# operationId: patchThing
+export def "patch-thing" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --size: int
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/things" $auth.query)
+  let req_body = {"size": $size} | compact
+  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req = {
+    method: "patch"
+    url: $full_url
+    query: {}
+    headers: ({"X-Test": "value"} | merge $auth.headers)
+    body: $req_body
+    content_type: "application/json"
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-patch $req $req_body $insecure $raw $allow_errors $full [200]
 }
 
 # Inherits a path-level formData param and adds its own.

@@ -63,8 +63,13 @@ def filter-config [tags: any, prefixes: any, methods: any, exclude_deprecated: b
 # characters outside `[a-z0-9._-]` collapsed to `-`. A raw title such as
 # `Pets / Store API` would otherwise make `save` write into a `Pets ` directory.
 def default-file-stem [title: string]: nothing -> string {
-  let stem = ($title | str lowercase | str replace --all --regex '[^a-z0-9._-]+' '-' | str trim --char '-')
-  if ($stem | is-empty) or ($stem =~ '^\.+$') { "client" } else { $stem }
+  # Edge `.`/`-` would make a hidden file (`.internal.nu`) or a doubled dot
+  # (`foo-inc..nu`); a title that already ends in `.nu` would double the
+  # extension. Trim, drop the extension, trim what that exposes.
+  let trim_edges = {|s| $s | str replace --all --regex '^[.-]+|[.-]+$' '' }
+  let stem = ($title | str lowercase | str replace --all --regex '[^a-z0-9._-]+' '-')
+  let stem = (do $trim_edges (do $trim_edges $stem | str replace --regex '\.nu$' ''))
+  if ($stem | is-empty) { "client" } else { $stem }
 }
 
 # Generate a Nushell HTTP client module from an OpenAPI/Swagger spec

@@ -17,6 +17,7 @@ use ../mod.nu
 const SPEC = "tests/inputs/openapi-v3/path-shadowing-edge-cases.yaml"
 const BODY_SPEC = "tests/inputs/openapi-v3/body-field-collision-edge-cases.yaml"
 const RESERVED_SPEC = "tests/inputs/openapi-v3/reserved-name-edge-cases.yaml"
+const GREEDY_SPEC = "tests/inputs/openapi-v3/greedy-path-edge-cases.yaml"
 
 def run-cmd [client: string, cmd: string]: nothing -> any {
     let result = ^nu --no-config-file -c $"use '($client)' *; ($cmd) | to json -r" | complete
@@ -35,7 +36,9 @@ def setup []: nothing -> record {
     mod $BODY_SPEC -o $body_client
     let reserved_client = ($temp | path join "reserved.nu")
     mod $RESERVED_SPEC -o $reserved_client
-    { temp: $temp, client: $client, body_client: $body_client, reserved_client: $reserved_client }
+    let greedy_client = ($temp | path join "greedy.nu")
+    mod $GREEDY_SPEC -o $greedy_client
+    { temp: $temp, client: $client, body_client: $body_client, reserved_client: $reserved_client, greedy_client: $greedy_client }
 }
 
 @after-all
@@ -103,6 +106,12 @@ def "path params named like body-code internals are not shadowed" [] {
 # The invariant itself, over every golden input: no generated command binds
 # the same variable twice, whether through two positionals, two flags, or a
 # positional and a flag.
+@test
+def "a greedy label declared with its plus is one greedy positional" [] {
+    let r = (run-cmd $in.greedy_client 'proxy-get "a/b c" --dry-run')
+    assert equal $r.url "https://s3.example.com/proxy/a/b%20c" "the slash survives, the space is encoded"
+}
+
 @test
 def "no golden command binds a variable twice" [] {
     let clashes = (glob tests/expected/**/baseline.nu | each {|f|

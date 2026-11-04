@@ -74,6 +74,14 @@ def "encode-path-greedy keeps slashes between encoded segments" [] {
 }
 
 @test
+def "encode-path-greedy encodes structured and empty values like a segment" [] {
+    assert equal (rt 'encode-path-greedy [a b]') (rt 'encode-path-segment [a b]') "a list is compact JSON, not debug text"
+    assert equal (rt 'encode-path-greedy {k: "x/y"}') (rt 'encode-path-segment {k: "x/y"}') "a record is never split on its slashes"
+    assert equal (rt 'encode-path-greedy null') ""
+    assert equal (rt 'encode-path-greedy 42') "42"
+}
+
+@test
 def "build-url joins base path, template path and query fragments" [] {
     assert equal (rt 'build-url "https://h.test/v1" "/pets" "a=1" "" "b=2"') "https://h.test/v1/pets?a=1&b=2" "empty fragments are dropped"
     assert equal (rt 'build-url "https://h.test/?k=v" "/pets" "a=1"') "https://h.test/pets?k=v&a=1" "a query on the base URL is kept first"

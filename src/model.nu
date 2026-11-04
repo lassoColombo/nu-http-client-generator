@@ -307,9 +307,10 @@ def path-slug [method: string, url_path: string]: nothing -> string {
 # Returns {name, source} — `source` tells the override closure which rule fired.
 def derive-command-name [op: record, method: string, url_path: string]: nothing -> record {
   let from_op_id = (sanitize-command-name ($op.operationId? | default ""))
+  # The slug may itself be unusable (`GET /` → `get`); deduplicate-commands
+  # gives every final name, slug or --name-fn result, its `-op` suffix.
   if ($from_op_id | is-empty) or (name-unusable $from_op_id) {
-    let slug = (path-slug $method $url_path)
-    {name: (if (name-unusable $slug) { $"($slug)-op" } else { $slug }), source: "path"}
+    {name: (path-slug $method $url_path), source: "path"}
   } else {
     {name: $from_op_id, source: "operation-id"}
   }
@@ -380,11 +381,21 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   # `name:in`, and an unresolved `{$ref: …}` has neither, so it would survive
   # next to the op's own same-named param and emit a duplicate flag.
   # resolve-ref is shallow, so also resolve the nested .schema if it's a ref.
+  # An API Gateway export declares a greedy label with its `+` (`name: proxy+`
+  # for `/{proxy+}`). The `+` is no part of the name: strip it here, before the
+  # merge, so the param binds `$proxy` like the normalized template, and keep
+  # the fact as `greedy`.
   let resolve = {|p|
     let resolved = (spec resolve-ref $p $doc)
     let s = ($resolved.schema? | default null)
-    if (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
+    let resolved = if (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
       $resolved | upsert schema (spec resolve-ref $s $doc)
+    } else {
+      $resolved
+    }
+    let name = ($resolved.name? | default "")
+    if ($resolved.in? == "path") and (($name | describe) == "string") and ($name | str ends-with "+") {
+      $resolved | update name ($name | str replace --regex '\+$' '') | upsert greedy true
     } else {
       $resolved
     }
@@ -395,11 +406,15 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   # merge path-level params with operation params (op overrides path-level).
   # The merged list keeps every location: Swagger 2 `body`/`formData` params
   # are inherited from the path item too, and the body helper reads them here.
-  let op_param_keys = $op_params | each {|p| $"($p.name? | default ''):($p.in? | default '')" }
-  let all_params = ($path_level_params | where {|p|
-    let key = $"($p.name? | default ''):($p.in? | default '')"
-    not ($key in $op_param_keys)
-  } | append $op_params)
+  # A param is identified by name+location, except a Swagger 2 `body`: an
+  # operation has at most one, so the op's own replaces the inherited one even
+  # when the two are named differently.
+  let param_key = {|p|
+    let loc = ($p.in? | default '')
+    if $loc == "body" { "body" } else { $"($p.name? | default ''):($loc)" }
+  }
+  let op_param_keys = ($op_params | each $param_key)
+  let all_params = ($path_level_params | where {|p| not ((do $param_key $p) in $op_param_keys) } | append $op_params)
   let resolved_params = ($all_params | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] })
 
   # Path params keep the spec name, the (items) type and the enum: render
@@ -407,7 +422,7 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   # positional `list<string>` (a bare `list` would parse `[01 02]` as ints and
   # send `1,2`), and wires an enum completer like it does for flags.
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
-    {name: $p.name, type: (do $h.get-param-type $p), items_type: (do $h.get-param-items-type $p), enum: (spec clean-enum-values (do $h.get-param-enum $p))}
+    {name: $p.name, type: (do $h.get-param-type $p), items_type: (do $h.get-param-items-type $p), enum: (spec clean-enum-values (do $h.get-param-enum $p)), greedy: ($p.greedy? | default false)}
   }
   let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p $h } }
 
@@ -453,10 +468,12 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   #   multipart — multipart/form-data; render emits `build-multipart-body`
   #   opaque    — anything else; the caller supplies the wire form
   let body_kind = if not $has_body { "none" } else if ($content_type | str starts-with "application/json") { "json" } else if $content_type == $spec.CT_FORM { "form" } else if $content_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
-  let has_schema = (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
+  # A body the command cannot send has no shape worth computing: render reads
+  # every body field, scalar type and array variant under `has_body` only.
+  let has_schema = $has_body and (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
   let expand_fields = $has_schema and ($body_kind in ["json" "form" "multipart"])
-  # Merged for every schema-bearing body (an opaque one still reports its
-  # array variant); its fields only become flags when they can be encoded.
+  # Merged for every sendable schema-bearing body (an opaque one still reports
+  # its array variant); its fields only become flags when they can be encoded.
   let merged = if $has_schema { merge-body-props $body_schema $doc } else { {props: {}, required: [], has_array_variant: false} }
   let resolved = if $expand_fields { resolve-body-props $merged.props $doc } else { [] }
   let body_fields = (body-fields-from-resolved $resolved $merged.required $doc)
@@ -636,9 +653,10 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       let fixed_query = ($clean_path | split row '?' | get -o 1 | default "")
       let clean_path = ($clean_path | split row '?' | first)
       # AWS greedy labels (`/{Bucket}/{Key+}`) match the rest of the path,
-      # slashes included. The `+` is not part of the name (the spec declares
-      # `Key`), so the template is normalized to `{Key}` and the param is
-      # marked greedy: render encodes it per segment, keeping its `/`.
+      # slashes included. The `+` is not part of the name (AWS declares `Key`;
+      # API Gateway declares `Key+`, stripped by classify-params), so the
+      # template is normalized to `{Key}` and the param is marked greedy:
+      # render encodes it per segment, keeping its `/`.
       let greedy_names = ($clean_path | parse --regex '\{(?P<n>[^{}]+)\+\}' | get n)
       let clean_path = ($clean_path | str replace --all --regex '\{([^{}]+)\+\}' '{${1}}')
 
@@ -647,17 +665,20 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       let declared = ($params.path_params | each {|p| $p.name })
       let template_placeholders = ($clean_path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
       let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared) } | each {|ph|
-        {name: $ph, type: "any", items_type: null, enum: []}
+        {name: $ph, type: "any", items_type: null, enum: [], greedy: false}
       }
       # Order path params as the URL template does. Path-param emission and
       # positional order are taken straight from this list, so a spec that
       # declares params in a different order (e.g. alphabetical) than the URL
       # template would route calls to the wrong endpoint (e.g. `{namespace}/{name}`
       # called as `(name, namespace)` would swap them).
+      # One positional per name: two params binding the same variable would
+      # silently keep only the later value, so a spec that declares a name
+      # twice (`Key` and `Key+`) keeps the first.
       let params = $params | update path_params ($params.path_params | append $extra_path_params | sort-by {|p|
         let idx = ($clean_path | str index-of $"{($p.name)}")
         if $idx < 0 { 999999 } else { $idx }
-      } | each {|p| $p | insert greedy ($p.name in $greedy_names) })
+      } | uniq-by name | each {|p| $p | update greedy ($p.greedy or ($p.name in $greedy_names)) })
       let body = (extract-body-info $method ($op | upsert parameters $params.all_params) $doc $h $"($method | str uppercase) ($path_entry.path)")
       let resp = (extract-response-info $method $op $doc $h)
       let derived_name = (derive-command-name $op $method (if ($fixed_query | is-empty) { $clean_path } else { $"($clean_path)?($fixed_query)" }))

@@ -73,8 +73,11 @@ def encode-path-array [v: any]: nothing -> string {
 
 # Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
 # each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
 def encode-path-greedy [v: any]: nothing -> string {
-  $"($v)" | split row "/" | each { encode-path-segment $in } | str join "/"
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query

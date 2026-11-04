@@ -19,6 +19,7 @@ paths:
               - '"Ashburn, VA"'
               - '"Chicago, IL"'
               - '"Latency"'
+              - '"weird"middle"'
       responses:
         '200':
           description: ok

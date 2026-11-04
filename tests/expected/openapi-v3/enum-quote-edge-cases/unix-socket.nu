@@ -72,8 +72,11 @@ def encode-path-array [v: any]: nothing -> string {
 
 # Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
 # each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
 def encode-path-greedy [v: any]: nothing -> string {
-  $"($v)" | split row "/" | each { encode-path-segment $in } | str join "/"
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -117,7 +120,8 @@ def auth-scheme-completer [] { ["bearer"] }
 def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
 # Completers for enum parameters
-def anchorsite-override-completer [] { ["Ashburn, VA" "Chicago, IL" "Latency"] }
+def anchorsite-override-completer [] { ["\"weird\"middle\"" "Ashburn, VA" "Chicago, IL" "Latency"] }
+def anchorsite-override-completer-1 [] { ["Ashburn, VA" "Chicago, IL" "Latency"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -196,7 +200,7 @@ export def "get-clean" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --anchorsite-override: string@anchorsite-override-completer
+  --anchorsite-override: string@anchorsite-override-completer-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
