@@ -86,7 +86,13 @@ def "build-url joins base path, template path and query fragments" [] {
     assert equal (rt 'build-url "https://h.test/v1" "/pets" "a=1" "" "b=2"') "https://h.test/v1/pets?a=1&b=2" "empty fragments are dropped"
     assert equal (rt 'build-url "https://h.test/?k=v" "/pets" "a=1"') "https://h.test/pets?k=v&a=1" "a query on the base URL is kept first"
     assert equal (rt 'build-url "https://h.test" ""') "https://h.test/"
-    assert equal (rt 'build-url "https://h.test:8080/v1/" "/x//y"') "https://h.test:8080/v1/x/y" "slash runs collapse"
+    assert equal (rt 'build-url "https://h.test:8080/v1//" "//x"') "https://h.test:8080/v1/x" "the seam is one slash"
+    assert equal (rt 'build-url "https://h.test:8080/v1/" "/x//y"') "https://h.test:8080/v1/x//y" "slashes inside the path are data"
+}
+
+@test
+def "a greedy value with a doubled slash reaches the URL intact" [] {
+    assert equal (rt 'build-url "https://s3.test" ({k: (encode-path-greedy "dir//a b.txt")} | format pattern "/b/{k}")') "https://s3.test/b/dir//a%20b.txt"
 }
 
 @test

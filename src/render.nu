@@ -687,9 +687,9 @@ export def build-body-code [cmd: record, config: record] {
 
   # Validate each path param is non-empty before URL substitution. Without
   # this guard, `format pattern` substitutes the empty string, leaving
-  # `/foo//bar` in the templated path which `build-url`'s `/+ -> /` collapse
-  # then erases — silently routing the request to a different endpoint. Naming
-  # the spec param in the error tells the caller which arg was passed empty.
+  # `/foo//bar` in the templated path (or dropping a trailing segment), a URL
+  # the server routes to a different endpoint or none. Naming the spec param
+  # in the error tells the caller which arg was passed empty.
   for p in $cmd.path_params {
     let msg = $"path parameter '($p.name)' must be non-empty"
     $lines ++= [$"  if \($($p.var_name) | is-empty\) { error make --unspanned { msg: ($msg | to nuon) } }"]
