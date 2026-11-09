@@ -111,16 +111,20 @@ def json-pointer-lookup [doc: any, ref_path: string]: nothing -> any {
   })
   mut current = $doc
   for seg in $segments {
-    let t = ($current | describe)
-    if ($t | str starts-with "record") {
-      if not ($seg in ($current | columns)) { return null }
-      $current = ($current | get $seg)
-    } else if ($t | str starts-with "list") or ($t | str starts-with "table") {
-      let idx = (try { $seg | into int } catch { -1 })
-      if $idx < 0 or $idx >= ($current | length) { return null }
-      $current = ($current | get $idx)
-    } else {
-      return null
+    # A match pattern tells a record from a list; `describe` would render the
+    # whole nested type, milliseconds on the root (the whole document) for
+    # every lookup.
+    match $current {
+      {} => {
+        if not ($seg in ($current | columns)) { return null }
+        $current = ($current | get $seg)
+      }
+      [..$_] => {
+        let idx = (try { $seg | into int } catch { -1 })
+        if $idx < 0 or $idx >= ($current | length) { return null }
+        $current = ($current | get $idx)
+      }
+      _ => { return null }
     }
   }
   $current
@@ -150,7 +154,8 @@ export def resolve-ref [val: any, doc: record] {
   mut current = $val
   mut visited = []
   loop {
-    if not (($current | describe) | str starts-with "record") { return $current }
+    # Not `describe`: it renders the whole nested type of a large value.
+    match $current { {} => {}, _ => { return $current } }
     let ref_path = ($current | get -o "$ref")
     if (($ref_path | describe) != "string") { return $current }
     if ($ref_path in $visited) { return $current }
