@@ -1,6 +1,7 @@
-# spec.nu — Dispatch table for OpenAPI/Swagger spec helpers.
-# Version-specific logic is encapsulated in closures, looked up by schema type + version.
-# Version-independent helpers are plain exported functions.
+# spec.nu — The version-independent spec helpers: loading, `$ref` resolution,
+# format detection, security requirements, success codes, type descriptors.
+# What differs between the formats lives in `oa3.nu` and `swagger2.nu`, each
+# exporting a `helpers` record of closures; mod.nu picks one by `detect`.
 
 # ── Module-level constants ──────────────────────────────────────────
 
@@ -192,14 +193,14 @@ export def is-nullable [schema: record] {
   if ($t | describe | str starts-with "list") { "null" in $t } else { false }
 }
 
-# Detect the spec format: {schema: "openapi" | "swagger"}. The version field
-# only has to be present; an unquoted YAML `swagger: 2.0` is a float, which
+# Detect the spec format: "openapi" or "swagger". The version field only has
+# to be present; an unquoted YAML `swagger: 2.0` is a float, which
 # `is-not-empty` accepts like a string.
-export def detect [spec: record] {
+export def detect [spec: record]: nothing -> string {
   if ($spec.openapi? | is-not-empty) {
-    {schema: "openapi"}
+    "openapi"
   } else if ($spec.swagger? | is-not-empty) {
-    {schema: "swagger"}
+    "swagger"
   } else {
     error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }

@@ -33,8 +33,7 @@ def check-spec-generatable [loaded: record] {
 # Shared pipeline: detect the format, extract auth metadata, build the
 # command model. Returns {commands, auth_schemes, base_url, all_urls}.
 def process-spec [doc: record, config: record] {
-  let info = (spec detect $doc)
-  let h = match $info.schema {
+  let h = match (spec detect $doc) {
     "openapi" => (oa3 helpers)
     "swagger" => (swagger2 helpers)
   }

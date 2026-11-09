@@ -1,5 +1,5 @@
-# spec-oa3.nu — OpenAPI 3.x dispatch closures.
-# Extracted from the unified dispatch table in spec.nu.
+# oa3.nu — OpenAPI 3.x answers to the `helpers` dispatch record (see spec.nu):
+# servers, request/response media types, parameter facts, security schemes.
 
 use spec.nu
 use ../log.nu

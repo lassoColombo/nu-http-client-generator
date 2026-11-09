@@ -1,7 +1,7 @@
 # render.nu — Code generation / rendering for the Nushell HTTP client module.
 #
-# All functions in this file take the command model (built by mod.nu + spec.nu)
-# and produce Nushell source code strings.
+# All functions in this file take the command model (built by model.nu) and
+# produce Nushell source code strings.
 
 # The config-independent helpers every client carries (`serialize-qp`,
 # `build-url`, `handle-response`, …) live as real Nushell source next to this

@@ -1,5 +1,6 @@
-# spec-swagger2.nu — Swagger 2.0 dispatch closures.
-# Extracted from the unified dispatch table in spec.nu.
+# swagger2.nu — Swagger 2.0 answers to the `helpers` dispatch record (see
+# spec.nu): host/basePath/schemes, consumes/produces, formData bodies,
+# parameter facts, securityDefinitions.
 
 use spec.nu
 use ../log.nu
