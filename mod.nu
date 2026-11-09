@@ -111,8 +111,10 @@ export def main [
     autocompletion_unix_sockets: ($autocompletion_unix_sockets | default [])
   }
 
-  # Interpolated: an unquoted YAML title such as `title: 2024` is a number.
-  let title = if ($name | is-not-empty) { $name } else {
+  # The module name drives the token env var and the default file stem; render
+  # takes the header's display title from `info.title` itself. Interpolated:
+  # an unquoted YAML title such as `title: 2024` is a number.
+  let module_name = if ($name | is-not-empty) { $name } else {
     $"($loaded.data.info?.title? | default ($loaded.source | path parse | get stem))"
   }
   let result = (process-spec $loaded.data $config)
@@ -122,8 +124,8 @@ export def main [
   if ($result.commands | is-empty) {
     error make --unspanned { msg: $"spec at ($loaded.source) yields no commands after filtering — nothing to generate" }
   }
-  let output_content = (render client $loaded $title $result $config)
-  let out_path = if ($output | is-not-empty) { $output } else { $"./(default-file-stem $title).nu" }
+  let output_content = (render client $loaded $module_name $result $config)
+  let out_path = if ($output | is-not-empty) { $output } else { $"./(default-file-stem $module_name).nu" }
   $output_content | save --force $out_path
 }
 

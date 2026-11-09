@@ -108,6 +108,21 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -163,6 +178,8 @@ export def "widgets-list" [
   --notion-version: string
   --x-request-id: string
   --x-custom-header: string
+  --x-ids: list
+  --tags: list
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -170,8 +187,10 @@ export def "widgets-list" [
   let full_url = (build-url $base "/widgets" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header} | compact
+  let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header, "X-Ids": (if ($x_ids | describe | str starts-with "list") { $x_ids | compact | each { into string } | str join "," } else { $x_ids })} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let cookie_str = {"tags": (if ($tags | describe | str starts-with "list") { $tags | compact | each { into string } | str join "," } else { $tags })} | items {|k, v| if $v == null { null } else { $"($k)=($v)" } } | compact | str join "; "
+  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }
   let req = {
     method: "get"
     url: $full_url

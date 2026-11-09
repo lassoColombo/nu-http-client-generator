@@ -27,6 +27,15 @@ paths:
           required: false
           schema:
             type: string
+        # Array header/cookie whose items are a `$ref`: no primitive item type,
+        # but still a list, so it is comma-joined (nushell drops a list value
+        # from `--headers` without a word).
+        - name: X-Ids
+          in: header
+          schema: {type: array, items: {$ref: '#/components/schemas/Id'}}
+        - name: tags
+          in: cookie
+          schema: {type: array, items: {$ref: '#/components/schemas/Id'}}
         - name: "{field-name}"
           in: query
           required: false
@@ -56,3 +65,6 @@ paths:
             application/json:
               schema:
                 type: object
+components:
+  schemas:
+    Id: {type: string}

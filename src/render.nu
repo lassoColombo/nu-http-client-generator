@@ -216,7 +216,7 @@ def decorate-param-group [params: list, prefix: string, path_vars: list<string>,
   for p in $params {
     let base = (effective-flag-name $p.name $prefix)
     let proposed = if ((flag-var $base) in $path_vars) { $"($prefix)-($base)" } else { $base }
-    let is_array = (($p.items_type? | default null) != null) or (($p.name | str ends-with "[]"))
+    let is_array = ($p.type == "array") or ($p.name | str ends-with "[]")
     let res = (disambiguate-flag-name $proposed $is_array $acc)
     let flag_var = (flag-var $res.flag_name)
     $items ++= [($p | merge {flag_name: $res.flag_name, flag_var: $flag_var, name_suffix: $res.suffix})]
@@ -321,11 +321,12 @@ def flatten-description [text: string]: nothing -> string {
 # §3.2.6, multi-value headers are comma-joined regardless of `explode` — HTTP
 # headers can't repeat. The runtime check handles `null` (compact-friendly) and
 # scalar values unchanged, so this is safe even when the user passes a single
-# string into a list-typed flag.
+# string into a list-typed flag. Keyed on the param's type, not its item type:
+# an array of `$ref` items has no primitive `items_type` but is still a list.
 def render-param-record [params: list] {
   $params | each {|p|
     let var = $p.flag_var
-    let value_expr = if (($p.items_type? | default null) != null) {
+    let value_expr = if $p.type == "array" {
       $"\(if \($($var) | describe | str starts-with \"list\"\) { $($var) | compact | each { into string } | str join \",\" } else { $($var) }\)"
     } else {
       $"$($var)"
@@ -404,26 +405,40 @@ def render-param-sig [flag_name: string, nu_type: string, desc: string, cname?: 
   }
 }
 
-# Render a group of decorated query/header/cookie params for the signature.
-# Returns {parts: list<string>, dep_flags: list<string>} — dep_flags are the
-# flag names that get an `@deprecated --flag` attribute.
+# The comment text for a decorated query/header/cookie flag: its description,
+# plus an origin note when the flag was disambiguated by a suffix, so users can
+# tell which spec-side parameter it maps to.
+def param-doc [q: record]: nothing -> string {
+  let note = match ($q.name_suffix? | default "") {
+    "" => ""
+    "-list" => " (array variant)"
+    $s => $" \(disambiguated($s)\)"
+  }
+  $"(flatten-description $q.description)($note)"
+}
+
+# The comment text for a decorated body field: its description and the shape
+# of a record-typed value joined by ` — `, then `(body field)` when the flag
+# took the `-body` suffix to avoid a query/header/cookie flag.
+def body-field-doc [f: record, shapes: list]: nothing -> string {
+  let text = ([(flatten-description $f.description) (lookup-shape $f.name $shapes)] | where {|t| $t | is-not-empty } | str join " — ")
+  [$text (if $f.collision == "cross-group" { "(body field)" } else { "" })] | where {|t| $t | is-not-empty } | str join " "
+}
+
+# Render decorated params or body fields for the signature. Each item carries
+# its comment text as `doc`; a body field may be a positional. Returns
+# {parts: list<string>, dep_flags: list<string>} — dep_flags are the flag names
+# that get an `@deprecated --flag` attribute (positionals cannot take one).
 def render-param-group [params: list, mapping: record, config: record] {
   mut parts = []
   mut dep_flags = []
   for q in $params {
     let nu_type = (nu-type-for $q.type ($q.items_type? | default null))
-    # Origin note for a flag that was disambiguated via suffix, so users can
-    # tell which spec-side parameter the flag actually maps to.
-    let suffix_note = match ($q.name_suffix? | default "") {
-      "" => ""
-      "-list" => " (array variant)"
-      $s => $" \(disambiguated($s)\)"
-    }
-    let desc_text = $"(flatten-description $q.description)($suffix_note)"
-    let desc = if $config.no_descriptions or ($desc_text | is-empty) { "" } else { $" # ($desc_text)" }
+    let desc = if $config.no_descriptions or ($q.doc | is-empty) { "" } else { $" # ($q.doc)" }
     let cname = if ($q.enum | is-not-empty) { resolve-completer $q $mapping } else { null }
-    $parts ++= [(render-param-sig $q.flag_name $nu_type $desc $cname)]
-    if ($q.deprecated? | default false) {
+    let positional = ($q.is_positional? | default false)
+    $parts ++= [(render-param-sig $q.flag_name $nu_type $desc $cname --positional=$positional)]
+    if (not $positional) and ($q.deprecated? | default false) {
       $dep_flags ++= [$q.flag_name]
     }
   }
@@ -488,52 +503,34 @@ export def build-signature [cmd: record, mapping: record, config: record] {
     $parts ++= [$'  --accept: string@($cname) # Response content type']
   }
 
+  let body_fields = if $cmd.has_body and (not $cmd.body_collapsed) {
+    $cmd.body_fields | each {|f| $f | insert doc (body-field-doc $f $shapes) }
+  } else { [] }
   for group in [$cmd.query_params $cmd.header_params $cmd.cookie_params] {
-    let result = (render-param-group $group $mapping $config)
+    let result = (render-param-group ($group | each {|q| $q | insert doc (param-doc $q) }) $mapping $config)
     $parts ++= $result.parts
     $dep_flags ++= $result.dep_flags
   }
+  let body_result = (render-param-group $body_fields $mapping $config)
+  $parts ++= $body_result.parts
+  $dep_flags ++= $body_result.dep_flags
 
-  if $cmd.has_body {
-    if $cmd.body_collapsed {
-      let body_shape = (lookup-shape "body" $shapes)
-      let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
-      $parts ++= [$"  --body: record($body_desc)"]
-    } else {
-      for f in $cmd.body_fields {
-        let nu_type = (nu-type-for $f.type ($f.items_type? | default null))
-        let shape_hint = (lookup-shape $f.name $shapes)
-        let desc_text = (flatten-description $f.description)
-        let desc_with_shape = if ($shape_hint != null) and ($desc_text | is-not-empty) { $"($desc_text) — ($shape_hint)" } else if ($shape_hint != null) { $shape_hint } else { $desc_text }
-        let cname = if ($f.enum | is-not-empty) { resolve-completer $f $mapping } else { null }
-        if $f.is_positional {
-          let desc = if $config.no_descriptions { "" } else if ($desc_with_shape | is-not-empty) { $" # ($desc_with_shape)" } else { "" }
-          $parts ++= [(render-param-sig $f.flag_name $nu_type $desc $cname --positional)]
-          # @deprecated --flag doesn't work on positional params — skip
-        } else {
-          let body_note = if $f.collision == "cross-group" { "(body field)" } else { "" }
-          let desc_with_note = ([$desc_with_shape $body_note] | where {|t| $t | is-not-empty } | str join " ")
-          let desc = if $config.no_descriptions { "" } else if ($desc_with_note | is-not-empty) { $" # ($desc_with_note)" } else { "" }
-          $parts ++= [(render-param-sig $f.flag_name $nu_type $desc $cname)]
-          if ($f.deprecated? | default false) {
-            $dep_flags ++= [$f.flag_name]
-          }
-        }
-      }
-      if ($cmd.body_fields | is-empty) {
-        # When the body schema is non-record (e.g. `type: string` for a
-        # `text/plain` body), emit a typed flag matching the scalar so callers
-        # can pass a raw value. For non-JSON content-types whose schema IS
-        # record-shaped (e.g. AWS text/xml AttachInstancesQuery), emit
-        # `--body: any` — `http post --content-type text/xml <record>` rejects
-        # records, so the caller has to pre-serialize to a string; `any` lets
-        # them pass either a record or a string. JSON-family records keep the
-        # `--body: record` typing.
-        let scalar = ($cmd.body_scalar_type? | default "any")
-        let body_t = if ($scalar != "any") { nu-type-for $scalar } else if $cmd.body_kind == "opaque" { "any" } else { "record" }
-        $parts ++= [$"  --body: ($body_t)"]
-      }
-    }
+  if $cmd.has_body and $cmd.body_collapsed {
+    let body_shape = (lookup-shape "body" $shapes)
+    let body_desc = if ($body_shape != null) { $" # ($body_shape)" } else { " # Request body" }
+    $parts ++= [$"  --body: record($body_desc)"]
+  } else if $cmd.has_body and ($cmd.body_fields | is-empty) {
+    # When the body schema is non-record (e.g. `type: string` for a
+    # `text/plain` body), emit a typed flag matching the scalar so callers
+    # can pass a raw value. For non-JSON content-types whose schema IS
+    # record-shaped (e.g. AWS text/xml AttachInstancesQuery), emit
+    # `--body: any` — `http post --content-type text/xml <record>` rejects
+    # records, so the caller has to pre-serialize to a string; `any` lets
+    # them pass either a record or a string. JSON-family records keep the
+    # `--body: record` typing.
+    let scalar = ($cmd.body_scalar_type? | default "any")
+    let body_t = if ($scalar != "any") { nu-type-for $scalar } else if $cmd.body_kind == "opaque" { "any" } else { "record" }
+    $parts ++= [$"  --body: ($body_t)"]
   }
 
   {signature: ($parts | str join "\n"), deprecated_flags: $dep_flags}
@@ -790,24 +787,19 @@ export def build-body-code [cmd: record, config: record] {
     } else {
       $lines ++= ['  let req_body = $body']
     }
-    # Pipeline-input merge: records merge deep into the assembled body. When
-    # the spec declares `oneOf: [{object}, {array}]` (or anyOf), we also accept
-    # a bare list and pass it straight through — the object variant remains
-    # reachable via flags, and the array variant via pipeline. When the body
-    # schema is a non-record scalar (string, int, etc.) OR the content-type is
-    # non-JSON-family (`text/xml`, `text/plain`, `application/vnd.X+json`,
-    # `application/octet-stream`, …), accept the raw pipeline input as the body
-    # so callers can `"text" | op` without a flag. Nushell's `http` only
-    # auto-encodes records for content-types matching `application/json*`; for
-    # everything else the wire format is the user's responsibility.
-    let non_record_body = (($cmd.body_scalar_type? | default "any") != "any")
-    if ($cmd.body_polymorphic_array? | default false) {
-      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if ($input | describe | str starts-with "list") { $input } else { $req_body }']
-    } else if ($cmd.body_kind == "opaque") or $non_record_body {
-      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }']
-    } else {
-      $lines ++= ['  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }']
-    }
+    # Pipeline-input merge (`merge-body-input` in runtime.nu): a piped record
+    # merges deep into the assembled body. When the spec declares
+    # `oneOf: [{object}, {array}]` (or anyOf), a piped list is the body — the
+    # object variant stays reachable via flags, the array variant via the
+    # pipeline. When the body schema is a non-record scalar (string, int, …) or
+    # the content type is opaque (`text/xml`, `application/octet-stream`, …),
+    # any piped value is the body, so callers can `"text" | op` without a flag.
+    let accepts = if ($cmd.body_polymorphic_array? | default false) {
+      "list"
+    } else if ($cmd.body_kind == "opaque") or (($cmd.body_scalar_type? | default "any") != "any") {
+      "scalar"
+    } else { "record" }
+    $lines ++= [$"  let req_body = \(merge-body-input $input $req_body ($accepts | to nuon)\)"]
     # A required body field that could not be a positional (it collides with a
     # reserved name, or is a bool) is still required: refuse an empty value
     # once flags and pipeline input are merged. Nullable fields are exempt —
@@ -867,15 +859,13 @@ export def build-body-code [cmd: record, config: record] {
       ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
     } | each {|f| $f.name })
     let file_list_lit = ($file_field_names | each {|n| $n | to nuon } | str join ' ')
-    # Guard against $req_body being a non-record (bare array/string body, or
-    # the empty-schema case where $req_body comes from `--body: record` but
-    # the user might pass nothing). Coerce to {} so the helper's `transpose`
-    # works; the empty body yields a multipart envelope with just the trailer.
-    # A record gets the envelope. Anything else (a multipart op whose schema is
-    # a bare `type: string` — spoonacular's recipe card, libretranslate's file
-    # token — binds `--body: string`) is sent verbatim rather than silently
-    # replaced by an empty envelope.
-    $lines ++= ['  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }']
+    # An omitted body (`--body: record` left out) is an empty record, which
+    # yields an envelope with just the trailer. A record gets the envelope.
+    # Anything else (a multipart op whose schema is a bare `type: string` —
+    # spoonacular's recipe card, libretranslate's file token — binds
+    # `--body: string`) is sent verbatim rather than silently replaced by an
+    # empty envelope.
+    $lines ++= ['  let req_body = ($req_body | default {})']
     $lines ++= [$"  let mp = if \($req_body | describe | str starts-with \"record\"\) { build-multipart-body $req_body [($file_list_lit)] $dry_run } else { {body: $req_body, content_type: \"multipart/form-data\"} }"]
   }
 
@@ -906,20 +896,27 @@ export def build-body-code [cmd: record, config: record] {
   # accepts a record/table. record → compact+build-query; null → "" (empty
   # form body); else → `into string` (the caller already supplied the wire form).
   let form_encode = 'if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }'
-  let emitted_wire_body = $has_ct_override or ($cmd.body_kind == "form")
+  # A `+json` suffix type (`application/merge-patch+json`): nushell's `http`
+  # encodes a record only for `application/json…` and rejects one for any
+  # other type, but sends a string verbatim under the declared type. So a
+  # structured body is encoded here; a string is taken as already encoded.
+  let json_encode = r#'if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }'#
+  let static_encode = match $cmd.body_kind { "form" => $form_encode, "json-text" => $json_encode, _ => null }
+  let emitted_wire_body = $has_ct_override or ($static_encode != null)
   if $has_ct_override {
-    # Effective content-type for body serialization and the request. When the
-    # user (or the spec default) picks x-www-form-urlencoded, serialize; other
-    # content types pass the body through unchanged — JSON is what Nushell's
-    # `http post` already does by default.
+    # Effective content-type for body serialization and the request. The
+    # user (or the spec default) may pick x-www-form-urlencoded or a `+json`
+    # type, which are encoded as above; other content types pass the body
+    # through unchanged — JSON is what Nushell's `http post` already does by
+    # default.
     $lines ++= [$"  let effective_ct = \(($ct_var) | default ($cmd.content_type | to nuon)\)"]
-    $lines ++= [('  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (' + $form_encode + ') } else { $req_body }')]
+    $lines ++= [('  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (' + $form_encode + r#') } else if ($effective_ct =~ '\+json\s*(;|$)') { ('# + $json_encode + ') } else { $req_body }')]
   } else if $emitted_wire_body {
-    $lines ++= [('  let req_body_wire = (' + $form_encode + ')')]
+    $lines ++= [('  let req_body_wire = (' + $static_encode + ')')]
   }
 
-  # Wire body handed to the sender: multipart envelope, form-urlencoded string,
-  # or the logical record. Bodyless verbs pass null.
+  # Wire body handed to the sender: multipart envelope, form-urlencoded or
+  # JSON-encoded string, or the logical record. Bodyless verbs pass null.
   let wire_body_expr = if $is_multipart { '$mp.body' } else if $emitted_wire_body { '$req_body_wire' } else if $cmd.has_body { '$req_body' } else { 'null' }
 
   # The $req record is the fully-resolved request AND the dry-run shape. The op
@@ -1213,12 +1210,23 @@ export def client [loaded: record, module_name: string, spec: record, config: re
   # from the scheme's spec_name) and the per-scheme env-var fallback name
   # (derived from the module token env-var base). Done here, not in model,
   # because the env-var base is only known at render time.
+  # One slug per scheme, decided over all schemes in document order so every
+  # command agrees: `appKey` and `app_key` both strip to `appkey`, and two
+  # `--token-appkey` flags would bind one variable (nushell keeps the first),
+  # so a taken slug gets a numeric suffix (`appkey2`). Kept alphanumeric: the
+  # slug is spliced into the flag's variable and the env-var name as is.
+  let slug_of = ($auth_schemes | reduce --fold {} {|s, acc|
+    let base = ($s.spec_name | str lowercase | str replace --all --regex '[^a-z0-9]' '' | if ($in | is-empty) { "scheme" } else { $in })
+    let taken = ($acc | values)
+    let slug = if ($base not-in $taken) { $base } else { 2.. | each {|n| $"($base)($n)" } | where {|c| $c not-in $taken } | first }
+    $acc | upsert $s.spec_name $slug
+  })
   let and_env_base = ($token_env_var | str replace --regex '_TOKEN$' '')
   let commands = ($spec.commands | each {|c|
     let ar = ($c.auth_required? | default [])
     if ($ar | length) > 1 {
       $c | update auth_required ($ar | each {|s|
-        let slug = ($s.spec_name | str lowercase | str replace --all --regex '[^a-z0-9]' '')
+        let slug = ($slug_of | get $s.spec_name)
         $s | insert flag_slug $slug | insert env_var $"($and_env_base)_($slug | str uppercase)_TOKEN"
       })
     } else { $c }

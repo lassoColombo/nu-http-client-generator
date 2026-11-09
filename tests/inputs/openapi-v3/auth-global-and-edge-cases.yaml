@@ -11,10 +11,11 @@ info:
     D-7 / issue 51.
 servers:
   - url: https://api.example.com
-# Top-level AND-form: BOTH schemes required on every non-overriding op.
+# Top-level AND-form: ALL schemes required on every non-overriding op.
 security:
   - appKey: []
     appToken: []
+    app_key: []
 components:
   securitySchemes:
     appKey:
@@ -25,8 +26,14 @@ components:
       type: apiKey
       in: header
       name: X-App-Token
+    # Strips to the same slug as `appKey`: takes `--token-appkey2` instead of
+    # a second `--token-appkey` that would bind the same variable.
+    app_key:
+      type: apiKey
+      in: header
+      name: X-App-Key-2
 paths:
-  # Inherits the global AND-form -> both --token-appkey and --token-apptoken.
+  # Inherits the global AND-form -> --token-appkey, --token-apptoken and --token-appkey2.
   /widgets:
     get:
       operationId: listWidgets

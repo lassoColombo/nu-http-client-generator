@@ -41,6 +41,13 @@ paths:
       operationId: getRegionStatus
       responses:
         '200': {description: ok}
+  # Undeclared placeholders spelled with `-` and `.` -> still synthesized
+  # (positionals `user_id`, `org_name`), never left as literal `{user-id}` text.
+  /users/{user-id}/orgs/{org.name}:
+    get:
+      operationId: getUserOrg
+      responses:
+        '200': {description: ok}
   # Fragment in the path key -> stripped before URL/resource derivation.
   /reports#section:
     get:

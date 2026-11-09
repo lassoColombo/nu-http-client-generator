@@ -3,6 +3,7 @@
 # Auth: --token flag or $env.AUTH_GLOBAL_AND_TOKEN
 # Auth (appKey): --token-appkey flag or $env.AUTH_GLOBAL_AND_APPKEY_TOKEN
 # Auth (appToken): --token-apptoken flag or $env.AUTH_GLOBAL_AND_APPTOKEN_TOKEN
+# Auth (app_key): --token-appkey2 flag or $env.AUTH_GLOBAL_AND_APPKEY2_TOKEN
 
 const BASE_URL = "https://api.example.com"
 const UNIX_SOCKET = "/var/run/docker.sock"
@@ -17,6 +18,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-app-key" => { {scheme: $scheme, headers: {"X-App-Key": $token_val}, query: "", location: "header"} }
     "x-app-token" => { {scheme: $scheme, headers: {"X-App-Token": $token_val}, query: "", location: "header"} }
+    "x-app-key-2" => { {scheme: $scheme, headers: {"X-App-Key-2": $token_val}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -123,6 +125,21 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = if ($req.unix_socket | is-empty) { http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url } else { http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw --unix-socket $req.unix_socket $req.url }
@@ -130,13 +147,13 @@ def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: 
 }
 
 def base-url-completer [] { ["https://api.example.com"] }
-def auth-scheme-completer [] { ["x-app-key" "x-app-token" "none"] }
+def auth-scheme-completer [] { ["x-app-key" "x-app-token" "x-app-key-2" "none"] }
 def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket" "token-appkey" "token-apptoken"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket" "token-appkey" "token-apptoken" "token-appkey2"]
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-widgets" "get-public" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -164,6 +181,7 @@ export def "list-widgets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-App-Key)
   --token-apptoken: string # Auth token for appToken (X-App-Token)
+  --token-appkey2: string # Auth token for app_key (X-App-Key-2)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -172,7 +190,7 @@ export def "list-widgets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
-  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o AUTH_GLOBAL_AND_APPKEY_TOKEN | default "")) "x-app-key") (build-auth ($token_apptoken | default ($env | get -o AUTH_GLOBAL_AND_APPTOKEN_TOKEN | default "")) "x-app-token")])
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o AUTH_GLOBAL_AND_APPKEY_TOKEN | default "")) "x-app-key") (build-auth ($token_apptoken | default ($env | get -o AUTH_GLOBAL_AND_APPTOKEN_TOKEN | default "")) "x-app-token") (build-auth ($token_appkey2 | default ($env | get -o AUTH_GLOBAL_AND_APPKEY2_TOKEN | default "")) "x-app-key-2")])
   let base = ($base_url | default $BASE_URL)
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let full_url = (build-url $base "/widgets" $auth.query)

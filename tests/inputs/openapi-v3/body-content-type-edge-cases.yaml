@@ -211,3 +211,31 @@ paths:
             schema: {type: string}
       responses:
         '200': {description: ok}
+  # `+json` suffix types (Kubernetes PATCH, JSON:API): per-field flags like
+  # JSON, but nushell's `http` only takes a string for these types, so the
+  # body is sent through `to json -r` under the declared content type.
+  /merge-patch:
+    patch:
+      operationId: mergePatch
+      requestBody:
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                labels: {type: array, items: {type: string}}
+      responses:
+        '200': {description: ok}
+  # A `+json` array body (RFC 6902 JSON Patch) -> `--body: list`, also encoded.
+  /json-patch:
+    patch:
+      operationId: jsonPatch
+      requestBody:
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              items: {type: object, properties: {op: {type: string}, path: {type: string}}}
+      responses:
+        '200': {description: ok}

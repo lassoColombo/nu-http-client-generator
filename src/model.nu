@@ -128,10 +128,17 @@ def merge-body-props [schema: record, doc: record] {
   {props: $props, required: $required, has_array_variant: $has_array_variant}
 }
 
-# Body field info for a request body schema: merge, resolve, extract.
-def extract-body-fields [schema: record, doc: record] {
-  let merged = (merge-body-props $schema $doc)
-  body-fields-from-resolved (resolve-body-props $merged.props $doc) $merged.required $doc
+# The body fields of a merged body (see merge-body-props) and, with
+# `--shapes`, their shape docs; every property is resolved once and both lists
+# derive from that. Returns {fields: list, shapes: list}. Shapes are one level
+# deep and opt-in: a shape's own fields are built without shapes, which is what
+# keeps a self-referencing schema (`Node.children: [Node]`) from looping.
+def body-fields [merged: record, doc: record, --shapes]: nothing -> record {
+  let resolved = (resolve-body-props $merged.props $doc)
+  {
+    fields: (body-fields-from-resolved $resolved $merged.required $doc)
+    shapes: (if $shapes { field-shapes-from-resolved $resolved $doc } else { [] })
+  }
 }
 
 # Resolve every property of a merged props record ONCE: `$ref` followed, allOf
@@ -202,12 +209,12 @@ def field-shapes-from-resolved [resolved: list, doc: record] {
     let fs = $f.spec
     let ft = (spec normalize-type ($fs.type? | default ""))
     if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
-      let sub_fields = (extract-body-fields $fs $doc)
+      let sub_fields = (body-fields (merge-body-props $fs $doc) $doc).fields
       if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: false} }
     } else if $ft == "array" {
       let items = (spec resolve-ref ($fs.items? | default {}) $doc)
       if ($items.properties? | is-not-empty) or ($items.allOf? | is-not-empty) {
-        let sub_fields = (extract-body-fields $items $doc)
+        let sub_fields = (body-fields (merge-body-props $items $doc) $doc).fields
         if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: true} }
       } else { null }
     } else { null }
@@ -360,10 +367,6 @@ def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, meth
   }
   let auth_required = if ($req == null) { $root_auth.required } else if ($req.schemes | length) > 1 { $req.schemes } else { [] }
 
-  # per-operation/path server overrides — resolve {var} placeholders via dispatch helper
-  let chosen_server = ($op.servers?.0? | default $methods.servers?.0?)
-  let base_url = if ($chosen_server == null) { null } else { do $h.resolve-server-url $chosen_server }
-
   {
     description: $description
     operation_id: $operation_id
@@ -371,7 +374,7 @@ def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, meth
     external_docs: $external_docs
     default_auth: $default_auth
     auth_required: $auth_required
-    base_url: $base_url
+    base_url: (do $h.get-op-base-url $op $methods)
   }
 }
 
@@ -451,33 +454,37 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
   let content_type = ($body_info.content_type? | default $spec.CT_JSON)
   let body_schema = $body_info.body_schema
 
-  # For non-JSON content-types (text/xml, application/vnd.X+json, …) we do
+  # For non-JSON content-types (text/xml, application/octet-stream, …) we do
   # NOT expand record schemas into per-field flags: there is no canonical
   # Nushell-record-to-XML codec, no canonical record-to-octet-stream codec,
   # etc. Callers pre-serialize and either pass a string via --body or pipe
-  # one into the operation. Per-field flags would be misleading. JSON-family
-  # content-types still expand because `http post --content-type application/json
-  # <record>` auto-encodes correctly. Multipart and form-urlencoded also
-  # expand — the renderer has dedicated `build-multipart-body` and
-  # `url build-query` codecs for them.
+  # one into the operation. Per-field flags would be misleading. JSON
+  # content-types expand: nushell's `http` encodes a record itself for
+  # `application/json`, and render encodes it for the `+json` suffix types
+  # (`application/merge-patch+json`), which `http` accepts only as a string.
+  # Multipart and form-urlencoded also expand — the renderer has dedicated
+  # `build-multipart-body` and `url build-query` codecs for them.
   # `body_kind` is the one place this is decided, and render matches on it
   # instead of re-reading content-type strings:
   #   none      — no request body (or a GET/HEAD/OPTIONS that cannot send one)
-  #   json      — JSON-family; nushell's `http` encodes a record itself
+  #   json      — `application/json`; nushell's `http` encodes a record itself
+  #   json-text — a `+json` suffix type; render emits `to json -r`
   #   form      — x-www-form-urlencoded; render emits `url build-query`
   #   multipart — multipart/form-data; render emits `build-multipart-body`
   #   opaque    — anything else; the caller supplies the wire form
-  let body_kind = if not $has_body { "none" } else if ($content_type | str starts-with "application/json") { "json" } else if $content_type == $spec.CT_FORM { "form" } else if $content_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
+  # Classified on the media type without parameters: nushell encodes a record
+  # for `application/json` (charset or not) but not for
+  # `application/json-patch+json`, which only the `+json` rule catches.
+  let media_type = ($content_type | split row ';' | first | str trim)
+  let body_kind = if not $has_body { "none" } else if $media_type == $spec.CT_JSON { "json" } else if ($media_type | str ends-with "+json") { "json-text" } else if $media_type == $spec.CT_FORM { "form" } else if $media_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
   # A body the command cannot send has no shape worth computing: render reads
   # every body field, scalar type and array variant under `has_body` only.
   let has_schema = $has_body and (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
-  let expand_fields = $has_schema and ($body_kind in ["json" "form" "multipart"])
+  let expand_fields = $has_schema and ($body_kind in ["json" "json-text" "form" "multipart"])
   # Merged for every sendable schema-bearing body (an opaque one still reports
   # its array variant); its fields only become flags when they can be encoded.
   let merged = if $has_schema { merge-body-props $body_schema $doc } else { {props: {}, required: [], has_array_variant: false} }
-  let resolved = if $expand_fields { resolve-body-props $merged.props $doc } else { [] }
-  let body_fields = (body-fields-from-resolved $resolved $merged.required $doc)
-  let field_shapes = (field-shapes-from-resolved $resolved $doc)
+  let fields = if $expand_fields { body-fields $merged $doc --shapes } else { {fields: [], shapes: []} }
 
   # The request-side discriminator; the response side is extract-response-info's.
   let discriminator = (schema-discriminator $body_schema "request")
@@ -493,7 +500,7 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
     if ($normalized == null) or ($normalized == "object") { "any" } else { $normalized }
   }
 
-  {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $body_fields, field_shapes: $field_shapes, discriminator: $discriminator, body_polymorphic_array: $merged.has_array_variant, body_scalar_type: $body_scalar_type}
+  {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $fields.fields, field_shapes: $fields.shapes, discriminator: $discriminator, body_polymorphic_array: $merged.has_array_variant, body_scalar_type: $body_scalar_type}
 }
 
 # Extract response info: accept_types, return_type, success_codes, discriminator.
@@ -661,9 +668,11 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       let clean_path = ($clean_path | str replace --all --regex '\{([^{}]+)\+\}' '{${1}}')
 
       let params = (classify-params $op $methods $doc $h)
-      # Synthesize path params for undeclared URL template placeholders
+      # Synthesize path params for undeclared URL template placeholders. `-` and
+      # `.` are common in placeholder names (`{user-id}`); render sanitizes the
+      # variable, so they must not leave the placeholder in the URL as text.
       let declared = ($params.path_params | each {|p| $p.name })
-      let template_placeholders = ($clean_path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^\w+$' })
+      let template_placeholders = ($clean_path | split row '{' | skip 1 | each {|s| $s | split row '}' | first } | where {|s| $s =~ '^[\w.-]+$' })
       let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared) } | each {|ph|
         {name: $ph, type: "any", items_type: null, enum: [], greedy: false}
       }

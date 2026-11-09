@@ -144,7 +144,12 @@ export def helpers [] {
   {
     get-base-url: {|spec| get-base-url-impl $spec }
     get-all-urls: {|spec| collect-oa3-urls $spec }
-    resolve-server-url: {|server| resolve-server-url $server }
+    # The operation's own server, else its path item's; null when neither
+    # overrides the root servers.
+    get-op-base-url: {|op, path_item|
+      let server = ($op.servers?.0? | default $path_item.servers?.0?)
+      if ($server == null) { null } else { resolve-server-url $server }
+    }
     get-param-type: {|param|
       # support `content` field as alternative to `schema` (OA3 5.9)
       if ($param.content? | is-not-empty) {

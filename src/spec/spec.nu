@@ -192,16 +192,14 @@ export def is-nullable [schema: record] {
   if ($t | describe | str starts-with "list") { "null" in $t } else { false }
 }
 
-# Detect schema type and major version from a parsed spec.
+# Detect the spec format: {schema: "openapi" | "swagger"}. The version field
+# only has to be present; an unquoted YAML `swagger: 2.0` is a float, which
+# `is-not-empty` accepts like a string.
 export def detect [spec: record] {
-  # Interpolated, not `into string`: an unquoted YAML `swagger: 2.0` parses
-  # as a float, and `into string` would render it `2`.
   if ($spec.openapi? | is-not-empty) {
-    let major = ($"($spec.openapi)" | split row '.' | first)
-    {schema: "openapi", version: $major}
+    {schema: "openapi"}
   } else if ($spec.swagger? | is-not-empty) {
-    let major = ($"($spec.swagger)" | split row '.' | first)
-    {schema: "swagger", version: $major}
+    {schema: "swagger"}
   } else {
     error make --unspanned { msg: "unknown spec format: missing 'openapi' or 'swagger' field" }
   }

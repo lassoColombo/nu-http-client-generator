@@ -113,3 +113,32 @@ def "handle-response raises on a failed status" [] {
     assert equal $r.exit_code 1
     assert ($r.stderr | str contains "HTTP 404: nf")
 }
+
+@test
+def "merge-body-input merges a piped record under the flags" [] {
+    for mode in [record list scalar] {
+        assert equal (rt $'merge-body-input {a: 1, b: 2} {b: 3} "($mode)"') {a: 1, b: 3}
+        assert equal (rt $'merge-body-input {a: 1} null "($mode)"') {a: 1}
+    }
+}
+
+@test
+def "merge-body-input passes a piped list only for an array variant" [] {
+    assert equal (rt 'merge-body-input [x y] null "list"') [x y]
+    assert equal (rt 'merge-body-input [{a: 1}] null "list"') [{a: 1}]
+    assert equal (rt 'merge-body-input [x y] {b: 1} "record"') {b: 1}
+}
+
+@test
+def "merge-body-input takes a piped scalar only when the flags gave nothing" [] {
+    assert equal (rt 'merge-body-input "text" null "scalar"') "text"
+    assert equal (rt 'merge-body-input "text" "flag" "scalar"') "flag"
+    assert equal (rt 'merge-body-input "text" null "record"') null
+}
+
+@test
+def "merge-body-input keeps the flags when nothing is piped" [] {
+    for mode in [record list scalar] {
+        assert equal (rt $'merge-body-input null {b: 1} "($mode)"') {b: 1}
+    }
+}

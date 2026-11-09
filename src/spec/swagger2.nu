@@ -172,7 +172,8 @@ export def helpers [] {
   {
     get-base-url: {|spec| get-all-urls-impl $spec | first }
     get-all-urls: {|spec| get-all-urls-impl $spec }
-    resolve-server-url: {|server| $server.url? | default null }
+    # Swagger 2 has no per-operation servers.
+    get-op-base-url: {|op, path_item| null }
     get-param-type: {|param|
       $param.type? | default "string"
     }

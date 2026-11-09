@@ -14,7 +14,7 @@
 export const EMITTED_DEF_NAMES = [
   main commands
   build-auth merge-auth serialize-qp encode-path-segment encode-path-array encode-path-greedy build-url status-ok
-  handle-response build-multipart-body
+  handle-response merge-body-input build-multipart-body
   send-get send-post send-put send-patch send-delete send-head send-options
   base-url-completer auth-scheme-completer unix-socket-completer
 ]
