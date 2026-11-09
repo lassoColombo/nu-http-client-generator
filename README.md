@@ -96,7 +96,7 @@ nu-http-client-generator --help
 | `--name: string`           | spec `info.title`  | Module name. Used as the file stem (when `-o` is not set), as the prefix of the token env var, and as the command namespace. |
 | `--autocompletion-base-urls: list<string>` | spec servers | Extra base URLs in `--base-url`'s tab-completer. First becomes the baked default when `--default-base-url` is unset.         |
 | `--default-base-url: string` | spec / none      | Override the base URL embedded in the module.                                                                              |
-| `--default-unix-socket: string` | none           | Talk to the API over this Unix socket by default. Bakes `UNIX_SOCKET` + a `--unix-socket` flag into every command (the Docker case). |
+| `--default-unix-socket: string` | none           | Talk to the API over this Unix socket by default. Bakes the socket into the client's `CLIENT` constant and a `--unix-socket` flag into every command (the Docker case). |
 | `--autocompletion-unix-sockets: list<string>` | none | Unix socket paths in the `--unix-socket` tab-completer. First becomes the baked default when `--default-unix-socket` is unset. |
 | `--spec-headers: record`   | `{}`               | Headers used when fetching a remote spec (e.g. `{Authorization: "Bearer …"}`). Does not appear in the generated client.    |
 
@@ -136,7 +136,7 @@ These flags control the behaviour of the *generated* commands. They don't affect
 
 | Flag                            | Default     | Description                                                                                                                |
 | ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `--token-env-var: string`       | `<NAME>_TOKEN` | The env-var the generated `build-auth` helper falls back to when `--token` is not passed. Derived from `--name` by default. |
+| `--token-env-var: string`       | `<NAME>_TOKEN` | The env-var the generated client falls back to when `--token` is not passed. Derived from `--name` by default. |
 | `--default-timeout: duration`   | `30min`     | Default request timeout. Overridable per-call via `--max-time`.                                                            |
 | `--default-headers: record`     | `{}`        | Headers merged into every request the client makes (e.g. `{X-Tenant-Id: "acme"}`).                                          |
 
@@ -172,7 +172,7 @@ Alongside the spec-derived flags, every command also ships with the same set of 
 | `--allow-errors`  | `-e`  | switch     | Return the full HTTP response record instead of erroring on non-2xx.                             |
 | `--dry-run`       | `-n`  | switch     | Return the request that *would* be sent as a structured record (method, url, query, headers, body, auth, …) without executing it.    |
 | `--accept`        |       | `string`   | Override the `Accept` header. Only present on operations whose spec declares more than one response content type; tab-completes from those types. |
-| `--unix-socket`   | `-U`  | `string`   | Connect over a Unix socket instead of TCP. Only present when the client was generated with `--default-unix-socket` / `--autocompletion-unix-sockets`; defaults to the baked `UNIX_SOCKET`, pass `""` to force TCP. |
+| `--unix-socket`   | `-U`  | `string`   | Connect over a Unix socket instead of TCP. Only present when the client was generated with `--default-unix-socket` / `--autocompletion-unix-sockets`; defaults to the baked socket, pass `""` to force TCP. |
 
 ### Passing inputs
 
@@ -212,11 +212,43 @@ If you generated with `--body-threshold N`, any endpoint with more than N body f
 At call time the client resolves a token by checking `--token` first, then `$env.<NAME>_TOKEN`. You can customize the default token name at generation time by using the `--token-env-var` flag.
 The scheme comes from `--auth-scheme` if set, otherwise the default the spec declared - or `bearer` if the spec didn't declare one. If the scheme resolves to `none` or no token turns up, the request goes out unauthenticated.
 
-The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. The base URL is baked into the module header so you can see it at a glance:
+The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. Everything baked in at generation time sits in one `CLIENT` constant at the top of the module, so you can see it at a glance:
 
 ```nu
 # Auth: --token flag or $env.PETSTORE_TOKEN
-const BASE_URL = "https://petstore3.swagger.io/api/v3"
+
+const CLIENT = {
+  base_url: "https://petstore3.swagger.io/api/v3"
+  token_env_var: "PETSTORE_TOKEN"
+  timeout: 30min
+  default_headers: {}
+  auth_schemes: [
+    {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+    {name: api_key, in: header, header_name: api_key, prefix: ""}
+  ]
+}
+```
+
+Each command's body is a single `http-request` call: a record describing the operation, then the arguments the command received. The code that builds and sends the request is the same for every command and sits once in the module, right after `CLIENT`:
+
+```nu
+export def "get-pet-by-id" [
+  pet_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  # …the other generator flags
+]: nothing -> oneof<record<id: int, name: string, …>, string, nothing> {
+  http-request {
+    method: get
+    path: "/pet/{petId}"
+    path_params: [{name: petId, var: pet_id}]
+    accept: ["application/json", "application/xml"]
+    ok: [200]
+    auth: api_key
+  } {
+    pet_id: $pet_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, accept: $accept
+  }
+}
 ```
 
 ### Tab completion and dry runs

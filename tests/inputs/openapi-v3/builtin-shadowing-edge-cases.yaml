@@ -9,7 +9,8 @@ info:
     inside build-auth becomes a call to the generated command), so these must
     fall back to the method+path slug. Seen in the wild: ip2location (GET /
     with no operationId → `get`), jira (`update`, `merge`, `start`), pinecone
-    (`upsert`), xtrf (`run`), d7networks (`SendPost` → helper `send-post`).
+    (`upsert`), xtrf (`run`). A def the client emits itself is a duplicate
+    definition (`HttpRequest` → the runtime's `http-request`).
 servers:
   - url: https://api.example.com/v1
 paths:
@@ -62,8 +63,8 @@ paths:
           description: ok
   /send:
     post:
-      operationId: SendPost
-      summary: Kebabs to `send-post`, the name of the emitted POST helper
+      operationId: HttpRequest
+      summary: Kebabs to `http-request`, the runtime def every command calls
       responses:
         "200":
           description: ok

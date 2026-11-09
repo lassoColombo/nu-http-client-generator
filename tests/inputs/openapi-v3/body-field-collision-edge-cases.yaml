@@ -82,7 +82,8 @@ paths:
                 user-id: {type: string}
       responses:
         '200': {description: ok}
-  # Two reserved names differing only by case both want `--body-input`.
+  # Two reserved names (the generator's own `--raw`) differing only by case
+  # both want `--body-raw`: the second gets the numeric sweep.
   /reserved-twice:
     post:
       operationId: reservedTwice
@@ -92,7 +93,7 @@ paths:
             schema:
               type: object
               properties:
-                input: {type: string}
-                Input: {type: string}
+                raw: {type: string}
+                Raw: {type: string}
       responses:
         '200': {description: ok}

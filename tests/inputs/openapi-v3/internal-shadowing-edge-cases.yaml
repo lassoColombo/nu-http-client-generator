@@ -11,9 +11,10 @@ components:
       in: query
       schema: {type: integer}
 paths:
-  # Body fields named like the generated body-code internals (`let input = $in`,
-  # `let sock`, `let req`, ...). Each must get a `body-` prefix instead of being
-  # shadowed and silently dropped from the request body.
+  # Body fields named like variables a command body could bind (`input`,
+  # `sock`, `req`, `mp`). A command body is one `http-request` call that binds
+  # none, so they keep their plain names: `input` is the required positional,
+  # the others `--sock`, `--req`, `--mp`, and every value reaches the body.
   /embeddings:
     post:
       operationId: createEmbedding

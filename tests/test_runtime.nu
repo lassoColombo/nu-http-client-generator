@@ -1,17 +1,53 @@
-# Unit tests for the static runtime helpers every generated client carries
-# (`src/runtime.nu`). The goldens only prove the text is emitted unchanged;
-# these prove what the text DOES. The file is `source`d in a subprocess so its
-# private defs are callable without generating a client.
+# Unit tests for the request runtime every generated client carries
+# (`src/runtime.nu`). The goldens prove the text is emitted unchanged; these
+# prove what the text DOES. The file is `source`d in a subprocess, after a
+# `CLIENT` constant like the one a generated client declares, so its private
+# defs are callable without generating a client.
 
 use std/assert
 use std/testing *
 
-def rt [expr: string]: nothing -> any {
-    let r = (^nu --no-config-file -c $"source src/runtime.nu; ($expr) | to json -r" | complete)
+# The client constant the runtime reads; a test may pass its own.
+const CLIENT = {
+    base_url: "https://api.test/v1"
+    token_env_var: "RT_TEST_TOKEN"
+    timeout: 30sec
+    default_headers: {}
+    auth_schemes: [
+        {name: bearer, in: header, header_name: Authorization, prefix: Bearer}
+        {name: x-api-key, in: header, header_name: X-Api-Key, prefix: ""}
+        {name: "query-api key", in: query, header_name: "api key", prefix: ""}
+        {name: cookie-sid, in: cookie, header_name: sid, prefix: ""}
+        {name: basic-credentials, in: header, header_name: Authorization, prefix: Basic, base64: true}
+    ]
+}
+
+# The generator's own flags, as every command passes them to `http-request`.
+const ARGS = {base_url: null, token: null, auth_scheme: null, insecure: false, max_time: null, raw: false, allow_errors: false, full: false, dry_run: true}
+
+def run-rt [expr: string, client: any]: nothing -> record {
+    ^nu --no-config-file -c $"const CLIENT = ($client | default $CLIENT | to nuon); source src/runtime.nu; ($expr) | to json -r" | complete
+}
+
+def rt [expr: string, --client: record]: nothing -> any {
+    let r = (run-rt $expr $client)
     if $r.exit_code != 0 {
         error make --unspanned { msg: $"runtime expression failed: ($r.stderr)" }
     }
     $r.stdout | from json
+}
+
+# The error message a runtime expression fails with.
+def rt-error [expr: string]: nothing -> string {
+    let r = (run-rt $expr null)
+    assert ($r.exit_code != 0) $"expected an error from: ($expr)"
+    $r.stderr
+}
+
+# `build-request`'s {req, wire} for a descriptor, the spec args (merged over
+# the generator's flags) and pipeline input.
+def build [op: record, args: record = {}, input: any = null, --client: record]: nothing -> record {
+    rt $"build-request ($op | to nuon) ($ARGS | merge $args | to nuon) ($input | to nuon)" --client=$client
 }
 
 @test
@@ -115,9 +151,7 @@ def "handle-response unwraps by flag" [] {
 
 @test
 def "handle-response raises on a failed status" [] {
-    let r = (^nu --no-config-file -c 'source src/runtime.nu; {status: 404, headers: {}, body: "nf"} | handle-response false false []' | complete)
-    assert equal $r.exit_code 1
-    assert ($r.stderr | str contains "HTTP 404: nf")
+    assert (rt-error '{status: 404, headers: {}, body: "nf"} | handle-response false false []' | str contains "HTTP 404: nf")
 }
 
 @test
@@ -154,5 +188,188 @@ def "merge-headers lets the right side win except for cookies" [] {
 def "merge-body-input keeps the flags when nothing is piped" [] {
     for mode in [record list scalar] {
         assert equal (rt $'merge-body-input null {b: 1} "($mode)"') {b: 1}
+    }
+}
+
+@test
+def "build-auth places the token where its scheme says" [] {
+    assert equal (rt 'build-auth t bearer') {scheme: bearer, headers: {Authorization: "Bearer t"}, query: "", location: header}
+    assert equal (rt 'build-auth t x-api-key').headers {X-Api-Key: t}
+    assert equal (rt 'build-auth "a b" "query-api key"') {scheme: "query-api key", headers: {}, query: "api%20key=a%20b", location: query}
+    assert equal (rt 'build-auth t cookie-sid').headers {Cookie: "sid=t"}
+    assert equal (rt 'build-auth "user:pass" basic-credentials').headers {Authorization: "Basic dXNlcjpwYXNz"}
+    assert equal (rt 'build-auth t made-up').headers {Authorization: "Bearer t"} "an unknown scheme sends a bearer token"
+}
+
+@test
+def "build-auth sends nothing without a token or with the none scheme" [] {
+    assert equal (rt 'build-auth "" bearer').location none
+    assert equal (rt 'build-auth t none') {scheme: none, headers: {}, query: "", location: none}
+}
+
+@test
+def "build-auth falls back to the client token env var" [] {
+    with-env {RT_TEST_TOKEN: e} {
+        assert equal (rt 'build-auth').headers {Authorization: "Bearer e"}
+    }
+}
+
+@test
+def "build-request fills the path, the query and the url" [] {
+    let op = {
+        method: get, path: "/pets/{petId}/{tags}/{key}"
+        path_params: [{name: petId, var: pet_id}, {name: tags, var: tags, encode: array}, {name: key, var: key, encode: greedy}]
+        query: [{name: limit, var: limit}, {name: q, var: q, style: multi}, {name: unset, var: unset}]
+        accept: [application/json], ok: [200], auth: bearer
+    }
+    let r = (build $op {pet_id: "a/b", tags: [x "y,z"], key: "d/e f", limit: 5, q: [1 2], unset: null})
+    assert equal $r.req.url "https://api.test/v1/pets/a%2Fb/x,y%2Cz/d/e%20f?limit=5&q=1&q=2"
+    assert equal $r.req.query {limit: 5, q: [1 2]} "the dry-run query is keyed by spec name, unset params left out"
+    assert equal $r.req.headers {Accept: application/json}
+    assert equal [$r.req.body $r.req.content_type $r.wire] [null null null]
+    assert equal $r.req.auth {scheme: bearer, location: none}
+}
+
+@test
+def "build-request refuses an empty path value" [] {
+    let op = {method: get, path: "/p/{id}", path_params: [{name: id, var: id}], accept: [a/b], ok: [], auth: bearer}
+    assert (rt-error $"build-request ($op | to nuon) ($ARGS | merge {id: ''} | to nuon) null" | str contains "path parameter 'id' must be non-empty")
+}
+
+@test
+def "build-request applies a required default and refuses a missing value" [] {
+    let op = {
+        method: get, path: "/r"
+        query: [{name: kind, var: kind, required: true, default: basic}]
+        header: [{name: X-Id, var: x_id, required: true}, {name: Content-Type, var: content_type, required: true}]
+        accept: [application/json], ok: [], auth: bearer
+    }
+    let r = (build $op {kind: null, x_id: 7, content_type: null})
+    assert equal $r.req.url "https://api.test/v1/r?kind=basic"
+    assert equal $r.req.query {kind: basic}
+    assert equal $r.req.headers {Accept: application/json, X-Id: 7} "a Content-Type param is never missing"
+    let args = ($ARGS | merge {kind: null, x_id: null, content_type: null} | to nuon)
+    assert (rt-error $"build-request ($op | to nuon) ($args) null" | str contains "required header parameter 'X-Id' missing: pass --x-id")
+}
+
+@test
+def "build-request comma-joins array headers and joins every cookie" [] {
+    let op = {
+        method: get, path: "/c"
+        header: [{name: X-Tags, var: x_tags, array: true}]
+        cookie: [{name: theme, var: theme}, {name: ids, var: ids, array: true}, {name: gone, var: gone}]
+        accept: [application/json], ok: [], auth: cookie-sid
+    }
+    let r = (build $op {x_tags: [a null b], theme: dark, ids: [1 2], gone: null, token: t})
+    assert equal $r.req.headers {Accept: application/json, X-Tags: "a,b", Cookie: "sid=t; theme=dark; ids=1,2"}
+    assert equal $r.req.auth {scheme: cookie-sid, location: cookie}
+}
+
+@test
+def "build-request assembles a JSON body from its fields and pipeline input" [] {
+    let op = {
+        method: post, path: "/b", content_type: application/json
+        body: {kind: json, fields: [{name: name, var: name}, {name: tag, var: tag}, {name: id, var: id, required: true}]}
+        accept: [application/json], ok: [201], auth: bearer
+    }
+    let r = (build $op {name: n, tag: null, id: 3} {extra: 1, name: piped})
+    assert equal $r.req.body {extra: 1, name: n, id: 3} "a flag wins over the piped record"
+    assert equal $r.wire $r.req.body
+    assert equal $r.req.content_type application/json
+    assert equal (build $op {name: null, tag: null, id: null} {id: 9}).req.body {id: 9} "a piped record satisfies a required field"
+    let args = ($ARGS | merge {name: null, tag: null, id: null} | to nuon)
+    assert (rt-error $"build-request ($op | to nuon) ($args) null" | str contains "required body field 'id' missing: pass --id or pipe a record")
+}
+
+@test
+def "build-request encodes form, json-text and opaque bodies for the wire" [] {
+    let form = {
+        method: post, path: "/f", content_type: application/x-www-form-urlencoded
+        body: {kind: form, fields: [{name: tags, var: tags, join: ","}, {name: n, var: n}]}
+        accept: [application/json], ok: [], auth: bearer
+    }
+    let r = (build $form {tags: [a b], n: "x y"})
+    assert equal $r.req.body {tags: "a,b", n: "x y"} "a csv form array is one joined value"
+    assert equal $r.wire ({tags: "a,b", n: "x y"} | url build-query)
+    let patch = ($form | merge {content_type: application/merge-patch+json, body: {kind: json-text, fields: [{name: a, var: a}]}})
+    assert equal (build $patch {a: 1}).wire '{"a":1}'
+    let opaque = ($form | merge {content_type: text/plain, body: {kind: opaque, accepts: scalar}})
+    let r = (build $opaque {body: null} "raw text")
+    assert equal [$r.req.body $r.wire] ["raw text" "raw text"] "a piped scalar is the body"
+}
+
+@test
+def "a Content-Type header param picks the body encoding at call time" [] {
+    let op = {
+        method: post, path: "/t", content_type: application/json
+        header: [{name: Content-Type, var: content_type, required: true}]
+        body: {kind: json, fields: [{name: a, var: a}]}
+        accept: [application/json], ok: [], auth: bearer
+    }
+    let r = (build $op {content_type: application/x-www-form-urlencoded, a: "1 2"})
+    assert equal $r.wire ({a: "1 2"} | url build-query)
+    assert equal $r.req.content_type application/x-www-form-urlencoded
+    assert equal $r.req.headers.Content-Type application/x-www-form-urlencoded
+    let r = (build $op {content_type: null, a: 1})
+    assert equal [$r.wire $r.req.content_type] [{a: 1} application/json]
+}
+
+@test
+def "build-request builds a multipart envelope without reading files under dry-run" [] {
+    let op = {
+        method: post, path: "/u", content_type: multipart/form-data
+        body: {kind: multipart, fields: [{name: file, var: file}, {name: note, var: note}], files: [file]}
+        accept: [application/json], ok: [], auth: bearer
+    }
+    let args = ($ARGS | merge {file: "/does/not/exist", note: hi} | to nuon)
+    let envelope = (rt $"build-request ($op | to nuon) ($args) null | get wire | decode utf-8")
+    assert ($envelope | str contains 'name="file"; filename="exist"')
+    assert ($envelope | str contains "name=\"note\"\r\n\r\nhi\r\n")
+    let r = (build $op {file: "/does/not/exist", note: hi})
+    assert ($r.req.content_type | str starts-with "multipart/form-data; boundary=----nu-")
+    assert equal $r.req.body {file: "/does/not/exist", note: hi}
+    let verbatim = (build ($op | update body {kind: multipart, accepts: scalar}) {body: "pre-encoded"})
+    assert equal [$verbatim.wire $verbatim.req.content_type] ["pre-encoded" multipart/form-data] "a non-record body is sent as is"
+}
+
+@test
+def "the client default headers sit under the request own" [] {
+    let client = ($CLIENT | update default_headers {X-Test: v, Accept: "*/*", Cookie: "pref=1"})
+    let op = {method: get, path: "/d", accept: [application/json], ok: [], auth: cookie-sid}
+    let r = (build $op {token: t} --client $client)
+    assert equal $r.req.headers {X-Test: v, Accept: application/json, Cookie: "pref=1; sid=t"}
+}
+
+@test
+def "an AND-form requirement sends every scheme" [] {
+    let op = {
+        method: get, path: "/and", accept: [application/json], ok: []
+        auth_all: [{scheme: x-api-key, var: token_a, env: RT_A_TOKEN}, {scheme: "query-api key", var: token_b, env: RT_B_TOKEN}]
+    }
+    with-env {RT_B_TOKEN: B} {
+        let r = (build $op {token_a: A, token_b: null})
+        assert equal $r.req.headers {X-Api-Key: A, Accept: application/json}
+        assert equal $r.req.url "https://api.test/v1/and?api%20key=B" "a scheme token falls back to its own env var"
+        assert equal $r.req.auth {scheme: "x-api-key+query-api key", location: "header+query"}
+    }
+}
+
+@test
+def "the Unix socket is recorded only for a socket client" [] {
+    let op = {method: get, path: "/s", accept: [application/json], ok: [], auth: bearer}
+    assert ("unix_socket" not-in (build $op).req)
+    let client = ($CLIENT | insert unix_socket /run/s.sock)
+    assert equal (build $op --client $client).req.unix_socket /run/s.sock
+    assert equal (build $op {unix_socket: ""} --client $client).req.unix_socket "" "an empty --unix-socket means TCP"
+}
+
+@test
+def "http-request returns the request under dry-run" [] {
+    let op = {method: delete, path: "/x/{id}", path_params: [{name: id, var: id}], content_type: application/json, accept: [application/json], ok: [204], auth: bearer}
+    let r = (rt $"http-request ($op | to nuon) ($ARGS | merge {id: 5, token: t, max_time: 1sec} | to nuon)")
+    assert equal $r {
+        dry_run: true, method: delete, url: "https://api.test/v1/x/5", query: {}
+        headers: {Authorization: "Bearer t", Accept: application/json}, body: null, content_type: application/json
+        timeout: 1000000000, auth: {scheme: bearer, location: header}
     }
 }

@@ -95,12 +95,12 @@ def "two body fields that sanitize alike bind two variables" [] {
 def "a third spelling and a second reserved name get the numeric sweep" [] {
     let r = (run-cmd $in.body_client 'triple-spelling --user-id A --body-user-id B --body-user-id-2 C --dry-run')
     assert equal $r.body {user_id: "A", userId: "B", "user-id": "C"}
-    let r = (run-cmd $in.body_client 'reserved-twice --body-input A --body-input-2 B --dry-run')
-    assert equal $r.body {input: "A", Input: "B"}
+    let r = (run-cmd $in.body_client 'reserved-twice --body-raw A --body-raw-2 B --dry-run')
+    assert equal $r.body {raw: "A", Raw: "B"}
 }
 
 @test
-def "path params named like body-code internals are not shadowed" [] {
+def "path params named input and base reach the url" [] {
     let r = (run-cmd $in.reserved_client 'run-job IN BASE --sort s --dry-run')
     assert equal $r.url "https://example.com/api/jobs/IN/BASE"
     assert equal $r.body {sort: "s"}

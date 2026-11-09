@@ -6,16 +6,16 @@
 # output through render itself.
 
 # Every `def` the module emits besides the API commands: `main`/`commands`,
-# the auth helpers, the runtime library (`src/runtime*.nu`), the per-verb
-# senders, and the fixed completers. A command with one of these names is a
-# `nu::parser::duplicate_command_def`. Enum completers (`<flag>-completer`,
-# `<flag>-completer-<n>`) are reserved by pattern in model's `name-unusable`.
-# `tests/test_reserved_names.nu` checks the runtime defs are all listed.
+# the runtime (`src/runtime.nu`), and the fixed completers. A command with
+# one of these names is a `nu::parser::duplicate_command_def`. Enum completers
+# (`<flag>-completer`, `<flag>-completer-<n>`) are reserved by pattern in
+# model's `name-unusable`. `tests/test_reserved_names.nu` checks the runtime
+# defs are all listed.
 export const EMITTED_DEF_NAMES = [
   main commands
-  build-auth merge-auth serialize-qp encode-path-segment encode-path-array encode-path-greedy build-url status-ok
-  handle-response merge-body-input merge-headers build-multipart-body
-  send-get send-post send-put send-patch send-delete send-head send-options
+  serialize-qp encode-path-segment encode-path-array encode-path-greedy build-url status-ok
+  handle-response merge-body-input merge-headers build-multipart-body merge-auth build-auth
+  build-request http-request http-send
   base-url-completer auth-scheme-completer unix-socket-completer
 ]
 
