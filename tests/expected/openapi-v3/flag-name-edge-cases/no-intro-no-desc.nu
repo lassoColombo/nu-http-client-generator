@@ -194,3 +194,46 @@ export def "widgets-list" [
   if $dry_run { return ({dry_run: true} | merge $req) }
   send-get $req $insecure $raw $allow_errors $full [200]
 }
+
+# GET /tagged
+#
+# operationId: listTagged
+export def "list-tagged" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --tag: string
+  --qp-tag: list<string>
+  --qp-tag-2: string
+  --hdr-tag: string
+  --ck-tag: string
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "tag[]" $qp_tag "multi") (serialize-qp "Tag" $qp_tag_2 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/tagged" $qp $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"tag": $hdr_tag} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let cookie_str = {"tag": $ck_tag} | items {|k, v| if $v == null { null } else { $"($k)=($v)" } } | compact | str join "; "
+  let auth = ($auth | update headers (merge-headers $auth.headers {Cookie: $cookie_str}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"tag": $tag, "tag[]": $qp_tag, "Tag": $qp_tag_2} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 30min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}

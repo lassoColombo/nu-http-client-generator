@@ -165,11 +165,11 @@ export def "create-embedding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-input: string
+  --body-input: string # (spec name: input)
   --model: string
-  --body-sock: string
-  --body-req: string
-  --body-mp: string
+  --body-sock: string # (spec name: sock)
+  --body-req: string # (spec name: req)
+  --body-mp: string # (spec name: mp)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -208,7 +208,7 @@ export def "list-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-help: string
+  --qp-help: string # (spec name: help)
   --tags: list<string> # nullable
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

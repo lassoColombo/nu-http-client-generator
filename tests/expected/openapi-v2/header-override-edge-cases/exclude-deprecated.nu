@@ -191,7 +191,7 @@ export def "token-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Equal to application/x-www-form-urlencoded (required)
-  --hdr-accept: string # Response media type override
+  --hdr-accept: string # Response media type override (spec name: Accept)
   --grant-type: string
   --username: string
   --password: string
@@ -237,7 +237,7 @@ export def "widgets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hdr-accept: string # application/json (default) or application/yaml
+  --hdr-accept: string # application/json (default) or application/yaml (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

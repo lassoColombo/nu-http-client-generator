@@ -148,7 +148,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["widgets-list" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["widgets-list" "list-tagged" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -207,6 +207,49 @@ export def "widgets-list" [
     method: "get"
     url: $full_url
     query: ({"{field-name}": $field_name, "sort": $sort, "from": $from, "to": $to, "if": $if, "null": $null} | compact)
+    headers: $auth.headers
+    body: null
+    content_type: null
+    timeout: ($max_time | default 5min)
+    auth: {scheme: $auth.scheme, location: $auth.location}
+  }
+  if $dry_run { return ({dry_run: true} | merge $req) }
+  send-get $req $insecure $raw $allow_errors $full [200]
+}
+
+# GET /tagged
+#
+# operationId: listTagged
+export def "list-tagged" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --tag: string
+  --qp-tag: list<string> # (spec name: tag[])
+  --qp-tag-2: string # (spec name: Tag)
+  --hdr-tag: string # (spec name: tag)
+  --ck-tag: string # (spec name: tag)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "tag" $tag "scalar") (serialize-qp "tag[]" $qp_tag "multi") (serialize-qp "Tag" $qp_tag_2 "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/tagged" $qp $auth.query)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"tag": $hdr_tag} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
+  let cookie_str = {"tag": $ck_tag} | items {|k, v| if $v == null { null } else { $"($k)=($v)" } } | compact | str join "; "
+  let auth = ($auth | update headers (merge-headers $auth.headers {Cookie: $cookie_str}))
+  let req = {
+    method: "get"
+    url: $full_url
+    query: ({"tag": $tag, "tag[]": $qp_tag, "Tag": $qp_tag_2} | compact)
     headers: $auth.headers
     body: null
     content_type: null

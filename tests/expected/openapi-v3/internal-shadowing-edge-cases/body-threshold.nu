@@ -225,7 +225,7 @@ export def "list-items" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int
-  --qp-help: string
+  --qp-help: string # (spec name: help)
   --tags: list<string> # nullable
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

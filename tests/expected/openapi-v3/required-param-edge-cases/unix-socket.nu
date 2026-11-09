@@ -290,7 +290,7 @@ export def "notify" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --account-name: string # required, default: apiexamples
-  --hdr-accept: string # required, default: application/json
+  --hdr-accept: string # required, default: application/json (spec name: Accept)
   --content-type: string # required
   --sku-id: string
 ]: any -> any {

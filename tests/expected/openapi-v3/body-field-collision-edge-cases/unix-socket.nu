@@ -185,14 +185,14 @@ export def "mixed-case" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   user_id: string
-  --user-id-body: string # (body field)
+  --body-user-id: string # (spec name: userId)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let full_url = (build-url $base "/mixed" $auth.query)
-  let req_body = {"user_id": $user_id, "userId": $user_id_body} | compact
+  let req_body = {"user_id": $user_id, "userId": $body_user_id} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
   let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
@@ -226,16 +226,16 @@ export def "both-required" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   user_id: string
-  --user-id-body: string # (body field)
+  --body-user-id: string # (spec name: userId)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let full_url = (build-url $base "/both-required" $auth.query)
-  let req_body = {"user_id": $user_id, "userId": $user_id_body} | compact
+  let req_body = {"user_id": $user_id, "userId": $body_user_id} | compact
   let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o "userId") == null) { error make --unspanned { msg: "required body field 'userId' missing: pass --user-id-body or pipe a record" } }
+  if (($req_body | get -o "userId") == null) { error make --unspanned { msg: "required body field 'userId' missing: pass --body-user-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
@@ -268,7 +268,7 @@ export def "shared-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --filter: string
-  --filter-body: record # shape: {field?: string} (body field)
+  --body-filter: record # shape: {field?: string} (spec name: filter)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -276,7 +276,7 @@ export def "shared-name" [
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shared" $qp $auth.query)
-  let req_body = {"filter": $filter_body} | compact
+  let req_body = {"filter": $body_filter} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
   let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
@@ -310,15 +310,15 @@ export def "triple-spelling" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --user-id: string
-  --user-id-body: string # (body field)
-  --user-id-body-2: string # (body field)
+  --body-user-id: string # (spec name: userId)
+  --body-user-id-2: string # (spec name: user-id)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let sock = ($unix_socket | default $UNIX_SOCKET)
   let full_url = (build-url $base "/triple" $auth.query)
-  let req_body = {"user_id": $user_id, "userId": $user_id_body, "user-id": $user_id_body_2} | compact
+  let req_body = {"user_id": $user_id, "userId": $body_user_id, "user-id": $body_user_id_2} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
   let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
@@ -351,8 +351,8 @@ export def "reserved-twice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --body-input: string
-  --body-input-2: string
+  --body-input: string # (spec name: input)
+  --body-input-2: string # (spec name: Input)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

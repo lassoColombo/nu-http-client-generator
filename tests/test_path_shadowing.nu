@@ -18,6 +18,7 @@ const SPEC = "tests/inputs/openapi-v3/path-shadowing-edge-cases.yaml"
 const BODY_SPEC = "tests/inputs/openapi-v3/body-field-collision-edge-cases.yaml"
 const RESERVED_SPEC = "tests/inputs/openapi-v3/reserved-name-edge-cases.yaml"
 const GREEDY_SPEC = "tests/inputs/openapi-v3/greedy-path-edge-cases.yaml"
+const FLAG_SPEC = "tests/inputs/openapi-v3/flag-name-edge-cases.yaml"
 
 def run-cmd [client: string, cmd: string]: nothing -> any {
     let result = ^nu --no-config-file -c $"use '($client)' *; ($cmd) | to json -r" | complete
@@ -38,7 +39,9 @@ def setup []: nothing -> record {
     mod $RESERVED_SPEC -o $reserved_client
     let greedy_client = ($temp | path join "greedy.nu")
     mod $GREEDY_SPEC -o $greedy_client
-    { temp: $temp, client: $client, body_client: $body_client, reserved_client: $reserved_client, greedy_client: $greedy_client }
+    let flag_client = ($temp | path join "flags.nu")
+    mod $FLAG_SPEC -o $flag_client
+    { temp: $temp, client: $client, body_client: $body_client, reserved_client: $reserved_client, greedy_client: $greedy_client, flag_client: $flag_client }
 }
 
 @after-all
@@ -82,15 +85,15 @@ def "path, query and body can all carry the same name" [] {
 
 @test
 def "two body fields that sanitize alike bind two variables" [] {
-    let r = (run-cmd $in.body_client 'mixed-case A --user-id-body B --dry-run')
+    let r = (run-cmd $in.body_client 'mixed-case A --body-user-id B --dry-run')
     assert equal $r.body {user_id: "A", userId: "B"}
-    let r = (run-cmd $in.body_client 'both-required A --user-id-body B --dry-run')
+    let r = (run-cmd $in.body_client 'both-required A --body-user-id B --dry-run')
     assert equal $r.body {user_id: "A", userId: "B"}
 }
 
 @test
 def "a third spelling and a second reserved name get the numeric sweep" [] {
-    let r = (run-cmd $in.body_client 'triple-spelling --user-id A --user-id-body B --user-id-body-2 C --dry-run')
+    let r = (run-cmd $in.body_client 'triple-spelling --user-id A --body-user-id B --body-user-id-2 C --dry-run')
     assert equal $r.body {user_id: "A", userId: "B", "user-id": "C"}
     let r = (run-cmd $in.body_client 'reserved-twice --body-input A --body-input-2 B --dry-run')
     assert equal $r.body {input: "A", Input: "B"}
@@ -103,15 +106,23 @@ def "path params named like body-code internals are not shadowed" [] {
     assert equal $r.body {sort: "s"}
 }
 
-# The invariant itself, over every golden input: no generated command binds
-# the same variable twice, whether through two positionals, two flags, or a
-# positional and a flag.
+@test
+def "one name in every group takes the group prefix, then a number" [] {
+    let r = (run-cmd $in.flag_client 'list-tagged --tag a --qp-tag [b c] --qp-tag-2 d --hdr-tag h --ck-tag k --dry-run')
+    assert equal $r.url "https://example.com/tagged?tag=a&tag%5B%5D=b&tag%5B%5D=c&Tag=d"
+    assert equal $r.headers.tag "h"
+    assert equal $r.headers.Cookie "tag=k"
+}
+
 @test
 def "a greedy label declared with its plus is one greedy positional" [] {
     let r = (run-cmd $in.greedy_client 'proxy-get "a/b c" --dry-run')
     assert equal $r.url "https://s3.example.com/proxy/a/b%20c" "the slash survives, the space is encoded"
 }
 
+# The invariant itself, over every golden input: no generated command binds
+# the same variable twice, whether through two positionals, two flags, or a
+# positional and a flag.
 @test
 def "no golden command binds a variable twice" [] {
     let clashes = (glob tests/expected/**/baseline.nu | each {|f|

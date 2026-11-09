@@ -65,6 +65,21 @@ paths:
             application/json:
               schema:
                 type: object
+  # One name in every place it can collide: the first query `tag` keeps the
+  # plain flag; each later spelling takes its group prefix (`--qp-tag`,
+  # `--hdr-tag`, `--ck-tag`); a second query spelling after `--qp-tag` gets
+  # the numeric sweep (`--qp-tag-2`). Each flag notes its spec name.
+  /tagged:
+    get:
+      operationId: listTagged
+      parameters:
+        - {name: tag, in: query, schema: {type: string}}
+        - {name: "tag[]", in: query, schema: {type: array, items: {type: string}}}
+        - {name: Tag, in: query, schema: {type: string}}
+        - {name: tag, in: header, schema: {type: string}}
+        - {name: tag, in: cookie, schema: {type: string}}
+      responses:
+        '200': {description: ok}
 components:
   schemas:
     Id: {type: string}

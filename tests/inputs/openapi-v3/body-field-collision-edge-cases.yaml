@@ -11,8 +11,8 @@ servers:
   - url: https://api.example.com
 paths:
   # `user_id` (required -> positional `user_id`) and `userId` (optional ->
-  # flag `--user-id`, which would also bind `$user_id`): the second takes
-  # `-body`.
+  # flag `--user-id`, which would also bind `$user_id`): the second takes the
+  # `body-` group prefix, `--body-user-id`.
   /mixed:
     post:
       operationId: mixedCase
@@ -44,7 +44,7 @@ paths:
       responses:
         '200': {description: ok}
   # A query param and a record-typed body field share a name: the body field
-  # takes `-body`, and its `shape:` doc must stay on the body flag only (the
+  # takes `body-`, and its `shape:` doc must stay on the body flag only (the
   # query flag is a plain string).
   /shared:
     post:
@@ -65,9 +65,9 @@ paths:
                     field: {type: string}
       responses:
         '200': {description: ok}
-  # Three spellings of one name: the third's `-body` candidate is already
-  # taken, so it gets the numeric sweep (`--user-id-body-2`) instead of a
-  # second `--user-id-body` that nushell would silently collapse.
+  # Three spellings of one name: the third's `body-` candidate is already
+  # taken, so it gets the numeric sweep (`--body-user-id-2`) instead of a
+  # second `--body-user-id` that nushell would silently collapse.
   /triple:
     post:
       operationId: tripleSpelling

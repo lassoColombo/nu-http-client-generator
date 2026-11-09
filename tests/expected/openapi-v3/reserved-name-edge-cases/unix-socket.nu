@@ -190,8 +190,8 @@ export def "search-by-env" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --qp-env: string
-  --qp-in: string
+  --qp-env: string # (spec name: env)
+  --qp-in: string # (spec name: in)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -305,11 +305,11 @@ export def "create-job" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --body-dry-run: oneof<nothing, bool>
-  --body-raw: string
-  --body-base-url: string
-  --body-token: string
-  --body-accept: string
+  --body-dry-run: oneof<nothing, bool> # (spec name: dryRun)
+  --body-raw: string # (spec name: raw)
+  --body-base-url: string # (spec name: baseUrl)
+  --body-token: string # (spec name: token)
+  --body-accept: string # (spec name: accept)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

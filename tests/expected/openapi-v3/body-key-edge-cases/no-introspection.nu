@@ -170,16 +170,15 @@ export def "things-create" [
   location: string
   osdb_body_data: string
   upload_yaml_yml_file: string
-  --body-param: string
+  param: string
   --address: string
 ]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/things" $auth.query)
-  let req_body = {"harry potter": $harry_potter, "Aux Price": $aux_price, "Location:": $location, "osdb:body_data": $osdb_body_data, "Upload Yaml/Yml File": $upload_yaml_yml_file, ":": $body_param, "address": $address} | compact
+  let req_body = {"harry potter": $harry_potter, "Aux Price": $aux_price, "Location:": $location, "osdb:body_data": $osdb_body_data, "Upload Yaml/Yml File": $upload_yaml_yml_file, ":": $param, "address": $address} | compact
   let req_body = (merge-body-input $input $req_body "record")
-  if (($req_body | get -o ":") == null) { error make --unspanned { msg: "required body field ':' missing: pass --body-param or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {

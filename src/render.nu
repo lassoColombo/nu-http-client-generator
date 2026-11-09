@@ -164,8 +164,7 @@ const RESERVED_VARS = (
 const RESERVED_FLAG_VARS = ($RESERVED_VARS ++ [body])
 
 # Convert a param name to a nushell flag name. A name nothing survives of
-# (`:`) becomes `param`; reserved names are the caller's business
-# (`effective-flag-name`, `decorate-body-fields`, `effective-positional-var`).
+# (`:`) becomes `param`; collisions are `claim-flag`'s business.
 export def to-flag-name [name: string] {
   let cleaned = ($name | str kebab-case)
   if ($cleaned | is-empty) { "param" } else { $cleaned }
@@ -176,13 +175,6 @@ def to-flag-var [name: string] {
   flag-var (to-flag-name $name)
 }
 
-# Flag name with collision prefix for query/header/cookie params
-def effective-flag-name [name: string, prefix: string] {
-  let raw = (to-flag-name $name)
-  let var = (to-flag-var $name)
-  if ($var in $RESERVED_FLAG_VARS) { $"($prefix)-($raw)" } else { $raw }
-}
-
 # The variable a flag binds: `--user-id` → `$user_id`. Every collision check
 # below compares variables, not flag spellings, because that is what nushell
 # binds: a positional `user_id` and a flag `--user-id` are the same variable
@@ -191,100 +183,57 @@ def flag-var [flag_name: string]: nothing -> string {
   $flag_name | str replace --all '-' '_'
 }
 
-# Disambiguate a flag name against the variables already bound. Returns
-# {flag_name, suffix} — suffix is the disambiguating tail ("" if untouched,
-# otherwise "-list", "-2", "-3", ...). Two query params whose kebab-case forms
-# collide (e.g. `dataSegmentCode` and `dataSegmentCode[]`) would otherwise
-# both bind the same flag, silently dropping the user's value. The
-# array-shaped variant gets `-list`; subsequent collisions get `-2`, `-3`, etc.
-def disambiguate-flag-name [proposed: string, is_array: bool, seen_vars: list<string>]: nothing -> record {
-  if not ((flag-var $proposed) in $seen_vars) { return {flag_name: $proposed, suffix: ""} }
-  if $is_array {
-    let candidate = $"($proposed)-list"
-    if not ((flag-var $candidate) in $seen_vars) { return {flag_name: $candidate, suffix: "-list"} }
-  }
-  let n = (2.. | where {|n| not ((flag-var $"($proposed)-($n)") in $seen_vars) } | first)
-  {flag_name: $"($proposed)-($n)", suffix: $"-($n)"}
+# The one naming rule for a spec-side flag. The flag is the spec name,
+# kebab-cased. When its variable is taken (a reserved variable, a path
+# positional, or a flag claimed before it) it takes its group prefix (`qp-`,
+# `hdr-`, `ck-`, `body-`); when that is taken too, the first free numeric
+# suffix (`-2`, `-3`, …). Examples: a query `id` next to a path `{id}` is
+# `--qp-id`; a body field `userId` after a field `user_id` is
+# `--body-user-id`, and a third spelling `user-id` is `--body-user-id-2`.
+def claim-flag [name: string, group: string, taken: list<string>]: nothing -> string {
+  let plain = (to-flag-name $name)
+  if (flag-var $plain) not-in $taken { return $plain }
+  let prefixed = $"($group)-($plain)"
+  if (flag-var $prefixed) not-in $taken { return $prefixed }
+  let n = (2.. | where {|n| (flag-var $"($prefixed)-($n)") not-in $taken } | first)
+  $"($prefixed)-($n)"
 }
 
-# Walk a list of params (query/header/cookie) and assign each a
-# collision-free flag_name and flag_var, threading the set of bound variables
-# so later groups (and the body) avoid colliding with earlier groups. Returns
-# {items, seen} where items has the original params merged with
-# {flag_name, flag_var, name_suffix} — `name_suffix` is the disambiguating
-# tail (empty when no collision) so callers can append origin notes to the
-# description text.
-#
-# `path_vars` are the path positionals' variable names. OpenAPI keys a
-# parameter by name AND location, so a path `{id}` next to a query `id` is
-# legal (DRF emits it for every detail route with an `id` filter), but both
-# would bind `$id`: the flag, declared later, wins and the path value is lost.
-# The positional keeps the name and the flag takes the group prefix, the same
-# way reserved names do (`decorate-body-fields` gives body fields `body-`).
-def decorate-param-group [params: list, prefix: string, path_vars: list<string>, seen: list<string>]: nothing -> record {
-  mut items = []
-  mut acc = $seen
-  for p in $params {
-    let base = (effective-flag-name $p.name $prefix)
-    let proposed = if ((flag-var $base) in $path_vars) { $"($prefix)-($base)" } else { $base }
-    let is_array = ($p.type == "array") or ($p.name | str ends-with "[]")
-    let res = (disambiguate-flag-name $proposed $is_array $acc)
-    let flag_var = (flag-var $res.flag_name)
-    $items ++= [($p | merge {flag_name: $res.flag_name, flag_var: $flag_var, name_suffix: $res.suffix})]
-    $acc ++= [$flag_var]
+# Claim a flag for each query/header/cookie param of one group, in order.
+# `taken` holds the variables bound so far (path positionals and earlier
+# groups); `RESERVED_FLAG_VARS` is added here. Returns {items, taken}: each
+# item is the param merged with {flag_name, flag_var, renamed}.
+def decorate-param-group [params: list, group: string, taken: list<string>]: nothing -> record {
+  $params | reduce --fold {items: [], taken: $taken} {|p, acc|
+    let flag_name = (claim-flag $p.name $group ($acc.taken ++ $RESERVED_FLAG_VARS))
+    let flag_var = (flag-var $flag_name)
+    let item = ($p | merge {flag_name: $flag_name, flag_var: $flag_var, renamed: ($flag_name != (to-flag-name $p.name))})
+    {items: ($acc.items | append $item), taken: ($acc.taken | append $flag_var)}
   }
-  {items: $items, seen: $acc}
 }
 
-# Decide the flag/positional naming for body fields, threading the set of
-# bound variables so body fields avoid colliding with each other or with
-# earlier query/header/cookie flags. Returns {items, seen} where each item is
-# the original field merged with:
-#   is_positional : rendered as a positional arg (required, non-colliding,
-#                   non-bool, non-nullable) rather than a `--flag`
+# Name the body fields after every other group, so a field yields to the
+# params. A required field is a positional when its plain name is free; a bool
+# (a three-state flag) and a nullable field (null is a value) stay flags, and
+# every flag is claimed with the `body` group. Returns {items, taken}: each
+# item is the field merged with
+#   is_positional : rendered as a positional arg rather than a `--flag`
 #   flag_name     : the flag name when a flag; the positional var name otherwise
-#   var_name      : the Nushell variable to reference in the body (flag_name
-#                   with '-' → '_')
-#   collision     : "" | "cross-group" | "reserved" — drives the "(body field)"
-#                   note and the `-body` / `body-` prefix choice
-def decorate-body-fields [body_fields: list, path_vars: list<string>, seen: list<string>]: nothing -> record {
-  mut items = []
-  mut body_seen = $seen
-  for f in $body_fields {
-    let flag = (to-flag-name $f.name)
-    let var = (flag-var $flag)
-    # Reserved-word collision (path positional / builtin variable / body-code
-    # internal) or a name nothing survives of (`:`): the field becomes a
-    # `body-` prefixed flag.
-    let reserved_collision = ($var in $path_vars) or ($var in $RESERVED_VARS) or ($f.name | str kebab-case | is-empty)
-    # A body field whose variable is already bound — by a query/header/cookie
-    # flag or by an earlier body field (`user_id` next to `userId`) — is a
-    # separate collision class: suffix with `-body`.
-    let cross_group_collision = (not $reserved_collision) and ($var in $body_seen)
-    let collides = $reserved_collision or $cross_group_collision
-    # Only `!= "bool"` matters here; nu-type-for and openapi-to-nu-type agree on
-    # bool-ness, so the cheaper mapping is enough for the positional decision.
+#   var_name      : the Nushell variable the body code reads
+#   renamed       : the flag is not the plain spec name (see `rename-note`)
+def decorate-body-fields [body_fields: list, taken: list<string>]: nothing -> record {
+  $body_fields | reduce --fold {items: [], taken: $taken} {|f, acc|
+    let reserved = ($acc.taken ++ $RESERVED_VARS)
+    let plain = (to-flag-name $f.name)
+    # nu-type-for and openapi-to-nu-type agree on bool-ness, so the cheaper
+    # mapping is enough for the positional decision.
     let is_bool = ((openapi-to-nu-type $f.type) == "bool")
-    let is_positional = $f.required and (not $collides) and (not $is_bool) and (not ($f.nullable? | default false))
-    let decided = if $is_positional {
-      {flag_name: $var, collision: ""}
-    } else if $cross_group_collision {
-      {flag_name: $"($flag)-body", collision: "cross-group"}
-    } else if $reserved_collision {
-      {flag_name: $"body-($flag)", collision: "reserved"}
-    } else {
-      {flag_name: $flag, collision: ""}
-    }
-    # The prefixed/suffixed candidate can itself be bound already (three
-    # spellings of one name, two reserved names differing only by case), so a
-    # flag goes through the same numeric sweep the param groups use; a
-    # positional is unbound by construction.
-    let flag_name = if $is_positional { $decided.flag_name } else { (disambiguate-flag-name $decided.flag_name false $body_seen).flag_name }
+    let is_positional = $f.required and ((flag-var $plain) not-in $reserved) and (not $is_bool) and (not ($f.nullable? | default false))
+    let flag_name = if $is_positional { flag-var $plain } else { claim-flag $f.name "body" $reserved }
     let var_name = (flag-var $flag_name)
-    $items ++= [($f | merge {is_positional: $is_positional, flag_name: $flag_name, var_name: $var_name, collision: $decided.collision})]
-    $body_seen ++= [$var_name]
+    let item = ($f | merge {is_positional: $is_positional, flag_name: $flag_name, var_name: $var_name, renamed: ((not $is_positional) and ($flag_name != $plain))})
+    {items: ($acc.items | append $item), taken: ($acc.taken | append $var_name)}
   }
-  {items: $items, seen: $body_seen}
 }
 
 # Effective positional path-param variable name. Sanitizes the path param's
@@ -301,13 +250,15 @@ export def effective-positional-var [name: string] {
 # references the variables) both read the names decided here, so the two
 # cannot disagree. Groups are walked query → header → cookie → body, each
 # avoiding the names taken by the ones before it and by the path positionals.
+# OpenAPI keys a parameter by name AND location, so a path `{id}` next to a
+# query `id` is legal (DRF emits it for every detail route with an `id`
+# filter); the positional keeps the name and the flag yields.
 def decorate-command [cmd: record]: nothing -> record {
   let path_params = ($cmd.path_params | each {|p| $p | insert var_name (effective-positional-var $p.name) })
-  let path_vars = ($path_params | each {|p| $p.var_name })
-  let qp = (decorate-param-group $cmd.query_params "qp" $path_vars [])
-  let hdr = (decorate-param-group $cmd.header_params "hdr" $path_vars $qp.seen)
-  let ck = (decorate-param-group $cmd.cookie_params "ck" $path_vars $hdr.seen)
-  let body = (decorate-body-fields $cmd.body_fields $path_vars $ck.seen)
+  let qp = (decorate-param-group $cmd.query_params "qp" ($path_params | get var_name))
+  let hdr = (decorate-param-group $cmd.header_params "hdr" $qp.taken)
+  let ck = (decorate-param-group $cmd.cookie_params "ck" $hdr.taken)
+  let body = (decorate-body-fields $cmd.body_fields $ck.taken)
   $cmd | merge {
     path_params: $path_params
     query_params: $qp.items
@@ -419,24 +370,24 @@ def render-param-sig [flag_name: string, nu_type: string, desc: string, cname?: 
   }
 }
 
-# The comment text for a decorated query/header/cookie flag: its description,
-# plus an origin note when the flag was disambiguated by a suffix, so users can
-# tell which spec-side parameter it maps to.
+# The note a renamed flag carries: the spec name it stands for. The flag
+# spelling alone may not say which spec param it is (`user_id` and `userId`
+# both kebab to `user-id`, so the second one is `--body-user-id`).
+def rename-note [item: record]: nothing -> string {
+  if ($item.renamed? | default false) { $"\(spec name: ($item.name)\)" } else { "" }
+}
+
+# The comment text for a decorated query/header/cookie flag: its description
+# and, when the flag was renamed, the spec name it stands for.
 def param-doc [q: record]: nothing -> string {
-  let note = match ($q.name_suffix? | default "") {
-    "" => ""
-    "-list" => " (array variant)"
-    $s => $" \(disambiguated($s)\)"
-  }
-  $"($q.description)($note)"
+  [$q.description (rename-note $q)] | where {|t| $t | is-not-empty } | str join " "
 }
 
 # The comment text for a decorated body field: its description and the shape
-# of a record-typed value joined by ` — `, then `(body field)` when the flag
-# took the `-body` suffix to avoid a query/header/cookie flag.
+# of a record-typed value joined by ` — `, then the rename note.
 def body-field-doc [f: record, shapes: list]: nothing -> string {
   let text = ([$f.description (lookup-shape $f.name $shapes)] | where {|t| $t | is-not-empty } | str join " — ")
-  [$text (if $f.collision == "cross-group" { "(body field)" } else { "" })] | where {|t| $t | is-not-empty } | str join " "
+  [$text (rename-note $f)] | where {|t| $t | is-not-empty } | str join " "
 }
 
 # Render decorated params or body fields for the signature. Each item carries

@@ -191,7 +191,7 @@ export def "list-group-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --qp-id: int
+  --qp-id: int # (spec name: id)
   --status: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -232,9 +232,9 @@ export def "list-tenant-things" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --qp-tenant: string
-  --hdr-tenant: string
-  --ck-tenant: string
+  --qp-tenant: string # (spec name: tenant)
+  --hdr-tenant: string # (spec name: tenant)
+  --ck-tenant: string # (spec name: tenant)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -278,7 +278,7 @@ export def "list-user-sessions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --qp-user-id: string
+  --qp-user-id: string # (spec name: user_id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,8 +318,8 @@ export def "create-group-note" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-  --qp-id: int
-  --body-id: int
+  --qp-id: int # (spec name: id)
+  --body-id: int # (spec name: id)
   text: string
 ]: any -> any {
   let input = $in

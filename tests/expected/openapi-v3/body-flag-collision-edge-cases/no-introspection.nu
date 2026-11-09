@@ -165,7 +165,7 @@ export def "search-text" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --body: string
 ]: any -> any {
   let input = $in
@@ -204,7 +204,7 @@ export def "create-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-body: string
+  --qp-body: string # (spec name: body)
   --body: record
 ]: any -> any {
   let input = $in
@@ -243,8 +243,8 @@ export def "echo-body" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hdr-body: string
-  --ck-body: string
+  --hdr-body: string # (spec name: body)
+  --ck-body: string # (spec name: body)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

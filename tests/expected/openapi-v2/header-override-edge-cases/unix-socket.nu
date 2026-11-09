@@ -194,7 +194,7 @@ export def "token-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --content-type: string # Equal to application/x-www-form-urlencoded (required)
-  --hdr-accept: string # Response media type override
+  --hdr-accept: string # Response media type override (spec name: Accept)
   --grant-type: string
   --username: string
   --password: string
@@ -243,7 +243,7 @@ export def "widgets-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --accept: string@accept-completer # Response content type
-  --hdr-accept: string # application/json (default) or application/yaml
+  --hdr-accept: string # application/json (default) or application/yaml (spec name: Accept)
 ]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

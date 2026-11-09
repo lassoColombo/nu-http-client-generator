@@ -259,7 +259,7 @@ export def "notify" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-name: string # required, default: apiexamples
-  --hdr-accept: string # required, default: application/json
+  --hdr-accept: string # required, default: application/json (spec name: Accept)
   --content-type: string # required
   --sku-id: string
 ]: any -> any {

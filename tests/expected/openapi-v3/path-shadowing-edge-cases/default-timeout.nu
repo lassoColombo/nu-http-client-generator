@@ -188,7 +188,7 @@ export def "list-group-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-id: int
+  --qp-id: int # (spec name: id)
   --status: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -226,9 +226,9 @@ export def "list-tenant-things" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-tenant: string
-  --hdr-tenant: string
-  --ck-tenant: string
+  --qp-tenant: string # (spec name: tenant)
+  --hdr-tenant: string # (spec name: tenant)
+  --ck-tenant: string # (spec name: tenant)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +269,7 @@ export def "list-user-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-user-id: string
+  --qp-user-id: string # (spec name: user_id)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -306,8 +306,8 @@ export def "create-group-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-id: int
-  --body-id: int
+  --qp-id: int # (spec name: id)
+  --body-id: int # (spec name: id)
   text: string
 ]: any -> any {
   let input = $in

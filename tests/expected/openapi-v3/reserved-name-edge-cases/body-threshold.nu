@@ -187,8 +187,8 @@ export def "search-by-env" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-env: string
-  --qp-in: string
+  --qp-env: string # (spec name: env)
+  --qp-in: string # (spec name: in)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
