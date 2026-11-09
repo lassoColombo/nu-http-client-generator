@@ -357,40 +357,55 @@ def http-request [op: record, args: record]: any -> any {
 }
 
 # Send a built request with `http <method>` and unwrap the response
-# (`handle-response`; a successful HEAD returns just the headers). A verb
-# that carries a body sends an empty one without a content type. A request
-# with a `unix_socket` (clients generated with one) connects over it unless
-# it is empty; `--unix-socket` has no "off" value, so each call has two forms.
+# (`handle-response`; a successful HEAD returns just the headers).
+#
+# nushell's `http` encodes a record or list body itself (JSON here, under
+# `--content-type`), and refuses a string or binary body under the form and
+# multipart types, which it would encode itself. Every other body arrives
+# already encoded by `build-request` (form, multipart, `+json` text, opaque),
+# so it goes out as is with its Content-Type a plain header. An empty body
+# goes out as "" without one.
+#
+# A request with a `unix_socket` (clients generated with one) connects over
+# it unless it is empty; `--unix-socket` has no "off" value, so each call has
+# two forms.
 def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
   let sock = ($req.unix_socket? | default "")
-  let empty = ($body | is-empty)
+  let shape = if ($body | is-empty) { "empty" } else { match $body { {} => "data", [..$_] => "data", _ => "encoded" } }
+  let headers = if $shape != "encoded" { $req.headers } else {
+    let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
+    $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
+  }
+  let body = if $shape == "empty" { "" } else { $body }
   let resp = if ($sock | is-empty) {
-    match [$req.method $empty] {
-      [get, _] => (http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
-      [head, _] => (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
-      [options, _] => (http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
-      [post, true] => (http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url "")
-      [post, false] => (http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [put, true] => (http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url "")
-      [put, false] => (http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [patch, true] => (http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url "")
-      [patch, false] => (http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [delete, true] => (http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
-      [delete, false] => (http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    match [$req.method $shape] {
+      [get, _] => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      [head, _] => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      [options, _] => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      [post, data] => (http post --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [post, _] => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [put, data] => (http put --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [put, _] => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [patch, data] => (http patch --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [patch, _] => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      [delete, empty] => (http delete --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      [delete, data] => (http delete --headers $headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      [delete, _] => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
     }
   } else {
-    match [$req.method $empty] {
-      [get, _] => (http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
-      [head, _] => (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
-      [options, _] => (http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
-      [post, true] => (http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url "")
-      [post, false] => (http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [put, true] => (http put --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url "")
-      [put, false] => (http put --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [patch, true] => (http patch --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url "")
-      [patch, false] => (http patch --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [delete, true] => (http delete --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
-      [delete, false] => (http delete --headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    match [$req.method $shape] {
+      [get, _] => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      [head, _] => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      [options, _] => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      [post, data] => (http post --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [post, _] => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [put, data] => (http put --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [put, _] => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [patch, data] => (http patch --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [patch, _] => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      [delete, empty] => (http delete --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      [delete, data] => (http delete --headers $headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      [delete, _] => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
     }
   }
   if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }

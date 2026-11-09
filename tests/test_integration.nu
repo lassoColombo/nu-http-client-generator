@@ -41,10 +41,16 @@ def setup []: nothing -> record {
     # remote-URL load path
     mod $APISGURU_SPEC_URL -o ($temp | path join "apisguru.nu")
 
+    # form and multipart bodies, against httpbingo's echo endpoints
+    mod ./tests/fixtures/httpbingo-forms.yaml -o ($temp | path join "forms.nu")
+    "file body" | save ($temp | path join "upload.txt")
+
     {
         temp: $temp
         httpbin: ($temp | path join "httpbin.nu")
         apisguru: ($temp | path join "apisguru.nu")
+        forms: ($temp | path join "forms.nu")
+        upload: ($temp | path join "upload.txt")
     }
 }
 
@@ -91,6 +97,24 @@ def "httpbin uuid returns valid uuid" [] {
 def "httpbin anything post echoes method" [] {
     let resp = run-cmd $in.httpbin "httpbin post-anything --max-time 15sec"
     assert equal $resp.method "POST"
+}
+
+# --- form and multipart bodies on the wire ---
+# nushell's `http` refuses a string body under the form content type and a
+# binary one under multipart; these bodies only ever reached --dry-run until
+# the sender passed their Content-Type as a plain header.
+
+@test
+def "a form body reaches the server" [] {
+    let resp = run-cmd $in.forms "forms post-form --name 'a b' --tags [x y] --max-time 15sec"
+    assert equal $resp.form {name: ["a b"], tags: [x y]}
+}
+
+@test
+def "a multipart body reaches the server with its file" [] {
+    let resp = run-cmd $in.forms $"forms post-multipart --note hi --file '($in.upload)' --max-time 15sec"
+    assert equal $resp.form.note [hi]
+    assert equal $resp.files.file ["file body"]
 }
 
 # --- apis.guru REST tests (loaded from URL) ---

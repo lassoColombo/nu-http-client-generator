@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: httpbingo forms
+  version: "1.0"
+  description: >-
+    httpbingo.org's echo endpoints described as a form post and a multipart
+    upload, for test_integration.nu: a generated client must put both bodies
+    on the wire, not only into its --dry-run record.
+servers:
+  - url: https://httpbingo.org
+paths:
+  /post:
+    post:
+      operationId: postForm
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+                tags: {type: array, items: {type: string}}
+      responses:
+        '200': {description: the request, echoed}
+  /anything:
+    post:
+      operationId: postMultipart
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                note: {type: string}
+                file: {type: string, format: binary}
+      responses:
+        '200': {description: the request, echoed}
