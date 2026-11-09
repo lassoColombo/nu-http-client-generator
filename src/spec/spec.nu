@@ -1,7 +1,10 @@
-# spec.nu — The version-independent spec helpers: loading, `$ref` resolution,
-# format detection, security requirements, success codes, type descriptors.
-# What differs between the formats lives in `oa3.nu` and `swagger2.nu`, each
-# exporting a `helpers` record of closures; mod.nu picks one by `detect`.
+# spec.nu — The format oracle: everything that depends on the wire shape of an
+# OpenAPI 3 document. Loading, `$ref` resolution, format detection, servers,
+# parameter facts, request bodies, responses, security, type descriptors.
+# A Swagger 2.0 document is converted to OpenAPI 3 first (`swagger2.nu`,
+# wired by mod.nu), so this file reads one format only.
+
+use ../log.nu
 
 # ── Module-level constants ──────────────────────────────────────────
 
@@ -395,36 +398,213 @@ def build-td-fields [properties: record, doc: record, depth: int, max_depth: int
   }
 }
 
-# Build an auth scheme record from a security definition entry.
-# Handles apiKey (header/query/cookie), oauth2, and fallback cases
-# shared by both OA3 and Swagger 2 closures.
-# Returns null when the entry requires version-specific handling.
-export def build-auth-scheme [entry: record] {
-  let d = $entry.def
-  let desc = ($d.description? | default "")
-  if ($d.type? == "apiKey") {
-    let loc = ($d.in? | default "header")
-    let hdr = ($d.name? | default "Authorization")
-    if $loc == "query" {
-      {spec_name: $entry.spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
-    } else if $loc == "cookie" {
-      {spec_name: $entry.spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
-    } else if ($hdr | str lowercase) == "authorization" {
-      let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
-      let scheme_name = ($pfx | str lowercase)
-      {spec_name: $entry.spec_name, name: $scheme_name, header_name: "Authorization", prefix: $pfx, in: "header"}
+# ── Security schemes ────────────────────────────────────────────────
+
+# The security schemes as the wire facts the client needs:
+# {spec_name, name, header_name, prefix, in}. `name` is the `--auth-scheme`
+# value: the HTTP scheme (`bearer`, `basic`, prefix capitalized); for an
+# apiKey `query-<param>` / `cookie-<name>`, the lowercased header name, or,
+# for an `Authorization` header, `jwt`/`static`/`bearer` by the description;
+# `bearer` for oauth2 and openIdConnect. An unknown type is logged and treated
+# as bearer.
+export def auth-schemes [doc: record]: nothing -> list<record> {
+  $doc.components?.securitySchemes? | default {} | items {|spec_name, d|
+    let type = ($d.type? | default "unset")
+    if $type == "http" {
+      let s = ($d.scheme? | default "bearer" | str lowercase)
+      {spec_name: $spec_name, name: $s, header_name: "Authorization", prefix: ($s | str capitalize), in: "header"}
+    } else if $type == "apiKey" {
+      let loc = ($d.in? | default "header")
+      let hdr = ($d.name? | default "Authorization")
+      if $loc == "query" {
+        {spec_name: $spec_name, name: $"query-($hdr)", header_name: $hdr, prefix: "", in: "query"}
+      } else if $loc == "cookie" {
+        {spec_name: $spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
+      } else if ($hdr | str lowercase) == "authorization" {
+        let desc = ($d.description? | default "")
+        let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
+        {spec_name: $spec_name, name: ($pfx | str lowercase), header_name: "Authorization", prefix: $pfx, in: "header"}
+      } else {
+        {spec_name: $spec_name, name: ($hdr | str lowercase), header_name: $hdr, prefix: "", in: "header"}
+      }
     } else {
-      let scheme_name = ($hdr | str lowercase)
-      {spec_name: $entry.spec_name, name: $scheme_name, header_name: $hdr, prefix: "", in: "header"}
+      if $type not-in [oauth2 openIdConnect] {
+        log warn $"unknown security scheme type '($type)' for '($spec_name)', defaulting to bearer"
+      }
+      {spec_name: $spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
     }
-  } else if ($d.type? == "oauth2") or ($d.type? == "openIdConnect") {
-    {spec_name: $entry.spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
-  } else {
-    null
   }
 }
 
-# ── Shared helpers ─────────────────────────────────────────────────
+# ── Servers ─────────────────────────────────────────────────────────
+
+# Resolve a server-URL template against a record of OAS server `variables`,
+# with optional per-call overrides. Backfills any `{var}` placeholder that
+# isn't declared in `variables[]` with empty string — preserves the old
+# lenient behavior (str-replace silently no-op'd unknown vars), since
+# `format pattern` errors on missing keys.
+def resolve-server-template [raw: string, vars: record, overrides: record = {}]: nothing -> string {
+  if ($vars | is-empty) and ($overrides | is-empty) {
+    return $raw
+  }
+  let defaults = ($vars | transpose name def | reduce -f {} {|v, acc|
+    let val = ($overrides | get -o $v.name | default ($v.def.default? | default ""))
+    $acc | upsert $v.name $val })
+  let placeholders = ($raw | parse --regex '\{(?P<n>[A-Za-z0-9_]+)\}' | get n | uniq)
+  let full = ($placeholders | reduce -f $defaults {|n, acc|
+    if ($n in ($acc | columns)) { $acc } else { $acc | upsert $n "" }
+  })
+  $full | format pattern $raw
+}
+
+# Resolve a server object to an absolute URL: `{var}` placeholders take the
+# per-call `overrides`, else the variable's `default`; a relative URL is
+# anchored on localhost; a trailing slash is dropped so path joins stay single.
+def resolve-server-url [server: record, overrides: record = {}] {
+  let raw = ($server.url? | default $"http://($DEFAULT_HOST)")
+  let substituted = (resolve-server-template $raw ($server.variables? | default {}) $overrides)
+  let absolute = if ($substituted | str starts-with "/") { $"http://($DEFAULT_HOST)($substituted)" } else { $substituted }
+  $absolute | str trim --right --char '/'
+}
+
+# The base URL: the first root server, else `http://localhost`.
+export def base-url [doc: record]: nothing -> string {
+  let servers = ($doc.servers? | default [])
+  if ($servers | is-not-empty) {
+    resolve-server-url ($servers | first)
+  } else {
+    $"http://($DEFAULT_HOST)"
+  }
+}
+
+# Every server URL the spec mentions, for `--base-url` completion: each root
+# server followed by one URL per enum value of each of its variables, then the
+# path-level and operation-level overrides, in document order.
+export def all-urls [doc: record]: nothing -> list<string> {
+  let root = ($doc.servers? | default [] | each {|s|
+    let variants = ($s.variables? | default {} | items {|name, def|
+      $def.enum? | default [] | each {|ev| resolve-server-url $s {$name: $ev} }
+    } | flatten)
+    [(resolve-server-url $s)] ++ $variants
+  } | flatten)
+  let overrides = ($doc.paths? | default {} | drop-vendor-extensions | values | each {|item|
+    let op_servers = ($item | items {|method, op|
+      if ($method in [get post put patch delete head options]) and (($op | describe) | str starts-with "record") { $op.servers? | default [] } else { [] }
+    } | flatten)
+    ($item.servers? | default []) ++ $op_servers
+  } | flatten | each {|s| resolve-server-url $s })
+  $root ++ $overrides | uniq
+}
+
+# The operation's own server, else its path item's; null when neither
+# overrides the root servers.
+export def op-base-url [op: record, path_item: record] {
+  let server = ($op.servers?.0? | default $path_item.servers?.0?)
+  if ($server == null) { null } else { resolve-server-url $server }
+}
+
+# ── Parameters, bodies, responses ───────────────────────────────────
+
+# A parameter's value facts, read from its `schema` (a `$ref` resolved).
+# A `content`-typed param (OAS 3 §4.8.12.5) is one serialized value whose
+# schema says nothing about the wire, so it reads as an empty schema: a
+# scalar `string`. `default`/`format`/`example` fall back to the param
+# itself, where some specs put them.
+export def param-facts [param: record, doc: record]: nothing -> record {
+  let raw = if ($param.content? | is-not-empty) { {} } else { resolve-ref ($param.schema? | default {}) $doc }
+  let schema = if (($raw | describe) | str starts-with "record") { $raw } else { {} }
+  # normalize-type: OAS 3.1 `type: [array, "null"]` is still an array
+  let t = (normalize-type ($schema.type? | default "string"))
+  let style = ($param.style? | default "form")
+  let explode = ($param.explode? | default ($style == "form"))
+  {
+    type: $t
+    # `list<string>` / `list<int>` in the signature instead of bare `list`;
+    # null when the items have no usable primitive type.
+    items_type: (if $t == "array" { normalize-type ($schema.items?.type? | default null) } else { null })
+    enum: ($schema.enum? | default [])
+    # For an object value the emitted serializer reads "multi" as exploded
+    # `k=v` pairs and "csv" as `name=k,v,k,v` (OAS 3 §4.8.12.4).
+    # `tabDelimited` is no OpenAPI 3 style: it is the converted Swagger 2
+    # `collectionFormat: tsv` (see swagger2.nu).
+    collection_style: (if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
+      match $style {
+        "form" => { if $explode { "multi" } else { "csv" } }
+        "spaceDelimited" => "ssv"
+        "pipeDelimited" => "pipes"
+        "tabDelimited" => "tsv"
+        _ => "csv"
+      }
+    })
+    default: ($schema.default? | default $param.default?)
+    format: ($schema.format? | default $param.format?)
+    example: ($schema.example? | default ($param.example? | default ($param | get -o "x-example")))
+    nullable: (is-nullable $schema)
+  }
+}
+
+# The request body: {has_body, body_schema, content_type}. Prefers a media
+# type the client can encode; with none declared (text/plain, text/xml,
+# application/vnd.X+json, …) the first one and its schema, so model can still
+# derive a typed `--body` flag.
+export def body-info [op: record, doc: record]: nothing -> record {
+  let request_body = $op.requestBody?
+  if ($request_body | is-empty) {
+    return {has_body: false, body_schema: {}, content_type: $CT_JSON}
+  }
+  let content = ((resolve-ref $request_body $doc).content? | default {})
+  let preferred = ($CT_PRIORITY | where {|ct| $content | get -o $ct | is-not-empty } | get -o 0)
+  let declared = ($content | columns | get -o 0 | default $CT_JSON)
+  # An empty media-type key (spoonacular writes `content: {"": {schema}}`) or
+  # a bare `*/*` is no content type a request can carry: fall back to JSON.
+  let ct = ($preferred | default (if ($declared | is-empty) or ($declared == "*/*") { $CT_JSON } else { $declared }))
+  # The schema must come from the media type the client will send, not the
+  # first one declared: `application/xml` listed before `application/json`
+  # would otherwise expose the XML schema's fields on a JSON request.
+  let s = ($content | get -o $ct | default ($content | get -o $declared | default {}) | get -o schema)
+  let schema = if ($s | is-not-empty) { resolve-ref $s $doc } else { {} }
+  {has_body: true, body_schema: $schema, content_type: $ct}
+}
+
+# The media types the success responses declare (the `--accept` values),
+# JSON when none does. A response may be a `$ref` into
+# `#/components/responses` (apideck, chompthis do this for every operation),
+# so each one is resolved before its `content` is read.
+export def response-content-types [op: record, doc: record]: nothing -> list<string> {
+  let responses = ($op.responses? | default {})
+  $responses | transpose code resp | where {|r|
+    ($r.code | str starts-with "2") or ($r.code == "default") or ($r.code =~ '^[12][xX]{2}$')
+  } | each {|r|
+    (resolve-ref $r.resp $doc).content? | default {} | columns
+  } | flatten | uniq | if ($in | is-empty) { [$CT_JSON] } else { $in }
+}
+
+# The success responses' schemas (unresolved — model resolves and walks
+# them), best candidate first (see `success-response-codes`); responses
+# without a schema are skipped. The first entry is the return type; the
+# others still contribute a discriminator.
+export def response-schemas [op: record, doc: record]: nothing -> list {
+  let responses = ($op.responses? | default {})
+  success-response-codes $responses | each {|code|
+    let resp = (resolve-ref ($responses | get -o $code) $doc)
+    if ($resp | is-empty) { return null }
+    let content = ($resp.content? | default {})
+    # Prefer application/json's schema; if this response has no JSON media
+    # (e.g. text/plain, application/xml, a vendor +json variant), fall back
+    # to the first media type that declares a schema. Without this, a
+    # non-JSON scalar response (`text/plain` `{type: string}`) derives `any`
+    # and loses the typed `oneof<…>` output annotation.
+    let json_schema = ($content | get -o "application/json" | default {} | get -o schema)
+    if ($json_schema | is-not-empty) {
+      $json_schema
+    } else {
+      $content | values | each {|m| $m | get -o schema } | get -o 0
+    }
+  }
+}
+
+# ── Descriptions ────────────────────────────────────────────────────
+
 
 # Normalize spec-supplied description text for the terminal `help` medium.
 # Strips HTML tags, decodes common entities, and collapses whitespace runs

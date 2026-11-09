@@ -30,7 +30,7 @@ Reads an API specification and generates a typed Nushell HTTP client module.
 | OpenAPI | 3.0.x, 3.1.x           |
 | Swagger | 2.0                    |
 
-Specs can be loaded from a local file or fetched directly from a URL.
+Specs can be loaded from a local file or fetched directly from a URL. A Swagger 2.0 document is converted to OpenAPI 3 in memory before anything reads it, so both formats produce the same kind of client.
 
 ---
 
@@ -117,7 +117,7 @@ Command names come from the spec's `operationId`, kebab-cased. Operations that d
 
 | Flag                  | Default | Description                                                                                                                                                          |
 | --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--name-fn: closure`  | —       | Override the command name per operation. The closure gets `{raw, params, derived}` context and returns a name (or `null` to keep the default). On both `http-gen` and `preview`. |
+| `--name-fn: closure`  | —       | Override the command name per operation. The closure gets `{raw, params, derived}` context and returns a name (or `null` to keep the default). `raw.op` is the operation as the generator reads it: for a Swagger 2.0 spec, its own fields plus their OpenAPI 3 equivalents. On both `http-gen` and `preview`. |
 
 Example — group commands under their first tag instead of trusting the `operationId` alone:
 

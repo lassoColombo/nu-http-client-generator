@@ -1,94 +1,100 @@
-# swagger2.nu — Swagger 2.0 answers to the `helpers` dispatch record (see
-# spec.nu): host/basePath/schemes, consumes/produces, formData bodies,
-# parameter facts, securityDefinitions.
+# swagger2.nu — Swagger 2.0 to OpenAPI 3 conversion.
+#
+# The generator reads one format. A Swagger 2.0 document is rewritten into the
+# OpenAPI 3 shape `spec.nu` reads (`to-openapi3`), once, before modelling, so
+# nothing downstream knows Swagger 2 exists. The rewrite covers what the reader
+# consults:
+#
+#   host, basePath, schemes, x-ms-parameterized-host  -> servers
+#   securityDefinitions (basic -> http/basic)         -> components.securitySchemes
+#   param type/items/enum/default/format              -> param.schema
+#   param collectionFormat                            -> param.style/explode
+#   body and formData params, consumes                -> requestBody
+#   response schema, produces                         -> response.content
+#   produces, for undocumented responses              -> a `default` response
+#
+# The rewrite only adds: each OpenAPI 3 spelling goes next to the Swagger 2
+# one, and nothing a `$ref` can point at moves. Specs do point into
+# operations (`#/paths/~1word~1%7Bid%7D/get/responses/200/schema/items/…`,
+# `#/paths/…/parameters/2`), so a response keeps its `schema`, a param its
+# Swagger 2 keys, and body/formData params stay in their lists, which model
+# filters by location.
 
 use spec.nu
 use ../log.nu
 
-# ── Private helpers ───────────────────────────────────────────────
+const METHODS = [get put post delete options head patch]
 
-# Azure data-plane specs use the `x-ms-parameterized-host` vendor
-# extension to template the host (e.g. `{searchServiceName}.{searchDnsSuffix}`)
-# and set `host: "azure.local"` as a sentinel. Honor the extension when present;
-# substitute placeholders whose referenced parameter has a `default:`, and leave
-# unresolved placeholders in place (mirrors the OAS3 resolve-server-url
-# behavior — `url parse` will then fail loudly on the unsubstituted `{var}`
-# instead of silently dispatching to azure.local).
-def resolve-parameterized-host [spec_data: record] {
-  let pham = ($spec_data | get -o "x-ms-parameterized-host")
-  if ($pham | is-empty) { return null }
-  let tmpl = ($pham | get -o hostTemplate | default "")
-  if ($tmpl | is-empty) { return null }
-  let use_scheme = ($pham | get -o useSchemePrefix | default true)
-  # Resolve each {var} placeholder from its parameter's `default:` (the
-  # parameters are usually `$ref`s into the spec-level table). Parameters
-  # without defaults stay as `{var}` so `url parse` errors loudly.
-  let defaults = ($pham | get -o parameters | default [] | reduce -f {} {|p, acc|
-    let resolved = (spec resolve-ref $p $spec_data)
-    let name = ($resolved.name? | default null)
-    let def = ($resolved.default? | default null)
-    if ($name != null) and ($def != null) { $acc | upsert $name ($def | into string) } else { $acc }
-  })
-  # Apply substitutions; placeholders not in `defaults` survive unchanged.
-  let placeholders = ($tmpl | parse --regex '\{(?P<n>[A-Za-z0-9_]+)\}' | get n | uniq)
-  let full = ($placeholders | reduce -f $defaults {|n, acc|
-    if ($n in ($acc | columns)) { $acc } else { $acc | upsert $n $"{($n)}" }
-  })
-  let substituted = ($full | format pattern $tmpl)
-  if $use_scheme {
-    let raw_schemes = ($spec_data.schemes? | default [])
-    let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
-    $"($scheme)://($substituted)"
-  } else {
-    $substituted
-  }
+# The parameter keys that describe its value, which OpenAPI 3 keeps under
+# `schema`. `collectionFormat` is not one: OpenAPI 3 spells it as
+# `style`/`explode`.
+const SCHEMA_KEYS = [
+  type format items default enum maximum exclusiveMaximum minimum exclusiveMinimum
+  maxLength minLength pattern maxItems minItems uniqueItems multipleOf
+]
+
+# Rebuild a record with every value mapped by `f`, which receives the key and
+# the value. An empty record stays a record (`transpose` would make it a list).
+def map-values [f: closure]: record -> record {
+  let r = $in
+  if ($r | is-empty) { return {} }
+  $r | transpose k v | each {|e| {k: $e.k, v: (do $f $e.k $e.v)} } | transpose -r -d
 }
 
-# One URL per declared scheme (https when none); a parameterized host yields
-# a single URL. The first one is the base URL.
-def get-all-urls-impl [spec_data: record] {
-  let base_path = (strip-base-path-template ($spec_data.basePath? | default ""))
-  let parameterized = (resolve-parameterized-host $spec_data)
-  if ($parameterized != null) {
-    return [($"($parameterized)($base_path)" | str trim --right --char '/')]
-  }
-  let host = ($spec_data.host? | default $spec.DEFAULT_HOST)
-  let raw_schemes = ($spec_data.schemes? | default [])
-  let schemes = (if ($raw_schemes | is-empty) { ["https"] } else { $raw_schemes })
-  $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join | str trim --right --char '/' }
+# A non-body parameter as OpenAPI 3: its value facts are copied under
+# `schema`, and an array's `collectionFormat` (csv when absent, the Swagger 2
+# default) is spelled as `style`/`explode`. `tsv` has no OpenAPI 3 style; it becomes
+# `tabDelimited`, which spec's `param-facts` reads like the standard
+# delimiters. OpenAPI 3 keys a Swagger 2 document should not have (`schema`,
+# `style`, `explode`, `content`; the httpbin spec mixes them in) are replaced,
+# as the Swagger 2 reader always ignored them. A `$ref` is left alone (its
+# target is converted where it lives), and so are body and formData params,
+# which `request-body` turns into the requestBody.
+def convert-param [p: any]: nothing -> any {
+  if not (($p | describe) | str starts-with "record") { return $p }
+  if ("$ref" in ($p | columns)) or (($p.in? | default "") in [body formData]) { return $p }
+  let present = ($SCHEMA_KEYS | where {|k| $k in ($p | columns) })
+  let schema = if ($present | is-empty) { {} } else { $p | select ...$present }
+  let style = if ($p.type? == "array") {
+    match ($p.collectionFormat? | default "csv") {
+      "multi" => {style: form, explode: true}
+      "ssv" => {style: spaceDelimited, explode: false}
+      "pipes" => {style: pipeDelimited, explode: false}
+      "tsv" => {style: tabDelimited, explode: false}
+      _ => {style: form, explode: false}
+    }
+  } else { {} }
+  $p | reject -o schema style explode content | insert schema $schema | merge $style
 }
 
-# Swagger-2 `basePath` may contain `{name}` template variables
-# (e.g. `/v2.0/{apikey}`) that are never declared as path parameters. Leaving
-# them in the path means `url parse` percent-encodes the braces (`%7B…%7D`),
-# producing guaranteed-404 URLs. Drop unresolved templates entirely; the user
-# must override via `--base-url` to substitute the missing value.
-def strip-base-path-template [base_path: string]: nothing -> string {
-  if not ($base_path =~ '\{[^}]+\}') { return $base_path }
-  let cleaned = ($base_path | str replace --all --regex '/\{[^}]+\}' '' | str replace --all --regex '\{[^}]+\}' '')
-  log warn $"basePath contains undeclared template variable\(s\); stripped to '($cleaned)'. Pass --base-url at call time to substitute."
-  $cleaned
-}
+# The requestBody of one operation, from the body or formData params it
+# declares or inherits from its path item; null when it has none. An op's own
+# param replaces an inherited one with the same name and location, and an own
+# `body` param replaces the inherited one whatever either is named: Swagger 2
+# allows one per operation. formData fields win over a body param.
+#
+# formData fields become an object schema, sent as multipart when a field is
+# a file or the op (else the document) `consumes` multipart, else urlencoded.
+# Each field keeps `items`, an array field its `collectionFormat` (csv by
+# default; model joins form arrays by it), and a `type: file` field stays
+# `file`, which render types as a path. A body param is sent as the first
+# `consumes` type nushell can encode: JSON when listed (or `*/*`, which `http`
+# rejects as a content type), then merge-patch JSON (the safe Kubernetes PATCH
+# type), then the first concrete type.
+def request-body [op: record, inherited: list, doc: record]: nothing -> any {
+  let key = {|p| if ($p.in? == "body") { "body" } else { $"($p.name? | default ''):($p.in? | default '')" } }
+  let own = ($op.parameters? | default [] | each {|p| spec resolve-ref $p $doc })
+  let own_keys = ($own | each $key)
+  let params = ($inherited | where {|p| (do $key $p) not-in $own_keys } | append $own)
+  let consumes = ($op.consumes? | default ($doc.consumes? | default []))
 
-def get-body-info-impl [op: record, doc: record] {
-  # Resolve $ref-only param entries (e.g. Kubernetes spec shares body/query
-  # params under #/parameters/...). Without this the body/form filter below
-  # never finds them and the op is silently classified as no-body.
-  let params = ($op.parameters? | default []) | each {|p| spec resolve-ref $p $doc }
-  let form_params = $params | where {|p| ($p.in? | default "") == "formData" }
-  if ($form_params | is-not-empty) {
-    # multipart when a param is a file OR the op (then the doc) `consumes`
-    # multipart — visagecloud uploads a picture as a plain `string` formData
-    # param under `consumes: [multipart/form-data]`.
-    let consumes = ($op.consumes? | default ($doc.consumes? | default []))
-    let has_file = ($form_params | any {|p| ($p.type? | default "") == "file" })
+  let form = ($params | where {|p| ($p.in? | default "") == "formData" })
+  if ($form | is-not-empty) {
+    let has_file = ($form | any {|p| ($p.type? | default "") == "file" })
     let ct = if $has_file or ($spec.CT_MULTIPART in $consumes) { $spec.CT_MULTIPART } else { $spec.CT_FORM }
     mut props = {}
     mut required = []
-    for fp in $form_params {
-      # Synthesized property schema. `items` keeps array params typed
-      # (`list<string>`, not `list<any>`); `collectionFormat` rides along as
-      # a vendor-style key so model can serialize csv/ssv/… form arrays.
+    for fp in $form {
       let prop = {type: ($fp.type? | default "string"), description: ($fp.description? | default ""), enum: ($fp.enum? | default [])}
       let prop = if ($fp.items? | is-not-empty) { $prop | insert items $fp.items } else { $prop }
       let prop = if ($fp.type? | default "") == "array" { $prop | insert collectionFormat ($fp.collectionFormat? | default "csv") } else { $prop }
@@ -97,104 +103,162 @@ def get-body-info-impl [op: record, doc: record] {
         $required = ($required | append $fp.name)
       }
     }
-    {has_body: true, body_schema: {type: "object", properties: $props, required: $required}, content_type: $ct}
+    return {content: {$ct: {schema: {type: "object", properties: $props, required: $required}}}}
+  }
+
+  let bodies = ($params | where {|p| ($p.in? | default "") == "body" })
+  if ($bodies | is-empty) { return null }
+  if ($bodies | length) > 1 {
+    log warn $"operation ($op.operationId? | default '<no operationId>') declares ($bodies | length) body params; Swagger 2 allows one, using '($bodies | first | get -o name)'"
+  }
+  let body = ($bodies | first)
+  let ct = if ($consumes | is-empty) or ($spec.CT_JSON in $consumes) or ("*/*" in $consumes) {
+    $spec.CT_JSON
+  } else if ("application/merge-patch+json" in $consumes) {
+    "application/merge-patch+json"
   } else {
-    let body_params = ($params | where {|p| ($p.in? | default "") == "body" })
-    if ($body_params | length) > 1 {
-      log warn $"operation ($op.operationId? | default '<no operationId>') declares ($body_params | length) body params; Swagger 2 allows one, using '($body_params | first | get -o name)'"
+    $consumes | where {|x| $x != "*/*" } | first | default $spec.CT_JSON
+  }
+  let media = if ($body.schema? | is-not-empty) { {schema: $body.schema} } else { {} }
+  {content: {$ct: $media}}
+}
+
+# A response as OpenAPI 3: its `schema` is served as each type the operation
+# produces, so the reader derives the same Accept types and success schema
+# from it. A `$ref` into `#/responses` is inlined first, since one shared
+# response can sit under operations that produce different types.
+def convert-response [resp: any, produces: list<string>, doc: record]: nothing -> any {
+  let r = (spec resolve-ref $resp $doc)
+  if not (($r | describe) | str starts-with "record") { return $resp }
+  let media = if ($r.schema? == null) { {} } else { {schema: $r.schema} }
+  $r | upsert content ($produces | reduce --fold {} {|ct, acc| $acc | upsert $ct $media })
+}
+
+# One operation: params converted in place, the requestBody built from the
+# body/formData params, responses given `content`. `produces` is the op's own
+# list, else the document's, else JSON. It describes every response, the
+# undocumented ones included, which OpenAPI 3 spells as a `default` response:
+# an op without one gets one, so an op documenting only a 302 still accepts
+# its `image/png`.
+def convert-operation [op: record, inherited: list, doc: record]: nothing -> record {
+  let own_produces = ($op.produces? | default [])
+  let produces = if ($own_produces | is-not-empty) { $own_produces } else { $doc.produces? | default [] }
+  let produces = if ($produces | is-empty) { [$spec.CT_JSON] } else { $produces | uniq }
+  let body = (request-body $op $inherited $doc)
+  let op = if ($op.parameters? == null) { $op } else { $op | update parameters ($op.parameters | each {|p| convert-param $p }) }
+  let op = if not (($op.responses? | default {} | describe) | str starts-with "record") { $op } else {
+    let responses = ($op.responses? | default {} | map-values {|code, r|
+      if ($code | str starts-with "x-") { $r } else { convert-response $r $produces $doc }
+    })
+    let responses = if ("default" in ($responses | columns)) { $responses } else {
+      $responses | insert default (convert-response {description: ""} $produces $doc)
     }
-    let body_param = ($body_params | first)
-    if ($body_param | is-empty) {
-      {has_body: false, body_schema: {}, content_type: $spec.CT_JSON}
+    $op | upsert responses $responses
+  }
+  if ($body == null) { $op } else { $op | upsert requestBody $body }
+}
+
+# One path item. A path-item `$ref` is followed first (a dangling one is left
+# for model to report). Path-level params are converted in place, and every
+# operation inherits the body/formData ones among them.
+def convert-path-item [item: any, doc: record]: nothing -> any {
+  let item = (spec resolve-ref $item $doc)
+  if not (($item | describe) | str starts-with "record") or ("$ref" in ($item | columns)) { return $item }
+  let inherited = ($item.parameters? | default [] | each {|p| spec resolve-ref $p $doc })
+  $item | map-values {|key, val|
+    if $key == "parameters" {
+      $val | each {|p| convert-param $p }
+    } else if ($key in $METHODS) and (($val | describe) | str starts-with "record") {
+      convert-operation $val $inherited $doc
     } else {
-      # Honour Swagger-2 `consumes` (op-level, then doc-level).
-      # Picker: prefer application/json (since `*/*` accepts it and most specs
-      # list it explicitly), then application/merge-patch+json (safest k8s
-      # PATCH default), then first non-wildcard. Wildcard `*/*` collapses to
-      # application/json because `http patch` rejects `*/*` as a CT header.
-      let consumes_global = ($doc.consumes? | default [])
-      let consumes_op = ($op.consumes? | default $consumes_global)
-      let picked_ct = (
-        if ($consumes_op | is-empty) or ($spec.CT_JSON in $consumes_op) or ("*/*" in $consumes_op) {
-          $spec.CT_JSON
-        } else if ("application/merge-patch+json" in $consumes_op) {
-          "application/merge-patch+json"
-        } else {
-          $consumes_op | where {|x| $x != "*/*" } | first | default $spec.CT_JSON
-        }
-      )
-      let s = $body_param.schema?
-      if ($s | is-not-empty) {
-        {has_body: true, body_schema: (spec resolve-ref $s $doc), content_type: $picked_ct}
-      } else {
-        {has_body: true, body_schema: {}, content_type: $picked_ct}
-      }
+      $val
     }
   }
 }
 
-def get-response-content-types-impl [op: record, doc: record] {
-  let op_produces = ($op.produces? | default [])
-  let global_produces = ($doc.produces? | default [])
-  let types = if ($op_produces | is-not-empty) { $op_produces } else { $global_produces }
-  if ($types | is-empty) { [$spec.CT_JSON] } else { $types | uniq }
-}
-
-# The success responses' schemas (unresolved — model resolves and walks
-# them), best candidate first (see `spec success-response-codes`); responses
-# without a schema are skipped. `#/responses/…` refs are resolved before
-# reading `.schema`.
-def get-response-schemas-impl [op: record, doc: record] {
-  let responses = ($op.responses? | default {})
-  spec success-response-codes $responses | each {|code|
-    let resp = (spec resolve-ref ($responses | get -o $code) $doc)
-    if (($resp | describe) | str starts-with "record") { $resp | get -o schema } else { null }
+# Azure data-plane specs template the host with the `x-ms-parameterized-host`
+# extension (`{searchServiceName}.{searchDnsSuffix}`) and set `host:
+# azure.local` as a sentinel. A placeholder whose parameter has a `default`
+# is substituted; the others stay as `{var}`, so `url parse` fails loudly
+# instead of a call silently going to azure.local. Null without the extension.
+def resolve-parameterized-host [doc: record] {
+  let pham = ($doc | get -o "x-ms-parameterized-host")
+  if ($pham | is-empty) { return null }
+  let tmpl = ($pham | get -o hostTemplate | default "")
+  if ($tmpl | is-empty) { return null }
+  let use_scheme = ($pham | get -o useSchemePrefix | default true)
+  let defaults = ($pham | get -o parameters | default [] | reduce -f {} {|p, acc|
+    let resolved = (spec resolve-ref $p $doc)
+    let name = ($resolved.name? | default null)
+    let def = ($resolved.default? | default null)
+    if ($name != null) and ($def != null) { $acc | upsert $name ($def | into string) } else { $acc }
+  })
+  let placeholders = ($tmpl | parse --regex '\{(?P<n>[A-Za-z0-9_]+)\}' | get n | uniq)
+  let full = ($placeholders | reduce -f $defaults {|n, acc|
+    if ($n in ($acc | columns)) { $acc } else { $acc | upsert $n $"{($n)}" }
+  })
+  let substituted = ($full | format pattern $tmpl)
+  if $use_scheme {
+    let raw_schemes = ($doc.schemes? | default [])
+    let scheme = (if ($raw_schemes | is-empty) { "https" } else { $raw_schemes | first })
+    $"($scheme)://($substituted)"
+  } else {
+    $substituted
   }
 }
 
-def get-auth-schemes-impl [spec_data: record] {
-  let schemes = ($spec_data.securityDefinitions? | default {})
-  $schemes | items {|spec_name, d|
-    if ($d.type? == "basic") {
-      {spec_name: $spec_name, name: "basic", header_name: "Authorization", prefix: "Basic", in: "header"}
-    } else {
-      let shared = (spec build-auth-scheme {spec_name: $spec_name, def: $d})
-      if ($shared != null) { $shared } else {
-        log warn $"unknown security scheme type '($d.type? | default 'unset')' for '($spec_name)', defaulting to bearer"
-        {spec_name: $spec_name, name: "bearer", header_name: "Authorization", prefix: "Bearer", in: "header"}
-      }
-    }
+# A `basePath` may hold `{name}` templates no parameter declares
+# (`/v2.0/{apikey}`); `url parse` would percent-encode the braces into a
+# guaranteed 404. They are dropped, and the caller substitutes the real value
+# with `--base-url`.
+def strip-base-path-template [base_path: string]: nothing -> string {
+  if not ($base_path =~ '\{[^}]+\}') { return $base_path }
+  let cleaned = ($base_path | str replace --all --regex '/\{[^}]+\}' '' | str replace --all --regex '\{[^}]+\}' '')
+  log warn $"basePath contains undeclared template variable\(s\); stripped to '($cleaned)'. Pass --base-url at call time to substitute."
+  $cleaned
+}
+
+# The servers: one per declared scheme (https when none) on `host` + `basePath`,
+# or the single parameterized host.
+def servers [doc: record]: nothing -> list<record> {
+  let base_path = (strip-base-path-template ($doc.basePath? | default ""))
+  let parameterized = (resolve-parameterized-host $doc)
+  let urls = if ($parameterized != null) {
+    [$"($parameterized)($base_path)"]
+  } else {
+    let host = ($doc.host? | default $spec.DEFAULT_HOST)
+    let schemes = ($doc.schemes? | default [])
+    let schemes = if ($schemes | is-empty) { ["https"] } else { $schemes }
+    $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join }
+  }
+  $urls | each {|u| {url: ($u | str trim --right --char '/')} }
+}
+
+# `type: basic` is OpenAPI 3's `http` scheme `basic`; apiKey and oauth2 read
+# the same in both formats.
+def convert-security-scheme [d: any]: nothing -> any {
+  if (($d | describe) | str starts-with "record") and ($d.type? == "basic") {
+    $d | update type "http" | upsert scheme "basic"
+  } else {
+    $d
   }
 }
 
-# ── Exported dispatch record ───────────────────────────────────────
-
-export def helpers [] {
-  {
-    get-base-url: {|spec| get-all-urls-impl $spec | first }
-    get-all-urls: {|spec| get-all-urls-impl $spec }
-    # Swagger 2 has no per-operation servers.
-    get-op-base-url: {|op, path_item| null }
-    # A parameter's value facts. Swagger 2 keeps them on a non-body parameter
-    # itself, `items` included; there is no `nullable`.
-    param-facts: {|param, doc|
-      let t = ($param.type? | default "string")
-      {
-        type: $t
-        items_type: (if $t == "array" { $param.items?.type? } else { null })
-        enum: ($param.enum? | default [])
-        collection_style: (if $t != "array" { "scalar" } else {
-          match ($param.collectionFormat? | default "csv") { "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
-        })
-        default: $param.default?
-        format: $param.format?
-        example: ($param.example? | default ($param | get -o "x-example"))
-        nullable: false
-      }
-    }
-    get-body-info: {|op, doc| get-body-info-impl $op $doc }
-    get-response-content-types: {|op, doc| get-response-content-types-impl $op $doc }
-    get-response-schemas: {|op, doc| get-response-schemas-impl $op $doc }
-    get-auth-schemes: {|spec| get-auth-schemes-impl $spec }
+# Rewrite a Swagger 2.0 document as OpenAPI 3 (see the file header).
+export def to-openapi3 [doc: record]: nothing -> record {
+  let paths = ($doc.paths? | default {} | map-values {|path, item|
+    if ($path | str starts-with "x-") { $item } else { convert-path-item $item $doc }
+  })
+  let parameters = if (($doc.parameters? | describe) | str starts-with "record") {
+    $doc.parameters | map-values {|_, p| convert-param $p }
+  } else {
+    $doc.parameters?
   }
+  let schemes = ($doc.securityDefinitions? | default {} | map-values {|_, d| convert-security-scheme $d })
+  $doc
+  | upsert openapi "3.0.3"
+  | upsert servers (servers $doc)
+  | upsert components {securitySchemes: $schemes}
+  | upsert paths $paths
+  | if ($parameters == null) { $in } else { $in | upsert parameters $parameters }
 }

@@ -6,7 +6,6 @@
 #   http-gen preview ./spec.yaml
 
 use src/spec/spec.nu
-use src/spec/oa3.nu
 use src/spec/swagger2.nu
 use src/render.nu
 use src/log.nu
@@ -30,19 +29,17 @@ def check-spec-generatable [loaded: record] {
   error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
 }
 
-# Shared pipeline: detect the format, extract auth metadata, build the
-# command model. Returns {commands, auth_schemes, base_url, all_urls}.
+# Shared pipeline: bring a Swagger 2.0 document to OpenAPI 3, extract auth
+# metadata, build the command model. Returns {commands, auth_schemes,
+# base_url, all_urls}.
 def process-spec [doc: record, config: record] {
-  let h = match (spec detect $doc) {
-    "openapi" => (oa3 helpers)
-    "swagger" => (swagger2 helpers)
-  }
-  let auth_schemes = (do $h.get-auth-schemes $doc)
+  let doc = if (spec detect $doc) == "swagger" { swagger2 to-openapi3 $doc } else { $doc }
+  let auth_schemes = (spec auth-schemes $doc)
   {
-    commands: (model command-list $doc $h $auth_schemes (spec root-auth $doc $auth_schemes) $config)
+    commands: (model command-list $doc $auth_schemes (spec root-auth $doc $auth_schemes) $config)
     auth_schemes: $auth_schemes
-    base_url: (do $h.get-base-url $doc)
-    all_urls: (do $h.get-all-urls $doc)
+    base_url: (spec base-url $doc)
+    all_urls: (spec all-urls $doc)
   }
 }
 

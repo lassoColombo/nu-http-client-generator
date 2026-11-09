@@ -11,8 +11,8 @@ use names.nu [EMITTED_DEF_NAMES]
 # ── Private helpers ────────────────────────────────────────────────
 
 # The command-model record for one query/header/cookie param. The value facts
-# (type, enum, default, …) are the format's `param-facts`: OpenAPI 3 keeps them
-# under `.schema`, Swagger 2 on the param itself, and only spec knows which.
+# (type, enum, default, …) are spec's `param-facts`: they live under the
+# param's `.schema`, which model never reads itself.
 def build-param [p: record, facts: record] {
   let default_val = $facts.default
   let deprecated = ($p.deprecated? | default false)
@@ -335,7 +335,7 @@ def resolve-path-item [path_entry: record, doc: record] {
 }
 
 # Extract operation-level metadata: description, auth, server override, etc.
-def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, methods: record, h: record] {
+def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, methods: record] {
   let operation_id = ($op.operationId? | default "")
   let summary = ($op.summary? | default "")
   let description_text = ($op.description? | default "")
@@ -370,16 +370,16 @@ def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, meth
     external_docs: $external_docs
     default_auth: $default_auth
     auth_required: $auth_required
-    base_url: (do $h.get-op-base-url $op $methods)
+    base_url: (spec op-base-url $op $methods)
   }
 }
 
 # Merge path+op params, resolve refs, split into path/query/header/cookie categories.
-def classify-params [op: record, methods: record, doc: record, h: record] {
+def classify-params [op: record, methods: record, doc: record] {
   # Resolve $ref in params FIRST: the path-level/op dedup below keys on
   # `name:in`, and an unresolved `{$ref: …}` has neither, so it would survive
   # next to the op's own same-named param and emit a duplicate flag. (A `$ref`
-  # in the param's own schema is the format's business: `param-facts`.)
+  # in the param's own schema is `param-facts`' business.)
   # An API Gateway export declares a greedy label with its `+` (`name: proxy+`
   # for `/{proxy+}`). The `+` is no part of the name: strip it here, before the
   # merge, so the param binds `$proxy` like the normalized template, and keep
@@ -396,32 +396,26 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   let path_level_params = ($methods.parameters? | default [] | each $resolve)
   let op_params = ($op.parameters? | default [] | each $resolve)
 
-  # merge path-level params with operation params (op overrides path-level).
-  # The merged list keeps every location: Swagger 2 `body`/`formData` params
-  # are inherited from the path item too, and the body helper reads them here.
-  # A param is identified by name+location, except a Swagger 2 `body`: an
-  # operation has at most one, so the op's own replaces the inherited one even
-  # when the two are named differently.
-  let param_key = {|p|
-    let loc = ($p.in? | default '')
-    if $loc == "body" { "body" } else { $"($p.name? | default ''):($loc)" }
-  }
+  # Merge path-level params with operation params: a param is identified by
+  # name+location, and the op's own wins. Only path, query, header and cookie
+  # params are read; a converted Swagger 2 document keeps its body/formData
+  # params in the list, but its requestBody already carries them.
+  let param_key = {|p| $"($p.name? | default ''):($p.in? | default '')" }
   let op_param_keys = ($op_params | each $param_key)
-  let all_params = ($path_level_params | where {|p| not ((do $param_key $p) in $op_param_keys) } | append $op_params)
-  let resolved_params = ($all_params | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] })
+  let resolved_params = ($path_level_params | where {|p| not ((do $param_key $p) in $op_param_keys) } | append $op_params
+    | where {|p| ($p.in? | default "") in ["path" "query" "header" "cookie"] })
 
   # Path params keep the spec name, the (items) type and the enum: render
   # derives the positional variable name from the spec name, types an array
   # positional `list<string>` (a bare `list` would parse `[01 02]` as ints and
   # send `1,2`), and wires an enum completer like it does for flags.
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
-    let facts = (do $h.param-facts $p $doc)
+    let facts = (spec param-facts $p $doc)
     {name: $p.name, type: $facts.type, items_type: $facts.items_type, enum: (spec clean-enum-values $facts.enum), greedy: ($p.greedy? | default false)}
   }
-  let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p (do $h.param-facts $p $doc) } }
+  let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p (spec param-facts $p $doc) } }
 
   {
-    all_params: $all_params
     path_params: $path_params
     query_params: (do $in_location "query")
     header_params: (do $in_location "header")
@@ -435,8 +429,8 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
 # `options` builtins take no body argument — so for those methods every body
 # artefact (has_body, fields, shapes) is suppressed together: the client must
 # never advertise a flag it cannot send, and --dry-run must match the wire.
-def extract-body-info [method: string, op: record, doc: record, h: record, label: string] {
-  let body_info = (do $h.get-body-info $op $doc)
+def extract-body-info [method: string, op: record, doc: record, label: string] {
+  let body_info = (spec body-info $op $doc)
   let bodyless_method = ($method in ["get" "head" "options"])
   if $body_info.has_body and $bodyless_method {
     log warn $"($label): ($method | str uppercase) cannot carry a request body in nushell; the declared body/formData params are dropped and the command may be uncallable"
@@ -495,12 +489,12 @@ def extract-body-info [method: string, op: record, doc: record, h: record, label
 }
 
 # Extract response info: accept_types, return_type, success_codes, discriminator.
-def extract-response-info [method: string, op: record, doc: record, h: record] {
-  let accept_types = (do $h.get-response-content-types $op $doc)
+def extract-response-info [method: string, op: record, doc: record] {
+  let accept_types = (spec response-content-types $op $doc)
   # Best candidate first; the return type is the first schema, the
   # discriminator the first one any success response declares (a `201` next
   # to a plain `200` still documents its discriminator).
-  let schemas = (do $h.get-response-schemas $op $doc)
+  let schemas = (spec response-schemas $op $doc)
   let return_type = if ($method in ["head" "options"]) {
     "record"
   } else if ($schemas | is-empty) {
@@ -602,7 +596,7 @@ def deduplicate-commands []: list -> list {
 }
 
 # Build the command model list from a parsed+resolved REST spec.
-export def command-list [doc: record, h: record, auth_schemes: list, root_auth: record, config: record] {
+export def command-list [doc: record, auth_schemes: list, root_auth: record, config: record] {
   ($doc.paths | spec drop-vendor-extensions) | transpose path methods | each {|path_entry|
     # PATH PREFIX FILTER
     if ($config.filter_prefixes | is-not-empty) {
@@ -632,7 +626,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
         if not $has_match { return null }
       }
 
-      let meta = (extract-op-metadata $op $auth_schemes $root_auth $methods $h)
+      let meta = (extract-op-metadata $op $auth_schemes $root_auth $methods)
 
       # DEPRECATED FILTER
       if $config.exclude_deprecated and $meta.deprecated {
@@ -658,7 +652,7 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
       let greedy_names = ($clean_path | parse --regex '\{(?P<n>[^{}]+)\+\}' | get n)
       let clean_path = ($clean_path | str replace --all --regex '\{([^{}]+)\+\}' '{${1}}')
 
-      let params = (classify-params $op $methods $doc $h)
+      let params = (classify-params $op $methods $doc)
       # Synthesize path params for undeclared URL template placeholders. `-` and
       # `.` are common in placeholder names (`{user-id}`); render sanitizes the
       # variable, so they must not leave the placeholder in the URL as text.
@@ -679,8 +673,8 @@ export def command-list [doc: record, h: record, auth_schemes: list, root_auth: 
         let idx = ($clean_path | str index-of $"{($p.name)}")
         if $idx < 0 { 999999 } else { $idx }
       } | uniq-by name | each {|p| $p | update greedy ($p.greedy or ($p.name in $greedy_names)) })
-      let body = (extract-body-info $method ($op | upsert parameters $params.all_params) $doc $h $"($method | str uppercase) ($path_entry.path)")
-      let resp = (extract-response-info $method $op $doc $h)
+      let body = (extract-body-info $method $op $doc $"($method | str uppercase) ($path_entry.path)")
+      let resp = (extract-response-info $method $op $doc)
       let derived_name = (derive-command-name $op $method (if ($fixed_query | is-empty) { $clean_path } else { $"($clean_path)?($fixed_query)" }))
       let cmd_name = if ($config.name_fn? == null) {
         $derived_name.name
