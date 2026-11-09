@@ -306,8 +306,11 @@ def decorate-command [cmd: record]: nothing -> record {
   }
 }
 
-# Collapse a multi-line description into one line: it lands in a `#` comment
-# inside the `def [...]` block, where a newline would end the comment.
+# Collapse spec text into one line before it lands in a `#` comment: a newline
+# would end the comment and leave the rest as code (a YAML block-scalar
+# `title: |` made the module unparseable). Every comment that carries spec
+# text — the module header, the command's extra lines, the signature docs —
+# goes through here.
 def flatten-description [text: string]: nothing -> string {
   $text | lines | str join " "
 }
@@ -414,14 +417,14 @@ def param-doc [q: record]: nothing -> string {
     "-list" => " (array variant)"
     $s => $" \(disambiguated($s)\)"
   }
-  $"(flatten-description $q.description)($note)"
+  $"($q.description)($note)"
 }
 
 # The comment text for a decorated body field: its description and the shape
 # of a record-typed value joined by ` — `, then `(body field)` when the flag
 # took the `-body` suffix to avoid a query/header/cookie flag.
 def body-field-doc [f: record, shapes: list]: nothing -> string {
-  let text = ([(flatten-description $f.description) (lookup-shape $f.name $shapes)] | where {|t| $t | is-not-empty } | str join " — ")
+  let text = ([$f.description (lookup-shape $f.name $shapes)] | where {|t| $t | is-not-empty } | str join " — ")
   [$text (if $f.collision == "cross-group" { "(body field)" } else { "" })] | where {|t| $t | is-not-empty } | str join " "
 }
 
@@ -434,7 +437,7 @@ def render-param-group [params: list, mapping: record, config: record] {
   mut dep_flags = []
   for q in $params {
     let nu_type = (nu-type-for $q.type ($q.items_type? | default null))
-    let desc = if $config.no_descriptions or ($q.doc | is-empty) { "" } else { $" # ($q.doc)" }
+    let desc = if $config.no_descriptions or ($q.doc | is-empty) { "" } else { $" # (flatten-description $q.doc)" }
     let cname = if ($q.enum | is-not-empty) { resolve-completer $q $mapping } else { null }
     let positional = ($q.is_positional? | default false)
     $parts ++= [(render-param-sig $q.flag_name $nu_type $desc $cname --positional=$positional)]
@@ -474,7 +477,7 @@ export def build-signature [cmd: record, mapping: record, config: record] {
   # OR-form ops keep the standard `--token` + `--auth-scheme` pair.
   let auth_req = ($cmd.auth_required? | default [])
   let token_flags = if ($auth_req | length) > 1 {
-    $auth_req | each {|s| $"  --token-($s.flag_slug): string # Auth token for ($s.spec_name) \(($s.header_name)\)" }
+    $auth_req | each {|s| $"  --token-($s.flag_slug): string # (flatten-description $"Auth token for ($s.spec_name) \(($s.header_name)\)")" }
   } else {
     [
       '  --token(-t): string # Auth token'
@@ -1027,7 +1030,7 @@ def render-module-header [ctx: record, config: record] {
   let has_single_auth = ($ctx.commands | any {|c| (($c.auth_required? | default []) | length) <= 1 })
   let auth_lines = (
     (if $has_single_auth { [$'# Auth: --token flag or $env.($ctx.token_env_var)'] } else { [] })
-    | append ($and_schemes | each {|s| $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
+    | append ($and_schemes | each {|s| flatten-description $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
   )
   # `help` is listed defensively: nushell 0.116's `scope` does not report it
   # for custom commands, but hiding it costs nothing if a version does.
@@ -1132,7 +1135,7 @@ def render-command [cmd: record, mapping: record, config: record] {
   }
   if ($extra | is-not-empty) {
     $cmd_lines ++= ["#"]
-    $cmd_lines ++= $extra
+    $cmd_lines ++= ($extra | each { flatten-description $in })
   }
 
   let sig_result = (build-signature $cmd $mapping $config)
@@ -1188,9 +1191,9 @@ def render-command [cmd: record, mapping: record, config: record] {
 export def client [loaded: record, module_name: string, spec: record, config: record] {
   let auth_schemes = $spec.auth_schemes
   # Interpolated, not `into string`: unquoted YAML `version: 1.0` is a float,
-  # and `into string` would render it `1`.
-  let title = $"($loaded.data.info?.title? | default $module_name)"
-  let version_str = $"($loaded.data.info?.version? | default '0.0.0')"
+  # and `into string` would render it `1`. Both land in the header comment.
+  let title = (flatten-description $"($loaded.data.info?.title? | default $module_name)")
+  let version_str = (flatten-description $"($loaded.data.info?.version? | default '0.0.0')")
   let token_env_var = if ($config.token_env_var | is-not-empty) {
     $config.token_env_var
   } else {

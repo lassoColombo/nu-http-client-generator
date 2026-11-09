@@ -1,0 +1,49 @@
+# Spec text that spans lines wherever the generator puts it in a `#` comment.
+# A newline would end the comment and leave the rest as code, so the module
+# would not parse. Each site is flattened to one line.
+openapi: 3.0.3
+info:
+  title: |
+    Info Text
+    Edge Cases
+  version: |
+    1.0
+    beta
+servers:
+  - url: https://api.example.com
+paths:
+  /notes:
+    post:
+      operationId: createNote
+      summary: |
+        Create a note.
+        The summary spans two lines.
+      externalDocs:
+        url: https://docs.example.com/notes
+        description: |
+          Notes guide,
+          second line.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  description: |
+                    Body text,
+                    on two lines.
+                meta:
+                  type: object
+                  description: Nested record whose shape doc lists an enum.
+                  properties:
+                    kind:
+                      type: string
+                      enum:
+                        - "plain\ntext"
+                        - rich
+      responses:
+        "201":
+          description: created
