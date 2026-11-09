@@ -15,6 +15,17 @@ def runtime-source [file: string]: nothing -> list<string> {
   open --raw ($RUNTIME_DIR | path join $file) | lines
 }
 
+# The defs of a runtime file whose name is in `names`, in file order, each
+# preceded by a blank line. The file's blocks are separated by blank lines, so
+# a def must not contain one; a block with no wanted def (the file's header
+# comment) is dropped. Used for the helpers a client carries only when it
+# needs them: the per-verb senders and the AND-form `merge-auth`.
+def runtime-defs [file: string, names: list<string>]: nothing -> list<string> {
+  open --raw ($RUNTIME_DIR | path join $file) | split row "\n\n" | where {|b|
+    $b | parse --regex '(?m)^def (?<n>[^ ]+) ' | get n | any {|n| $n in $names }
+  } | each {|b| [''] ++ ($b | str trim --right | lines) } | flatten
+}
+
 # Build a NUON-like shape description from a list of body-field-like records.
 # Example output: {name: string, tag?: string, status: "active"|"inactive"}
 #
@@ -548,10 +559,11 @@ def offers-basic-credentials [auth_schemes: list]: nothing -> bool {
   $auth_schemes | any {|s| $s.prefix == "Basic" and $s.in == "header" }
 }
 
-# Render the helper functions that go into every generated client.
-# `needs_multipart` controls emission of the `build-multipart-body` helper —
-# only generated when at least one operation uses `multipart/form-data` so
-# clients that never upload files stay slim.
+# Render the helper functions that go into every generated client: the
+# spec-specific `build-auth`, then the runtime files (`src/runtime*.nu`).
+# `merge-auth`, the multipart builder and each `send-<verb>` are spliced in
+# only when some operation needs them, so a read-only client ships no POST
+# sender and a client that never uploads files no envelope builder.
 def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: bool = false, needs_and_auth: bool = false, methods_used: list<string> = [], needs_unix_socket: bool = false] {
   mut match_arms = []
   mut seen_names = []
@@ -575,66 +587,10 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
   }
   $match_arms ++= ['    _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }']
   let match_body = $match_arms | str join "\n"
-
-  # Emitted only for clients with at least one AND-form op.
-  # Merges N per-scheme auth records (each built by `build-auth`) into one:
-  # headers union (right-biased, cookies joined), query strings joined with '&', distinct
-  # non-"none" locations joined with '+'. Schemes whose token was absent return
-  # location "none" from build-auth and contribute nothing.
-  let merge_auth_block = if $needs_and_auth { [
-    ''
-    '# Merge multiple auth records (AND-form security: every scheme must be sent).'
-    'def merge-auth [parts: list]: nothing -> record {'
-    '  let active = ($parts | where {|p| $p.location != "none" })'
-    '  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })'
-    '  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")'
-    '  let locs = ($active | each {|p| $p.location } | uniq)'
-    '  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }'
-    '  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}'
-    '}'
-  ] } else { [] }
-
-  # Per-verb send helpers — emitted only for the HTTP methods this client uses.
-  # Each builds the request from the $req record the op assembled, then unwraps
-  # via handle-response. No `match $method`, no arms for verbs this client never
-  # calls. This is the composition core: an op invokes exactly one sender.
-  #
-  # When `needs_unix_socket` is set each sender branches at runtime on
-  # `$req.unix_socket`: a non-empty path adds `--unix-socket <path>` to the
-  # `http <verb>` call, an empty one connects over TCP. nushell's --unix-socket
-  # has no "no socket" sentinel (both null and "" error), so the flag must be
-  # physically present-or-absent — hence the branch rather than a passed value.
-  # The non-socket form is byte-identical to the pre-feature output.
-  let f_base = '--headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure'
-  let f_get = $f_base + ' --raw=$raw'
-  let f_body = '--headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw'
-  let f_del_body = '--headers $req.headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw'
-  let sig_bodyless = 'req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>'
-  let sig_get = 'req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>'
-  let sig_body = 'req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>'
-  # One row per verb. `call` is the `http <verb>` expression with `@SOCK@`
-  # marking where the socket flag goes. Every sender binds `let resp` and
-  # unwraps it; HEAD first surfaces just the headers on success.
-  let with_body = {|verb, flags, empty_arg| 'if ($body | is-empty) { http ' + $verb + ' ' + $f_get + '@SOCK@ $req.url' + $empty_arg + ' } else { http ' + $verb + ' ' + $flags + '@SOCK@ $req.url' + (if $verb == 'delete' { '' } else { ' $body' }) + ' }' }
-  let senders = [
-    {verb: 'get', doc: 'GET — bodyless, honours --raw', sig: $sig_get, call: ('http get ' + $f_get + '@SOCK@ $req.url')}
-    {verb: 'head', doc: 'HEAD — bodyless; default surfaces just the headers on success', sig: $sig_bodyless, call: ('http head ' + $f_base + '@SOCK@ $req.url')}
-    {verb: 'options', doc: 'OPTIONS — bodyless', sig: $sig_bodyless, call: ('http options ' + $f_base + '@SOCK@ $req.url')}
-    {verb: 'post', doc: 'POST — body + content-type', sig: $sig_body, call: (do $with_body 'post' $f_body ' ""')}
-    {verb: 'put', doc: 'PUT — body + content-type', sig: $sig_body, call: (do $with_body 'put' $f_body ' ""')}
-    {verb: 'patch', doc: 'PATCH — body + content-type', sig: $sig_body, call: (do $with_body 'patch' $f_body ' ""')}
-    {verb: 'delete', doc: 'DELETE — body via --data', sig: $sig_body, call: (do $with_body 'delete' $f_del_body '')}
-  ]
-  let head_unwrap = '  if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }'
-  let sender_block = ($senders | where verb in $methods_used | each {|s|
-    let nosock = ($s.call | str replace --all '@SOCK@' '')
-    let call = if $needs_unix_socket {
-      let sock = ($s.call | str replace --all '@SOCK@' ' --unix-socket $req.unix_socket')
-      'if ($req.unix_socket | is-empty) { ' + $nosock + ' } else { ' + $sock + ' }'
-    } else { $nosock }
-    let body = [('  let resp = ' + $call)] ++ (if $s.verb == 'head' { [$head_unwrap] } else { [] }) ++ ['  $resp | handle-response $allow_errors $full $ok_codes']
-    ['' $"# ($s.doc)" $"def send-($s.verb) [($s.sig)]: nothing -> any {"] ++ $body ++ ['}']
-  } | flatten)
+  # The senders for the verbs this client uses, in the socket-aware form when
+  # the client is generated with a Unix socket (see `runtime-send-socket.nu`).
+  let sender_file = if $needs_unix_socket { "runtime-send-socket.nu" } else { "runtime-send.nu" }
+  let senders = (runtime-defs $sender_file ($methods_used | each {|m| $"send-($m)" }))
 
   [
     '# Build auth: returns {scheme: string, headers: record, query: string, location: string}.'
@@ -648,10 +604,10 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     $match_body
     '  }'
     '}'
-    ...$merge_auth_block
+    ...(if $needs_and_auth { runtime-defs "runtime-auth-and.nu" [merge-auth] } else { [] })
     ''
     ...(runtime-source "runtime.nu")
-  ] | append $sender_block | append (if $needs_multipart { [''] ++ (runtime-source "runtime-multipart.nu") } else { [] }) | str join "\n"
+  ] | append $senders | append (if $needs_multipart { [''] ++ (runtime-source "runtime-multipart.nu") } else { [] }) | str join "\n"
 }
 
 # Build the body code for a decorated command (see `decorate-command`).
