@@ -10,19 +10,15 @@ use names.nu [EMITTED_DEF_NAMES]
 
 # ── Private helpers ────────────────────────────────────────────────
 
-# The command-model record for one query/header/cookie param. OpenAPI 3 keeps
-# the value facts under `.schema`, Swagger 2 puts them on the param itself, so
-# each is read from the schema first and the param second.
-def build-param [p: record, h: record] {
-  let schema = ($p.schema? | default {})
-  let default_val = ($schema.default? | default $p.default?)
-  let format = ($schema.format? | default $p.format?)
-  let example = ($schema.example? | default ($p.example? | default ($p | get -o "x-example")))
+# The command-model record for one query/header/cookie param. The value facts
+# (type, enum, default, …) are the format's `param-facts`: OpenAPI 3 keeps them
+# under `.schema`, Swagger 2 on the param itself, and only spec knows which.
+def build-param [p: record, facts: record] {
+  let default_val = $facts.default
   let deprecated = ($p.deprecated? | default false)
-  let nullable = (spec is-nullable $schema)
   let allow_empty = ($p.allowEmptyValue? | default false)
   let required = ($p.required? | default false)
-  let enum = (spec clean-enum-values (do $h.get-param-enum $p))
+  let enum = (spec clean-enum-values $facts.enum)
   # The value a REQUIRED param takes when the caller gives none: the spec
   # `default`, else a single-member enum (AWS JSON-RPC's `X-Amz-Target`
   # header is `required: true, enum: [one-value]`). Optional params keep
@@ -31,17 +27,17 @@ def build-param [p: record, h: record] {
   let required_default = if not $required { null } else if ($default_val != null) { $default_val } else if ($enum | length) == 1 { $enum | first } else { null }
   {
     name: $p.name
-    type: (do $h.get-param-type $p)
-    items_type: (do $h.get-param-items-type $p)
+    type: $facts.type
+    items_type: $facts.items_type
     required: $required
     required_default: $required_default
     description: (spec build-description ($p.description? | default "") (
       [(if $required { "required" } else { null })]
-      ++ (value-notes $deprecated $nullable $format $default_val $example)
+      ++ (value-notes $deprecated $facts.nullable $facts.format $default_val $facts.example)
       ++ [(if $allow_empty { "allows empty value" } else { null })]
     ))
     enum: $enum
-    collection_style: (do $h.get-param-collection-style $p)
+    collection_style: $facts.collection_style
     deprecated: $deprecated
   }
 }
@@ -382,20 +378,14 @@ def extract-op-metadata [op: record, auth_schemes: list, root_auth: record, meth
 def classify-params [op: record, methods: record, doc: record, h: record] {
   # Resolve $ref in params FIRST: the path-level/op dedup below keys on
   # `name:in`, and an unresolved `{$ref: …}` has neither, so it would survive
-  # next to the op's own same-named param and emit a duplicate flag.
-  # resolve-ref is shallow, so also resolve the nested .schema if it's a ref.
+  # next to the op's own same-named param and emit a duplicate flag. (A `$ref`
+  # in the param's own schema is the format's business: `param-facts`.)
   # An API Gateway export declares a greedy label with its `+` (`name: proxy+`
   # for `/{proxy+}`). The `+` is no part of the name: strip it here, before the
   # merge, so the param binds `$proxy` like the normalized template, and keep
   # the fact as `greedy`.
   let resolve = {|p|
     let resolved = (spec resolve-ref $p $doc)
-    let s = ($resolved.schema? | default null)
-    let resolved = if (($s | describe) | str starts-with "record") and ("$ref" in ($s | columns)) {
-      $resolved | upsert schema (spec resolve-ref $s $doc)
-    } else {
-      $resolved
-    }
     let name = ($resolved.name? | default "")
     if ($resolved.in? == "path") and (($name | describe) == "string") and ($name | str ends-with "+") {
       $resolved | update name ($name | str replace --regex '\+$' '') | upsert greedy true
@@ -425,9 +415,10 @@ def classify-params [op: record, methods: record, doc: record, h: record] {
   # positional `list<string>` (a bare `list` would parse `[01 02]` as ints and
   # send `1,2`), and wires an enum completer like it does for flags.
   let path_params = $resolved_params | where {|p| ($p.in? | default "") == "path" } | each {|p|
-    {name: $p.name, type: (do $h.get-param-type $p), items_type: (do $h.get-param-items-type $p), enum: (spec clean-enum-values (do $h.get-param-enum $p)), greedy: ($p.greedy? | default false)}
+    let facts = (do $h.param-facts $p $doc)
+    {name: $p.name, type: $facts.type, items_type: $facts.items_type, enum: (spec clean-enum-values $facts.enum), greedy: ($p.greedy? | default false)}
   }
-  let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p $h } }
+  let in_location = {|loc| $resolved_params | where {|p| ($p.in? | default "") == $loc } | each {|p| build-param $p (do $h.param-facts $p $doc) } }
 
   {
     all_params: $all_params

@@ -150,48 +150,38 @@ export def helpers [] {
       let server = ($op.servers?.0? | default $path_item.servers?.0?)
       if ($server == null) { null } else { resolve-server-url $server }
     }
-    get-param-type: {|param|
-      # support `content` field as alternative to `schema` (OA3 5.9)
-      if ($param.content? | is-not-empty) {
-        "string"
-      } else {
-        spec normalize-type ($param.schema?.type? | default "string")
-      }
-    }
-    get-param-items-type: {|param|
-      # For array-typed params, return items.type so the signature can render
-      # `list<string>` / `list<int>` instead of bare `list`. Returns null when
-      # the param isn't an array or the item type isn't a usable primitive.
-      if ($param.content? | is-not-empty) { return null }
-      let t = (spec normalize-type ($param.schema?.type? | default null))
-      if $t != "array" { return null }
-      spec normalize-type ($param.schema?.items?.type? | default null)
-    }
-    get-param-enum: {|param|
-      if ($param.content? | is-not-empty) {
-        []
-      } else {
-        $param.schema?.enum? | default []
-      }
-    }
-    get-param-collection-style: {|param|
-      if ($param.content? | is-not-empty) {
-        "scalar"
-      } else {
-        # normalize-type: OAS 3.1 `type: [array, "null"]` is still an array
-        let t = (spec normalize-type ($param.schema?.type? | default "string"))
-        let style = ($param.style? | default "form")
-        if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
-          let explode = ($param.explode? | default ($style == "form"))
-          # For an object value the emitted serializer reads "multi" as
-          # exploded `k=v` pairs and "csv" as `name=k,v,k,v` (OAS 3 §4.8.12.4).
+    # A parameter's value facts, read from its `schema` (a `$ref` resolved).
+    # A `content`-typed param (OAS 3 §4.8.12.5) is one serialized value whose
+    # schema says nothing about the wire, so it reads as an empty schema: a
+    # scalar `string`. `default`/`format`/`example` fall back to the param
+    # itself, where some specs put them.
+    param-facts: {|param, doc|
+      let raw = if ($param.content? | is-not-empty) { {} } else { spec resolve-ref ($param.schema? | default {}) $doc }
+      let schema = if (($raw | describe) | str starts-with "record") { $raw } else { {} }
+      # normalize-type: OAS 3.1 `type: [array, "null"]` is still an array
+      let t = (spec normalize-type ($schema.type? | default "string"))
+      let style = ($param.style? | default "form")
+      let explode = ($param.explode? | default ($style == "form"))
+      {
+        type: $t
+        # `list<string>` / `list<int>` in the signature instead of bare `list`;
+        # null when the items have no usable primitive type.
+        items_type: (if $t == "array" { spec normalize-type ($schema.items?.type? | default null) } else { null })
+        enum: ($schema.enum? | default [])
+        # For an object value the emitted serializer reads "multi" as exploded
+        # `k=v` pairs and "csv" as `name=k,v,k,v` (OAS 3 §4.8.12.4).
+        collection_style: (if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
           match $style {
             "form" => { if $explode { "multi" } else { "csv" } }
             "spaceDelimited" => "ssv"
             "pipeDelimited" => "pipes"
             _ => "csv"
           }
-        }
+        })
+        default: ($schema.default? | default $param.default?)
+        format: ($schema.format? | default $param.format?)
+        example: ($schema.example? | default ($param.example? | default ($param | get -o "x-example")))
+        nullable: (spec is-nullable $schema)
       }
     }
     get-body-info: {|op, doc| get-body-info-impl $op $doc }

@@ -175,24 +175,21 @@ export def helpers [] {
     get-all-urls: {|spec| get-all-urls-impl $spec }
     # Swagger 2 has no per-operation servers.
     get-op-base-url: {|op, path_item| null }
-    get-param-type: {|param|
-      $param.type? | default "string"
-    }
-    get-param-items-type: {|param|
-      # Swagger 2 puts the items schema directly on the param, not under
-      # `.schema`. Returns null for non-array params.
-      let t = ($param.type? | default null)
-      if $t != "array" { return null }
-      $param.items?.type? | default null
-    }
-    get-param-enum: {|param|
-      $param.enum? | default []
-    }
-    get-param-collection-style: {|param|
+    # A parameter's value facts. Swagger 2 keeps them on a non-body parameter
+    # itself, `items` included; there is no `nullable`.
+    param-facts: {|param, doc|
       let t = ($param.type? | default "string")
-      if $t != "array" { "scalar" } else {
-        let cf = ($param.collectionFormat? | default "csv")
-        match $cf { "csv" => "csv", "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
+      {
+        type: $t
+        items_type: (if $t == "array" { $param.items?.type? } else { null })
+        enum: ($param.enum? | default [])
+        collection_style: (if $t != "array" { "scalar" } else {
+          match ($param.collectionFormat? | default "csv") { "ssv" => "ssv", "tsv" => "tsv", "pipes" => "pipes", "multi" => "multi", _ => "csv" }
+        })
+        default: $param.default?
+        format: $param.format?
+        example: ($param.example? | default ($param | get -o "x-example"))
+        nullable: false
       }
     }
     get-body-info: {|op, doc| get-body-info-impl $op $doc }
