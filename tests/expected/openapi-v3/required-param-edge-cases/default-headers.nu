@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -195,14 +205,14 @@ export def "search" [
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let cookie_str = {"session": $session} | items {|k, v| if $v == null { null } else { $"($k)=($v)" } } | compact | str join "; "
-  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Cookie: $cookie_str}))
   let req = {
     method: "get"
     url: $full_url
     query: ({"q": $q, "sort": $sort, "strict": $strict, "limit": $limit, "fields": $fields} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -238,14 +248,14 @@ export def "list-clusters" [
   let req_body = {"ClusterStates": $cluster_states} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"X-Amz-Target": $x_amz_target} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
     query: ({"Marker": $marker} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -283,16 +293,16 @@ export def "notify" [
   let req_body = {"skuId": $sku_id} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let effective_ct = ($content_type | default "application/json")
   let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else if ($effective_ct =~ '\+json\s*(;|$)') { (if (($req_body | describe) =~ '^(record|list|table)') { $req_body | to json -r } else { $req_body }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
     query: ({"accountName": $account_name} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: $effective_ct
     timeout: ($max_time | default 30min)

@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -192,12 +202,12 @@ export def "get-books" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/books" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -227,12 +237,12 @@ export def "get-book" [
   if ($book_id | is-empty) { error make --unspanned { msg: "path parameter 'bookId' must be non-empty" } }
   let full_url = (build-url $base ({book_id: (encode-path-segment $book_id)} | format pattern "/books/{book_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -264,12 +274,12 @@ export def "create-tome" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -301,12 +311,12 @@ export def "create-tome-v1" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -336,12 +346,12 @@ export def "remove-scroll" [
   if ($isbn | is-empty) { error make --unspanned { msg: "path parameter 'isbn' must be non-empty" } }
   let full_url = (build-url $base ({isbn: (encode-path-segment $isbn)} | format pattern "/scrolls/{isbn}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -371,12 +381,12 @@ export def "delete-scroll" [
   if ($position | is-empty) { error make --unspanned { msg: "path parameter 'position' must be non-empty" } }
   let full_url = (build-url $base ({position: (encode-path-segment $position)} | format pattern "/v1/scrolls/{position}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -412,12 +422,12 @@ export def "replace-block-v1" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -453,12 +463,12 @@ export def "replace-block-v2" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -496,12 +506,12 @@ export def "replace-catalog-v1" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -539,12 +549,12 @@ export def "replace-catalog-v2" [
   let req_body = $body
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)

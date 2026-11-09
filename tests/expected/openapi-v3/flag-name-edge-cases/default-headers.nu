@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -186,16 +196,16 @@ export def "widgets-list" [
   let qp = [(serialize-qp "{field-name}" $field_name "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "if" $if "scalar") (serialize-qp "null" $null "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/widgets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Notion-Version": $notion_version, "X-Request-Id": $x_request_id, "XCustomHeader": $x_custom_header, "X-Ids": (if ($x_ids | describe | str starts-with "list") { $x_ids | compact | each { into string } | str join "," } else { $x_ids })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let cookie_str = {"tags": (if ($tags | describe | str starts-with "list") { $tags | compact | each { into string } | str join "," } else { $tags })} | items {|k, v| if $v == null { null } else { $"($k)=($v)" } } | compact | str join "; "
-  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }
+  let auth = ($auth | update headers (merge-headers $auth.headers {Cookie: $cookie_str}))
   let req = {
     method: "get"
     url: $full_url
     query: ({"{field-name}": $field_name, "sort": $sort, "from": $from, "to": $to, "if": $if, "null": $null} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)

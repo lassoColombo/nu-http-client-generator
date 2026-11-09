@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -187,12 +197,12 @@ export def "create-tree" [
   let req_body = {"value": $value, "children": $children} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -222,12 +232,12 @@ export def "get-aliased" [
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliased" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: ({"page": $page} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -260,12 +270,12 @@ export def "create-aliased" [
   let req_body = {"name": $name, "count": $count} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -295,12 +305,12 @@ export def "list-pets" [
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pets" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: ({"status": $status} | compact)
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -330,12 +340,12 @@ export def "get-pet" [
   if ($pet_id | is-empty) { error make --unspanned { msg: "path parameter 'petId' must be non-empty" } }
   let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pets/{pet_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -365,12 +375,12 @@ export def "list-pet-photos" [
   if ($pet_id | is-empty) { error make --unspanned { msg: "path parameter 'petId' must be non-empty" } }
   let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id)} | format pattern "/pets/{pet_id}/photos") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -403,12 +413,12 @@ export def "list-clusters" [
   let req_body = {"CreatedAfter": $created_after, "ClusterStates": $cluster_states} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -442,12 +452,12 @@ export def "create-outer" [
   let req_body = {"leaf_field": $leaf_field, "mid_field": $mid_field, "outer_field": $outer_field} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -476,12 +486,12 @@ export def "get-kinded" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kinded" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -513,12 +523,12 @@ export def "create-deep" [
   let req_body = {"deep_field": $deep_field} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -547,12 +557,12 @@ export def "create-kinded" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kinded-created" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: "application/json"
     timeout: ($max_time | default 30min)

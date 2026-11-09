@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # POST — body + content-type
 def send-post [req: record, body: any, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = if ($body | is-empty) { http post --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url "" } else { http post --headers $req.headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url $body }
@@ -187,12 +197,12 @@ export def "create-pet" [
   let req_body = {"name": $name, "kind": $kind, "meow": $meow, "lives": $lives, "bark": $bark} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -229,12 +239,12 @@ export def "create-any-pet" [
   let req_body = {"name": $name, "kind": $kind, "meow": $meow, "lives": $lives, "bark": $bark} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)
@@ -271,12 +281,12 @@ export def "create-deep-pet" [
   let req_body = {"name": $name, "kind": $kind, "meow": $meow, "lives": $lives, "ageWeeks": $age_weeks} | compact
   let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: $req_body
     content_type: "application/json"
     timeout: ($max_time | default 30min)

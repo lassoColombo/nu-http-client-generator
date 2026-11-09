@@ -123,6 +123,16 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
   let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
@@ -180,12 +190,12 @@ export def "get-item-sub" [
   if ($zone_id | is-empty) { error make --unspanned { msg: "path parameter 'zoneId' must be non-empty" } }
   let full_url = (build-url $base ({pet_id: (encode-path-segment $pet_id), account_id: (encode-path-segment $account_id), zone_id: (encode-path-segment $zone_id)} | format pattern "/items/{pet_id}/sub/{account_id}/{zone_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)
@@ -217,12 +227,12 @@ export def "get-mixed" [
   if ($a | is-empty) { error make --unspanned { msg: "path parameter 'a' must be non-empty" } }
   let full_url = (build-url $base ({b: (encode-path-segment $b), a: (encode-path-segment $a)} | format pattern "/mixed/{b}/{a}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
     query: {}
-    headers: ({"X-Test": "value"} | merge $auth.headers)
+    headers: (merge-headers {"X-Test": "value"} $auth.headers)
     body: null
     content_type: null
     timeout: ($max_time | default 30min)

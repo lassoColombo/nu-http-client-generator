@@ -15,6 +15,7 @@ use ../mod.nu
 
 const AUTH_SPEC = "tests/inputs/openapi-v3/auth-edge-cases.yaml"
 const GLOBAL_AND_SPEC = "tests/inputs/openapi-v3/auth-global-and-edge-cases.yaml"
+const COOKIE_SPEC = "tests/inputs/openapi-v3/cookie-auth-edge-cases.yaml"
 
 # Run a generated command and return its parsed output. Shells out to a clean
 # nu process so the test environment stays clean (no env-var leakage into the
@@ -34,7 +35,9 @@ def setup []: nothing -> record {
     let global_client = ($temp | path join "global.nu")
     mod $AUTH_SPEC -o $client
     mod $GLOBAL_AND_SPEC -o $global_client
-    { temp: $temp, client: $client, global_client: $global_client }
+    let cookie_client = ($temp | path join "cookie.nu")
+    mod $COOKIE_SPEC -o $cookie_client
+    { temp: $temp, client: $client, global_client: $global_client, cookie_client: $cookie_client }
 }
 
 @after-all
@@ -114,4 +117,25 @@ def "global and-form public override drops all auth" [] {
     let r = (run-cmd $in.global_client 'get-public --dry-run')
     assert equal $r.auth.location "none" "security: [] override must yield no auth"
     assert (("X-App-Key" not-in ($r.headers | columns)) and ("X-App-Token" not-in ($r.headers | columns))) "public op must send no auth headers"
+}
+
+# ── Cookie auth: every cookie travels in one joined header ───────────────
+
+@test
+def "a cookie param keeps the cookie auth token" [] {
+    let r = (run-cmd $in.cookie_client 'get-profile --token T --lang it --dry-run')
+    assert equal $r.headers.Cookie "session=T; lang=it"
+}
+
+@test
+def "and-form joins two cookie schemes and a cookie param" [] {
+    let r = (run-cmd $in.cookie_client 'get-pair --token-sess A --token-csrf B --theme dark --dry-run')
+    assert equal $r.headers.Cookie "session=A; csrf=B; theme=dark"
+    assert equal $r.auth.location "cookie"
+}
+
+@test
+def "an unset cookie param sends no cookie header" [] {
+    let r = (run-cmd $in.cookie_client 'get-public --dry-run')
+    assert ("Cookie" not-in ($r.headers | columns))
 }

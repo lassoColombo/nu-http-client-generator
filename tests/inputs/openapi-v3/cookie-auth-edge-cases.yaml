@@ -1,0 +1,62 @@
+# Cookie-located auth next to cookie params. A request sends every cookie in
+# one `Cookie` header, so the auth cookie and the param cookies must be joined,
+# not merged key-wise (the later `Cookie` used to replace the earlier one).
+openapi: 3.0.3
+info:
+  title: Cookie Auth Edge Cases
+  version: "1.0"
+servers:
+  - url: https://api.example.com
+components:
+  securitySchemes:
+    sess:
+      type: apiKey
+      in: cookie
+      name: session
+    csrf:
+      type: apiKey
+      in: cookie
+      name: csrf
+security:
+  - sess: []
+paths:
+  /profile:
+    get:
+      operationId: getProfile
+      summary: Cookie auth plus a cookie param
+      parameters:
+        - name: lang
+          in: cookie
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+  /pair:
+    get:
+      operationId: getPair
+      summary: AND-form of two cookie schemes plus a cookie param
+      security:
+        - sess: []
+          csrf: []
+      parameters:
+        - name: theme
+          in: cookie
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+  /public:
+    get:
+      operationId: getPublic
+      summary: Public op with a cookie param only
+      security: []
+      parameters:
+        - name: lang
+          in: cookie
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok

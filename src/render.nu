@@ -575,7 +575,7 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
 
   # Emitted only for clients with at least one AND-form op.
   # Merges N per-scheme auth records (each built by `build-auth`) into one:
-  # headers union (right-biased), query strings joined with '&', distinct
+  # headers union (right-biased, cookies joined), query strings joined with '&', distinct
   # non-"none" locations joined with '+'. Schemes whose token was absent return
   # location "none" from build-auth and contribute nothing.
   let merge_auth_block = if $needs_and_auth { [
@@ -583,7 +583,7 @@ def render-helpers [token_env_var: string, auth_schemes: list, needs_multipart: 
     '# Merge multiple auth records (AND-form security: every scheme must be sent).'
     'def merge-auth [parts: list]: nothing -> record {'
     '  let active = ($parts | where {|p| $p.location != "none" })'
-    '  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })'
+    '  let headers = ($parts | reduce --fold {} {|p, acc| merge-headers $acc $p.headers })'
     '  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")'
     '  let locs = ($active | each {|p| $p.location } | uniq)'
     '  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }'
@@ -817,27 +817,29 @@ export def build-body-code [cmd: record, config: record] {
 
   # Emit the hardcoded `Accept` default FIRST, then merge user-driven
   # `extra_headers` (which may carry the user's `--hdr-accept` value) on top.
-  # Nushell's `merge` is right-biased — the last operand wins on key collision,
-  # so this ordering guarantees user-supplied Accept (and any other header
-  # param the user set) overrides the spec-default.
+  # `merge-headers` is right-biased like `merge` — the last operand wins on key
+  # collision, so this ordering guarantees user-supplied Accept (and any other
+  # header param the user set) overrides the spec-default. Every header merge
+  # goes through it because it is the one that keeps both sides' cookies.
   let default_accept = ($cmd.accept_types | first)
   if ($cmd.accept_types | length) > 1 {
     $lines ++= [$"  let accept_val = \($accept | default ($default_accept | to nuon)\)"]
   } else {
     $lines ++= [$"  let accept_val = ($default_accept | to nuon)"]
   }
-  $lines ++= ['  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))']
+  $lines ++= ['  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))']
 
   if ($cmd.header_params | is-not-empty) {
     let hp_record = (render-param-record $cmd.header_params)
     $lines ++= [$"  let extra_headers = {($hp_record)} | compact"]
-    $lines ++= ['  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))']
+    $lines ++= ['  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))']
   }
 
   if ($cmd.cookie_params | is-not-empty) {
     let cp_record = (render-param-record $cmd.cookie_params)
     $lines ++= [$"  let cookie_str = {($cp_record)} | items {|k, v| if $v == null { null } else { $\"\($k\)=\($v\)\" } } | compact | str join \"; \""]
-    $lines ++= ['  let auth = if ($cookie_str | is-not-empty) { $auth | update headers ($auth.headers | merge {Cookie: $cookie_str}) } else { $auth }']
+    # An empty `$cookie_str` adds nothing: merge-headers drops empty cookies.
+    $lines ++= ['  let auth = ($auth | update headers (merge-headers $auth.headers {Cookie: $cookie_str}))']
   }
 
   # multipart/form-data: encode the request body as an RFC 7578 envelope so
@@ -933,10 +935,10 @@ export def build-body-code [cmd: record, config: record] {
   } else { '{}' }
   # Final request headers: $auth.headers already carries auth token + Accept +
   # header/cookie params; fold any static default-headers UNDER them so an
-  # op-set value wins on collision (matches the old do-request merge order).
+  # op-set value wins on collision, and a default Cookie joins the op's own.
   let req_headers_expr = if ($config.default_headers? | is-not-empty) {
     let pairs = ($config.default_headers | items {|k, v| $'($k | to nuon): ($v | to nuon)' } | str join ", ")
-    $"\({($pairs)} | merge $auth.headers\)"
+    $"\(merge-headers {($pairs)} $auth.headers\)"
   } else { '$auth.headers' }
   # ok_codes: the spec's declared success codes; [] falls back to < 400 at runtime.
   let ok_codes_expr = $"[($cmd.success_codes? | default [] | each {|c| $c | into string } | str join ' ')]"

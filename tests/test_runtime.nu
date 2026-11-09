@@ -137,6 +137,14 @@ def "merge-body-input takes a piped scalar only when the flags gave nothing" [] 
 }
 
 @test
+def "merge-headers lets the right side win except for cookies" [] {
+    assert equal (rt 'merge-headers {A: 1, B: 2} {B: 3}') {A: 1, B: 3}
+    assert equal (rt 'merge-headers {Cookie: "s=1"} {Cookie: "l=it"}') {Cookie: "s=1; l=it"} "both cookie strings are kept"
+    assert equal (rt 'merge-headers {Cookie: "s=1"} {A: 1}') {A: 1, Cookie: "s=1"}
+    assert equal (rt 'merge-headers {A: 1} {Cookie: ""}') {A: 1} "an empty cookie adds no header"
+}
+
+@test
 def "merge-body-input keeps the flags when nothing is piped" [] {
     for mode in [record list scalar] {
         assert equal (rt $'merge-body-input null {b: 1} "($mode)"') {b: 1}
