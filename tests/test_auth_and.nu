@@ -139,3 +139,19 @@ def "an unset cookie param sends no cookie header" [] {
     let r = (run-cmd $in.cookie_client 'get-public --dry-run')
     assert ("Cookie" not-in ($r.headers | columns))
 }
+
+# ── single-scheme placement ──────────────────────────────────────────────
+
+@test
+def "an Authorization apiKey takes the prefix its description names" [] {
+    assert equal (run-cmd $in.client 'get-swashbuckle-authorization --token T --dry-run').headers.Authorization "Bearer T" "Swashbuckle's text names JWT but the Bearer scheme"
+    assert equal (run-cmd $in.client 'get-jwt-authorization --token T --dry-run').headers.Authorization "JWT T"
+    assert equal (run-cmd $in.client 'get-static-authorization --token T --dry-run').headers.Authorization "STATIC T"
+}
+
+@test
+def "optional auth sends the token when given and nothing otherwise" [] {
+    assert equal (run-cmd $in.client 'get-optional --token T --dry-run').url "https://api.example.com/optional?api_key=T"
+    let r = (run-cmd $in.client 'get-optional --dry-run')
+    assert equal [$r.url $r.auth.location] ["https://api.example.com/optional" none]
+}

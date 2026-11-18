@@ -21,18 +21,39 @@ components:
     basicAuth:
       type: http
       scheme: basic
-    # apiKey in header; description mentions JWT -> jwt prefix detection
+    # apiKey in a custom header -> scheme named after the header, raw value;
+    # the description's hints only matter for an `Authorization` header
     jwtHeader:
       type: apiKey
       in: header
       name: X-JWT-Token
       description: A JWT bearer token issued by the auth server.
-    # apiKey in header named Authorization with a "static" hint -> static prefix
+    # apiKey in a custom header, like jwtHeader
     staticHeader:
       type: apiKey
       in: header
       name: X-Static-Key
       description: A static, long-lived API key. Does not expire.
+    # apiKey in a header named Authorization: the prefix comes from the
+    # description. Swashbuckle's stock text names JWT but says "Bearer scheme"
+    # -> Authorization: Bearer (scheme "bearer").
+    swashbuckleAuthorization:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
+    # Only a JWT hint -> Authorization: JWT (scheme "jwt").
+    jwtAuthorization:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: A JWT issued by the auth server.
+    # Only a static hint -> Authorization: STATIC (scheme "static").
+    staticAuthorization:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: A static, long-lived API key.
     # apiKey in query -> scheme name prefixed "query-", value goes in the URL
     queryKey:
       type: apiKey
@@ -102,6 +123,38 @@ paths:
       operationId: getStatic
       security:
         - staticHeader: []
+      responses:
+        '200': {description: ok}
+  # Per-op apiKey in an Authorization header, one per description hint.
+  /swashbuckle-authorization:
+    get:
+      operationId: getSwashbuckleAuthorization
+      security:
+        - swashbuckleAuthorization: []
+      responses:
+        '200': {description: ok}
+  /jwt-authorization:
+    get:
+      operationId: getJwtAuthorization
+      security:
+        - jwtAuthorization: []
+      responses:
+        '200': {description: ok}
+  /static-authorization:
+    get:
+      operationId: getStaticAuthorization
+      security:
+        - staticAuthorization: []
+      responses:
+        '200': {description: ok}
+  # Optional auth: `{}` OR queryKey. The first non-empty requirement is the
+  # default scheme, so a token is sent when given and nothing otherwise.
+  /optional:
+    get:
+      operationId: getOptional
+      security:
+        - {}
+        - queryKey: []
       responses:
         '200': {description: ok}
   # Per-op apiKey-in-query.

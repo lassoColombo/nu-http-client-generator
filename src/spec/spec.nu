@@ -214,19 +214,21 @@ export def detect [spec: record]: nothing -> string {
   }
 }
 
-# The schemes named by a security requirement list's FIRST requirement object,
-# resolved against the parsed auth schemes. Shared by the root-level
-# `security` (`root-auth`) and the per-op override in model, so the two read
-# the same thing. Returns
+# The schemes named by a security requirement list's first non-empty
+# requirement object, resolved against the parsed auth schemes. Shared by the
+# root-level `security` (`root-auth`) and the per-op override in model, so the
+# two read the same thing. Returns
 # {declared: list<string>, schemes: list<record>}: `declared` is the raw
-# scheme names (empty when the first requirement is `{}` or not a record);
-# `schemes` is the resolved records, unknown names dropped, wire-identical
-# duplicates collapsed. A list longer than one is the AND-form (every scheme
-# must be sent together); the OR-form outer array only contributes its first
-# alternative.
+# scheme names (empty when every requirement is `{}`, the list is empty, or
+# nothing in it is a record); `schemes` is the resolved records, unknown names
+# dropped, wire-identical duplicates collapsed. A list longer than one is the
+# AND-form (every scheme must be sent together); the OR-form outer array only
+# contributes its first alternative. An empty requirement next to a real one
+# (`[{}, {key: []}]`) is optional auth: the key is the scheme, and the runtime
+# sends nothing when no token is given.
 export def requirement-schemes [security: any, auth_schemes: list]: nothing -> record {
-  let first_req = ($security | default [] | get -o 0)
-  let declared = if (($first_req | describe) | str starts-with "record") { $first_req | columns } else { [] }
+  let first_req = ($security | default [] | where {|r| ($r | describe | str starts-with "record") and ($r | is-not-empty) } | get -o 0)
+  let declared = if ($first_req == null) { [] } else { $first_req | columns }
   let schemes = ($declared | each {|n| $auth_schemes | where {|s| $s.spec_name == $n } | get -o 0 } | collapse-wire-identical)
   {declared: $declared, schemes: $schemes}
 }
@@ -476,7 +478,9 @@ def build-td-fields [properties: record, doc: record, depth: int, max_depth: int
 # {spec_name, name, header_name, prefix, in}. `name` is the `--auth-scheme`
 # value: the HTTP scheme (`bearer`, `basic`, prefix capitalized); for an
 # apiKey `query-<param>` / `cookie-<name>`, the lowercased header name, or,
-# for an `Authorization` header, `jwt`/`static`/`bearer` by the description;
+# for an `Authorization` header, the prefix the description names: `bearer`
+# when it mentions Bearer (Swashbuckle's stock "JWT Authorization header using
+# the Bearer scheme"), else `jwt` or `static` on those words, else `bearer`;
 # `bearer` for oauth2 and openIdConnect. An unknown type is logged and treated
 # as bearer.
 export def auth-schemes [doc: record]: nothing -> list<record> {
@@ -494,7 +498,7 @@ export def auth-schemes [doc: record]: nothing -> list<record> {
         {spec_name: $spec_name, name: $"cookie-($hdr)", header_name: $hdr, prefix: "", in: "cookie"}
       } else if ($hdr | str lowercase) == "authorization" {
         let desc = ($d.description? | default "")
-        let pfx = if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
+        let pfx = if ($desc =~ '(?i)bearer') { "Bearer" } else if ($desc =~ '(?i)jwt') { "JWT" } else if ($desc =~ '(?i)static') { "STATIC" } else { "Bearer" }
         {spec_name: $spec_name, name: ($pfx | str lowercase), header_name: "Authorization", prefix: $pfx, in: "header"}
       } else {
         {spec_name: $spec_name, name: ($hdr | str lowercase), header_name: $hdr, prefix: "", in: "header"}

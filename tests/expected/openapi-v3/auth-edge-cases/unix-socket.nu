@@ -15,6 +15,8 @@ const CLIENT = {
     {name: basic, in: header, header_name: Authorization, prefix: Basic}
     {name: x-jwt-token, in: header, header_name: X-JWT-Token, prefix: ""}
     {name: x-static-key, in: header, header_name: X-Static-Key, prefix: ""}
+    {name: jwt, in: header, header_name: Authorization, prefix: JWT}
+    {name: static, in: header, header_name: Authorization, prefix: STATIC}
     {name: query-api_key, in: query, header_name: api_key, prefix: ""}
     {name: x-api-key-a, in: header, header_name: X-Api-Key-A, prefix: ""}
     {name: x-api-key-b, in: header, header_name: X-Api-Key-B, prefix: ""}
@@ -429,14 +431,14 @@ def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> 
 }
 
 def base-url-completer [] { ["https://api.example.com"] }
-def auth-scheme-completer [] { ["bearer" "basic" "x-jwt-token" "x-static-key" "query-api_key" "x-api-key-a" "x-api-key-b" "cookie-brain.sid" "none" "basic-credentials"] }
+def auth-scheme-completer [] { ["bearer" "basic" "x-jwt-token" "x-static-key" "jwt" "static" "query-api_key" "x-api-key-a" "x-api-key-b" "cookie-brain.sid" "none" "basic-credentials"] }
 def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket" "token-apikeya" "token-apikeyb" "token-querykey"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-default-auth" "get-basic" "get-jwt" "get-static" "get-query-key" "get-cookie-key" "get-oauth" "get-oidc" "get-public" "get-and-header" "get-and-mixed" "get-and-identical" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-default-auth" "get-basic" "get-jwt" "get-static" "get-swashbuckle-authorization" "get-jwt-authorization" "get-static-authorization" "get-optional" "get-query-key" "get-cookie-key" "get-oauth" "get-oidc" "get-public" "get-and-header" "get-and-mixed" "get-and-identical" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -555,6 +557,110 @@ export def "get-static" [
     accept: ["application/json"]
     ok: [200]
     auth: x-static-key
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /swashbuckle-authorization
+#
+# operationId: getSwashbuckleAuthorization
+export def "get-swashbuckle-authorization" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/swashbuckle-authorization"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /jwt-authorization
+#
+# operationId: getJwtAuthorization
+export def "get-jwt-authorization" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/jwt-authorization"
+    accept: ["application/json"]
+    ok: [200]
+    auth: jwt
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /static-authorization
+#
+# operationId: getStaticAuthorization
+export def "get-static-authorization" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/static-authorization"
+    accept: ["application/json"]
+    ok: [200]
+    auth: static
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /optional
+#
+# operationId: getOptional
+export def "get-optional" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/optional"
+    accept: ["application/json"]
+    ok: [200]
+    auth: query-api_key
   } {
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
   }
