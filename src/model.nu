@@ -247,8 +247,9 @@ def schema-discriminator [schema: any, context: string] {
 #      `build-auth` resolves to the generated command (`unknown_flag` /
 #      `extra_positional` at parse time, or a silent wrong call at runtime for
 #      input-only builtins like `is-not-empty`). Every single-word builtin of
-#      nushell 0.116 is listed; the set rarely changes and the cost of an
+#      nushell 0.117 is listed; the set rarely changes and the cost of an
 #      unneeded entry is one slug-named command, not a broken client.
+#      `tests/test_reserved_names.nu` fails when a nushell release adds one.
 #   3. The module's own defs (`EMITTED_DEF_NAMES` in `names.nu`) and the enum
 #      completers (`*-completer`). A collision is
 #      `nu::parser::duplicate_command_def`.
@@ -257,7 +258,7 @@ def schema-discriminator [schema: any, context: string] {
 # — that one lives in render and is about variables, not commands.
 const PARSER_KEYWORDS = [
   alias break collect const continue def export export-env extern for hide if let loop match module
-  mut overlay plugin return run source source-env try use where while
+  mut overlay plugin return run source source-env try type use where while
 ]
 const NU_BUILTIN_COMMANDS = [
   abbr all ansi any append ast attr bits bytes cal cd char chunk-by chunks clear columns combinations
@@ -267,7 +268,7 @@ const NU_BUILTIN_COMMANDS = [
   ignore input insert inspect interleave intersect into is-admin is-empty is-not-empty is-redirected
   is-terminal items job join keybindings kill last length let-env lines load-env ls math matrix merge
   metadata mkdir mktemp move mv nu-check nu-highlight open panic par-each parse path peek
-  permutations port prepend print ps random reduce reject rename reverse rm roll rotate
+  permutations port prepend print ps random record reduce reject rename reverse rm roll rotate
   run-external run-internal save schema scope select semver seq shuffle skip sleep slice sort sort-by
   split start stor str sys table take tee term timeit to touch transpose tui tutor ulimit umask uname
   union uniq uniq-by unlet update upsert url values version view watch which whoami window with-env
