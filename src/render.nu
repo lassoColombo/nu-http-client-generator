@@ -541,10 +541,10 @@ def client-const [ctx: record, config: record, default_sock: any]: nothing -> li
   ]
 }
 
-# The body part of a descriptor: the encoding (`body_kind`, decided by model),
-# what pipeline input the body takes (`merge-body-input`'s `accepts`), the
-# per-field flags unless the body is one `--body` value, and the multipart
-# fields sent as files.
+# The body part of a descriptor: the media type and its encoding
+# (`body_kind`), both decided by model; what pipeline input the body takes
+# (`merge-body-input`'s `accepts`); the per-field flags unless the body is one
+# `--body` value; and the multipart fields sent as files.
 def body-descriptor [cmd: record]: nothing -> record {
   # A oneOf/anyOf with an array variant takes a piped list as the whole body;
   # a scalar or opaque body takes any piped value; else only a record merges.
@@ -580,7 +580,7 @@ def body-descriptor [cmd: record]: nothing -> record {
       ($f.type? | default "") == "file" or (($f.type? | default "") == "string" and ($f.format? | default null) == "binary")
     } | each {|f| $f.name }
   }
-  {kind: $cmd.body_kind}
+  {content_type: $cmd.content_type, kind: $cmd.body_kind}
   | merge (if $accepts == "record" { {} } else { {accepts: $accepts} })
   | merge (if ($fields | is-empty) { {} } else { {fields: $fields} })
   | merge (if ($files | is-empty) { {} } else { {files: $files} })
@@ -621,7 +621,6 @@ def op-descriptor [cmd: record]: nothing -> record {
     [query $query]
     [header ($cmd.header_params | each $simple)]
     [cookie ($cmd.cookie_params | each $simple)]
-    [content_type (if ($cmd.method in [get head options]) { null } else { $cmd.content_type })]
     [body (if $cmd.has_body { body-descriptor $cmd } else { null })]
     [accept $cmd.accept_types]
     [ok ($cmd.success_codes? | default [])]

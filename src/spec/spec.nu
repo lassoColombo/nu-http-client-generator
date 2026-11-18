@@ -613,7 +613,7 @@ export def param-facts [param: record, doc: record]: nothing -> record {
 export def body-info [op: record, doc: record]: nothing -> record {
   let request_body = $op.requestBody?
   if ($request_body | is-empty) {
-    return {has_body: false, body_schema: {}, content_type: $CT_JSON, encoding: {}}
+    return {has_body: false, body_schema: {}, content_type: null, encoding: {}}
   }
   let content = ((resolve-ref $request_body $doc).content? | default {})
   let preferred = ($CT_PRIORITY | where {|ct| $content | get -o $ct | is-not-empty } | get -o 0)

@@ -268,8 +268,8 @@ def "build-request comma-joins array headers and joins every cookie" [] {
 @test
 def "build-request assembles a JSON body from its fields and pipeline input" [] {
     let op = {
-        method: post, path: "/b", content_type: application/json
-        body: {kind: json, fields: [{name: name, var: name}, {name: tag, var: tag}, {name: id, var: id, required: true}]}
+        method: post, path: "/b"
+        body: {content_type: application/json, kind: json, fields: [{name: name, var: name}, {name: tag, var: tag}, {name: id, var: id, required: true}]}
         accept: [application/json], ok: [201], auth: bearer
     }
     let r = (build $op {name: n, tag: null, id: 3} {extra: 1, name: piped})
@@ -284,8 +284,8 @@ def "build-request assembles a JSON body from its fields and pipeline input" [] 
 @test
 def "build-request encodes every JSON value, empty and scalar ones included" [] {
     let op = {
-        method: put, path: "/j", content_type: application/json
-        body: {kind: json, accepts: scalar}
+        method: put, path: "/j"
+        body: {content_type: application/json, kind: json, accepts: scalar}
         accept: [application/json], ok: [], auth: bearer
     }
     assert equal (build $op {body: []}).wire "[]"
@@ -294,15 +294,15 @@ def "build-request encodes every JSON value, empty and scalar ones included" [] 
     assert equal (build $op {body: false}).wire "false"
     assert equal (build $op {body: '{"pre":1}'}).wire '{"pre":1}' "a string is already JSON text"
     assert equal (build $op {body: null}).wire null "no body sends nothing"
-    let patch = ($op | merge {content_type: application/merge-patch+json, body: {kind: json, fields: [{name: a, var: a}]}})
+    let patch = ($op | merge {body: {content_type: application/merge-patch+json, kind: json, fields: [{name: a, var: a}]}})
     assert equal (build $patch {a: 1}).wire '{"a":1}' "a +json type is JSON"
 }
 
 @test
 def "a per-field body without flags or input is no body, a piped empty record is one" [] {
     let op = {
-        method: post, path: "/p", content_type: application/json
-        body: {kind: json, fields: [{name: a, var: a}]}
+        method: post, path: "/p"
+        body: {content_type: application/json, kind: json, fields: [{name: a, var: a}]}
         accept: [application/json], ok: [], auth: bearer
     }
     let r = (build $op {a: null})
@@ -313,14 +313,14 @@ def "a per-field body without flags or input is no body, a piped empty record is
 @test
 def "build-request encodes form and opaque bodies for the wire" [] {
     let form = {
-        method: post, path: "/f", content_type: application/x-www-form-urlencoded
-        body: {kind: form, fields: [{name: tags, var: tags, join: ","}, {name: n, var: n}]}
+        method: post, path: "/f"
+        body: {content_type: application/x-www-form-urlencoded, kind: form, fields: [{name: tags, var: tags, join: ","}, {name: n, var: n}]}
         accept: [application/json], ok: [], auth: bearer
     }
     let r = (build $form {tags: [a b], n: "x y"})
     assert equal $r.req.body {tags: "a,b", n: "x y"} "a csv form array is one joined value"
     assert equal $r.wire ({tags: "a,b", n: "x y"} | url build-query)
-    let opaque = ($form | merge {content_type: text/plain, body: {kind: opaque, accepts: scalar}})
+    let opaque = ($form | merge {body: {content_type: text/plain, kind: opaque, accepts: scalar}})
     let r = (build $opaque {body: null} "raw text")
     assert equal [$r.req.body $r.wire] ["raw text" "raw text"] "a piped scalar is the body"
     assert equal (build $opaque {body: 42}).wire "42"
@@ -331,9 +331,9 @@ def "build-request encodes form and opaque bodies for the wire" [] {
 @test
 def "a Content-Type header param picks the body encoding at call time" [] {
     let op = {
-        method: post, path: "/t", content_type: application/json
+        method: post, path: "/t"
         header: [{name: Content-Type, var: content_type, required: true}]
-        body: {kind: json, fields: [{name: a, var: a}]}
+        body: {content_type: application/json, kind: json, fields: [{name: a, var: a}]}
         accept: [application/json], ok: [], auth: bearer
     }
     let r = (build $op {content_type: application/x-www-form-urlencoded, a: "1 2"})
@@ -349,8 +349,8 @@ def "a Content-Type header param picks the body encoding at call time" [] {
 @test
 def "build-request builds a multipart envelope without reading files under dry-run" [] {
     let op = {
-        method: post, path: "/u", content_type: multipart/form-data
-        body: {kind: multipart, fields: [{name: file, var: file}, {name: note, var: note}], files: [file]}
+        method: post, path: "/u"
+        body: {content_type: multipart/form-data, kind: multipart, fields: [{name: file, var: file}, {name: note, var: note}], files: [file]}
         accept: [application/json], ok: [], auth: bearer
     }
     let args = ($ARGS | merge {file: "/does/not/exist", note: hi} | to nuon)
@@ -360,7 +360,7 @@ def "build-request builds a multipart envelope without reading files under dry-r
     let r = (build $op {file: "/does/not/exist", note: hi})
     assert ($r.req.content_type | str starts-with "multipart/form-data; boundary=----nu-")
     assert equal $r.req.body {file: "/does/not/exist", note: hi}
-    let verbatim = (build ($op | update body {kind: multipart, accepts: scalar}) {body: "pre-encoded"})
+    let verbatim = (build ($op | update body {content_type: multipart/form-data, kind: multipart, accepts: scalar}) {body: "pre-encoded"})
     assert equal [$verbatim.wire $verbatim.req.content_type] ["pre-encoded" multipart/form-data] "a non-record body is sent as is"
 }
 
@@ -397,11 +397,11 @@ def "the Unix socket is recorded only for a socket client" [] {
 
 @test
 def "http-request returns the request under dry-run" [] {
-    let op = {method: delete, path: "/x/{id}", path_params: [{name: id, var: id}], content_type: application/json, accept: [application/json], ok: [204], auth: bearer}
+    let op = {method: delete, path: "/x/{id}", path_params: [{name: id, var: id}], accept: [application/json], ok: [204], auth: bearer}
     let r = (rt $"http-request ($op | to nuon) ($ARGS | merge {id: 5, token: t, max_time: 1sec} | to nuon)")
     assert equal $r {
         dry_run: true, method: delete, url: "https://api.test/v1/x/5", query: {}
-        headers: {Authorization: "Bearer t", Accept: application/json}, body: null, content_type: application/json
+        headers: {Authorization: "Bearer t", Accept: application/json}, body: null, content_type: null
         timeout: 1000000000, auth: {scheme: bearer, location: header}
     }
 }

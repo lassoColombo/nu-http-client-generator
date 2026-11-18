@@ -227,8 +227,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 #   path_params         [{name, var, encode?: array|greedy}]
 #   query               [{name, var, style?, required?, default?}]
 #   header, cookie      [{name, var, array?, required?, default?}]
-#   content_type        the request media type (none for GET/HEAD/OPTIONS)
-#   body                {kind: json|form|multipart|opaque, accepts?,
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
 #                        fields?: [{name, var, join?, required?}], files?}
 #   accept, ok          the response media types, the success status codes
 #   base_url            the operation's own server
@@ -327,7 +326,7 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
   # An opaque type takes the caller's own wire form.
   let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
   let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
-  let content_type = ($ct_arg | default $op.content_type?)
+  let content_type = ($ct_arg | default $body.content_type?)
   let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
   let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
   let shape = ($req_body | describe | str replace --regex '<.*' '')
@@ -350,14 +349,13 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
     }
   }
 
-  let bodyless = ($op.method in [get head options])
   let req = {
     method: $op.method
     url: $url
     query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
     headers: $headers
-    body: (if $bodyless { null } else { $req_body })
-    content_type: (if $bodyless { null } else if $kind == "multipart" { $mp.content_type } else { $content_type })
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
     timeout: ($args.max_time | default $CLIENT.timeout)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -440,8 +438,7 @@ export def "mixed-case" [
   $in | http-request {
     method: post
     path: "/mixed"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -470,8 +467,7 @@ export def "both-required" [
   $in | http-request {
     method: post
     path: "/both-required"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id, required: true}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id, required: true}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -501,8 +497,7 @@ export def "shared-name" [
     method: post
     path: "/shared"
     query: [{name: filter, var: filter}]
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: filter, var: body_filter}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: filter, var: body_filter}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -532,8 +527,7 @@ export def "triple-spelling" [
   $in | http-request {
     method: post
     path: "/triple"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id}, {name: user-id, var: body_user_id_2}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: user_id, var: user_id}, {name: userId, var: body_user_id}, {name: user-id, var: body_user_id_2}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -562,8 +556,7 @@ export def "reserved-twice" [
   $in | http-request {
     method: post
     path: "/reserved-twice"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: raw, var: body_raw}, {name: Raw, var: body_raw_2}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: raw, var: body_raw}, {name: Raw, var: body_raw_2}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer

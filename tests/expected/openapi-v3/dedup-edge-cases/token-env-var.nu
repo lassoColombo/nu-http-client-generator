@@ -227,8 +227,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 #   path_params         [{name, var, encode?: array|greedy}]
 #   query               [{name, var, style?, required?, default?}]
 #   header, cookie      [{name, var, array?, required?, default?}]
-#   content_type        the request media type (none for GET/HEAD/OPTIONS)
-#   body                {kind: json|form|multipart|opaque, accepts?,
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
 #                        fields?: [{name, var, join?, required?}], files?}
 #   accept, ok          the response media types, the success status codes
 #   base_url            the operation's own server
@@ -327,7 +326,7 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
   # An opaque type takes the caller's own wire form.
   let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
   let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
-  let content_type = ($ct_arg | default $op.content_type?)
+  let content_type = ($ct_arg | default $body.content_type?)
   let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
   let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
   let shape = ($req_body | describe | str replace --regex '<.*' '')
@@ -350,14 +349,13 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
     }
   }
 
-  let bodyless = ($op.method in [get head options])
   let req = {
     method: $op.method
     url: $url
     query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
     headers: $headers
-    body: (if $bodyless { null } else { $req_body })
-    content_type: (if $bodyless { null } else if $kind == "multipart" { $mp.content_type } else { $content_type })
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
     timeout: ($args.max_time | default $CLIENT.timeout)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -514,8 +512,7 @@ export def "create-tome" [
   $in | http-request {
     method: post
     path: "/tomes"
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -543,8 +540,7 @@ export def "create-tome-v1" [
   $in | http-request {
     method: post
     path: "/v1/tomes"
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -573,7 +569,6 @@ export def "remove-scroll" [
     method: delete
     path: "/scrolls/{isbn}"
     path_params: [{name: isbn, var: isbn}]
-    content_type: "application/json"
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -602,7 +597,6 @@ export def "delete-scroll" [
     method: delete
     path: "/v1/scrolls/{position}"
     path_params: [{name: position, var: position}]
-    content_type: "application/json"
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -633,8 +627,7 @@ export def "replace-block-v1" [
     method: put
     path: "/v1/blocks/{dashboardId}/{id}"
     path_params: [{name: dashboardId, var: dashboard_id}, {name: id, var: id}]
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -665,8 +658,7 @@ export def "replace-block-v2" [
     method: put
     path: "/v2/blocks/{pageId}/{id}"
     path_params: [{name: pageId, var: page_id}, {name: id, var: id}]
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -698,8 +690,7 @@ export def "replace-catalog-v1" [
     method: put
     path: "/v1/catalogs/{type}/{typeId}/{id}"
     path_params: [{name: type, var: type}, {name: typeId, var: type_id}, {name: id, var: id}]
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -731,8 +722,7 @@ export def "replace-catalog-v2" [
     method: put
     path: "/v2/catalogs/{kind}/{kindId}/{id}"
     path_params: [{name: kind, var: kind}, {name: kindId, var: kind_id}, {name: id, var: id}]
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer

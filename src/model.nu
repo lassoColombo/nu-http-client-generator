@@ -407,10 +407,12 @@ def classify-params [op: record, methods: record, doc: record] {
 
 # Extract body info: has_body, content_type, body_fields, request discriminator.
 #
-# GET/HEAD/OPTIONS cannot carry a request body — Nushell's `http get`/`head`/
-# `options` builtins take no body argument — so for those methods every body
-# artefact (has_body, fields, shapes) is suppressed together: the client must
-# never advertise a flag it cannot send, and --dry-run must match the wire.
+# This is the one place "no body" is decided. GET/HEAD/OPTIONS cannot carry a
+# request body — Nushell's `http get`/`head`/`options` builtins take no body
+# argument — so for those methods every body artefact (has_body, content
+# type, fields, shapes, discriminator) is suppressed together: the client
+# must never advertise a flag it cannot send, and --dry-run must match the
+# wire. Render and the runtime read `has_body` and never the method.
 def extract-body-info [method: string, op: record, doc: record, label: string] {
   let body_info = (spec body-info $op $doc)
   let bodyless_method = ($method in ["get" "head" "options"])
@@ -418,7 +420,7 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
     log warn $"($label): ($method | str uppercase) cannot carry a request body in nushell; the declared body/formData params are dropped and the command may be uncallable"
   }
   let has_body = $body_info.has_body and (not $bodyless_method)
-  let content_type = ($body_info.content_type? | default $spec.CT_JSON)
+  let content_type = if $has_body { $body_info.content_type } else { null }
   let body_schema = $body_info.body_schema
 
   # For non-JSON content-types (text/xml, application/octet-stream, …) we do
@@ -436,7 +438,7 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
   #   opaque    — anything else; the caller supplies the wire form
   # Classified on the media type without parameters, so a charset does not
   # hide `application/json`.
-  let media_type = ($content_type | split row ';' | first | str trim)
+  let media_type = ($content_type | default "" | split row ';' | first | str trim)
   let body_kind = if not $has_body { "none" } else if ($media_type == $spec.CT_JSON) or ($media_type | str ends-with "+json") { "json" } else if $media_type == $spec.CT_FORM { "form" } else if $media_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
   # A body the command cannot send has no shape worth computing: render reads
   # every body field, scalar type and array variant under `has_body` only.
@@ -448,7 +450,7 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
   let fields = if $expand_fields { body-fields $merged $doc $body_info.encoding --shapes } else { {fields: [], shapes: []} }
 
   # The request-side discriminator; the response side is extract-response-info's.
-  let discriminator = (schema-discriminator $body_schema "request")
+  let discriminator = if $has_body { schema-discriminator $body_schema "request" } else { null }
 
   # Determine the body schema's scalar type so the renderer can emit a typed
   # `--body: <type>` flag (and accept matching pipeline input) when the body

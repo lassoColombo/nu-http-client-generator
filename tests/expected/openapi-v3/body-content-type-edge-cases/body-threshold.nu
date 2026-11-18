@@ -227,8 +227,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 #   path_params         [{name, var, encode?: array|greedy}]
 #   query               [{name, var, style?, required?, default?}]
 #   header, cookie      [{name, var, array?, required?, default?}]
-#   content_type        the request media type (none for GET/HEAD/OPTIONS)
-#   body                {kind: json|form|multipart|opaque, accepts?,
+#   body                {content_type, kind: json|form|multipart|opaque, accepts?,
 #                        fields?: [{name, var, join?, required?}], files?}
 #   accept, ok          the response media types, the success status codes
 #   base_url            the operation's own server
@@ -327,7 +326,7 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
   # An opaque type takes the caller's own wire form.
   let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
   let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
-  let content_type = ($ct_arg | default $op.content_type?)
+  let content_type = ($ct_arg | default $body.content_type?)
   let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
   let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
   let shape = ($req_body | describe | str replace --regex '<.*' '')
@@ -350,14 +349,13 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
     }
   }
 
-  let bodyless = ($op.method in [get head options])
   let req = {
     method: $op.method
     url: $url
     query: ($query | reduce --fold {} {|q, acc| $acc | upsert $q.name ($args | get $q.var) } | compact)
     headers: $headers
-    body: (if $bodyless { null } else { $req_body })
-    content_type: (if $bodyless { null } else if $kind == "multipart" { $mp.content_type } else { $content_type })
+    body: $req_body
+    content_type: (if $kind == "multipart" { $mp.content_type } else { $content_type })
     timeout: ($args.max_time | default $CLIENT.timeout)
     auth: {scheme: $auth.scheme, location: $auth.location}
   }
@@ -463,8 +461,7 @@ export def "create-json" [
   $in | http-request {
     method: post
     path: "/json"
-    content_type: "application/json"
-    body: {kind: json}
+    body: {content_type: "application/json", kind: json}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -493,8 +490,7 @@ export def "create-form" [
   $in | http-request {
     method: post
     path: "/form"
-    content_type: "application/x-www-form-urlencoded"
-    body: {kind: form, fields: [{name: grant_type, var: grant_type}, {name: scope, var: scope}]}
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, fields: [{name: grant_type, var: grant_type}, {name: scope, var: scope}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -522,8 +518,7 @@ export def "create-form-scalar" [
   $in | http-request {
     method: post
     path: "/form-scalar"
-    content_type: "application/x-www-form-urlencoded"
-    body: {kind: form, accepts: scalar}
+    body: {content_type: "application/x-www-form-urlencoded", kind: form, accepts: scalar}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -551,8 +546,7 @@ export def "create-text" [
   $in | http-request {
     method: post
     path: "/text"
-    content_type: "text/plain"
-    body: {kind: opaque, accepts: scalar}
+    body: {content_type: "text/plain", kind: opaque, accepts: scalar}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -581,8 +575,7 @@ export def "upload-file" [
   $in | http-request {
     method: post
     path: "/upload"
-    content_type: "multipart/form-data"
-    body: {kind: multipart, fields: [{name: file, var: file}, {name: filename, var: filename}], files: [file]}
+    body: {content_type: "multipart/form-data", kind: multipart, fields: [{name: file, var: file}, {name: filename, var: filename}], files: [file]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -610,8 +603,7 @@ export def "upload-empty" [
   $in | http-request {
     method: post
     path: "/upload-empty"
-    content_type: "multipart/form-data"
-    body: {kind: multipart}
+    body: {content_type: "multipart/form-data", kind: multipart}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -640,8 +632,7 @@ export def "create-multi-ct" [
   $in | http-request {
     method: post
     path: "/multi-ct"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: a, var: a}, {name: b, var: b}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: a, var: a}, {name: b, var: b}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -670,8 +661,7 @@ export def "create-allof" [
   $in | http-request {
     method: post
     path: "/allof"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: id, var: id}, {name: label, var: label}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: id, var: id}, {name: label, var: label}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -702,8 +692,7 @@ export def "create-oneof" [
   $in | http-request {
     method: post
     path: "/oneof"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: petType, var: pet_type}, {name: meow, var: meow}, {name: bark, var: bark}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: petType, var: pet_type}, {name: meow, var: meow}, {name: bark, var: bark}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -732,8 +721,7 @@ export def "create-poly-array" [
   $in | http-request {
     method: post
     path: "/poly-array"
-    content_type: "application/json"
-    body: {kind: json, accepts: list, fields: [{name: strict, var: strict, required: true}, {name: name, var: name}]}
+    body: {content_type: "application/json", kind: json, accepts: list, fields: [{name: strict, var: strict, required: true}, {name: name, var: name}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -761,8 +749,7 @@ export def "create-empty-media-type" [
   $in | http-request {
     method: post
     path: "/empty-media-type"
-    content_type: "application/json"
-    body: {kind: json, fields: [{name: username, var: username}]}
+    body: {content_type: "application/json", kind: json, fields: [{name: username, var: username}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -790,8 +777,7 @@ export def "upload-token" [
   $in | http-request {
     method: post
     path: "/upload-token"
-    content_type: "multipart/form-data"
-    body: {kind: multipart, accepts: scalar}
+    body: {content_type: "multipart/form-data", kind: multipart, accepts: scalar}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -820,8 +806,7 @@ export def "merge-patch" [
   $in | http-request {
     method: patch
     path: "/merge-patch"
-    content_type: "application/merge-patch+json"
-    body: {kind: json, fields: [{name: name, var: name}, {name: labels, var: labels}]}
+    body: {content_type: "application/merge-patch+json", kind: json, fields: [{name: name, var: name}, {name: labels, var: labels}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -849,8 +834,7 @@ export def "json-patch" [
   $in | http-request {
     method: patch
     path: "/json-patch"
-    content_type: "application/json-patch+json"
-    body: {kind: json, accepts: scalar}
+    body: {content_type: "application/json-patch+json", kind: json, accepts: scalar}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
