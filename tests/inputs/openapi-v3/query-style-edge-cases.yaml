@@ -78,9 +78,38 @@ paths:
           in: query
           schema: {type: string}
           description: A free-text query that may contain reserved chars (&, =, /).
+        # Pydantic's Optional[list[str]]: a nullable union of one array is
+        # that array, so `--labels: list<string>` and labels=a&labels=b, not
+        # a string flag sending `[a b]`.
+        - name: labels
+          in: query
+          schema:
+            anyOf:
+              - {type: array, items: {type: string}}
+              - {type: 'null'}
+        # Optional[int] the same way: `--page: int`, documented nullable.
+        - name: page
+          in: query
+          schema:
+            anyOf: [{type: integer}, {type: 'null'}]
+        # An allOf wrapper around an enum still completes from the enum.
+        - name: order
+          in: query
+          schema:
+            allOf: [{$ref: '#/components/schemas/Order'}]
+            default: asc
+        # Array items given by $ref: `list<string>`, so `[01 02]` stays "01,02".
+        - name: codes
+          in: query
+          schema: {type: array, items: {$ref: '#/components/schemas/Code'}}
+          explode: false
       responses:
         '200':
           description: ok
           content:
             application/json:
               schema: {type: object}
+components:
+  schemas:
+    Order: {type: string, enum: [asc, desc]}
+    Code: {type: string}

@@ -462,17 +462,18 @@ export def "create-json" [
   --count: int
   --active: oneof<nothing, bool>
   --nickname: string
+  --scores: list<int>
 ]: any -> any {
   $in | http-request {
     method: post
     path: "/json"
     content_type: "application/json"
-    body: {kind: json, fields: [{name: name, var: name}, {name: count, var: count}, {name: active, var: active}, {name: nickname, var: nickname}]}
+    body: {kind: json, fields: [{name: name, var: name}, {name: count, var: count}, {name: active, var: active}, {name: nickname, var: nickname}, {name: scores, var: scores}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
   } {
-    name: $name, count: $count, active: $active, nickname: $nickname
+    name: $name, count: $count, active: $active, nickname: $nickname, scores: $scores
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }

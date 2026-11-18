@@ -76,10 +76,11 @@ def normalize-discriminator [disc: any] {
 # per-field flags only cover the object variants, so render accepts a piped
 # list as the whole body (GitHub's branch-protection contexts).
 def merge-body-props [schema: record, doc: record] {
-  # allOf is folded by spec's merge-all-of — recursively, so a chain of
+  # allOf is folded by spec's fold-schema — recursively, so a chain of
   # allOf-only wrappers (`Base: allOf [Mid]`, `Mid: allOf [Leaf, {props}]`)
-  # still surfaces the leaf's properties and `required`.
-  let schema = (spec merge-all-of $schema $doc)
+  # still surfaces the leaf's properties and `required` — and so is a
+  # nullable union (`anyOf: [Obj, {type: null}]`), which is Obj.
+  let schema = (spec fold-schema $schema $doc)
   let props_after_allof = ($schema.properties? | default {})
   let required_after_allof = ($schema.required? | default [])
 
@@ -126,73 +127,53 @@ def merge-body-props [schema: record, doc: record] {
 
 # The body fields of a merged body (see merge-body-props) and, with
 # `--shapes`, their shape docs; every property is resolved once and both lists
-# derive from that. Returns {fields: list, shapes: list}. Shapes are one level
-# deep and opt-in: a shape's own fields are built without shapes, which is what
-# keeps a self-referencing schema (`Node.children: [Node]`) from looping.
-def body-fields [merged: record, doc: record, --shapes]: nothing -> record {
+# derive from that. `encoding` is the media type's per-field encoding (a form
+# or multipart array's serialization). Returns {fields: list, shapes: list}.
+# Shapes are one level deep and opt-in: a shape's own fields are built without
+# shapes, which is what keeps a self-referencing schema
+# (`Node.children: [Node]`) from looping.
+def body-fields [merged: record, doc: record, encoding: record = {}, --shapes]: nothing -> record {
   let resolved = (resolve-body-props $merged.props $doc)
   {
-    fields: (body-fields-from-resolved $resolved $merged.required $doc)
+    fields: (body-fields-from-resolved $resolved $merged.required $encoding $doc)
     shapes: (if $shapes { field-shapes-from-resolved $resolved $doc } else { [] })
   }
 }
 
-# Resolve every property of a merged props record ONCE: `$ref` followed, allOf
-# folded (so an AWS-style `{allOf: [{$ref}, {description}]}` wrapper yields the
-# member's type), readOnly and malformed entries dropped (meilisearch uses
-# `$ref` as a property name, leaving a bare string sibling that would crash
-# cell-path access). Both the body fields and the shape docs derive from this
-# list. Returns list<{name, spec}>.
+# Resolve every property of a merged props record ONCE with spec's
+# fold-schema (so an AWS-style `{allOf: [{$ref}, {description}]}` wrapper
+# yields the member's type, and `anyOf: [T, {type: null}]` is a nullable T),
+# readOnly and malformed entries dropped (meilisearch uses `$ref` as a
+# property name, leaving a bare string sibling that would crash cell-path
+# access). Both the body fields and the shape docs derive from this list.
+# Returns list<{name, spec}>.
 def resolve-body-props [props: record, doc: record]: nothing -> list {
   $props | items {|name, field_spec| {name: $name, spec: $field_spec} }
     | where {|f| ($f.spec | describe) | str starts-with "record" }
-    | each {|f| {name: $f.name, spec: (spec merge-all-of (spec resolve-ref $f.spec $doc) $doc)} }
-    | where {|f| (($f.spec | describe) | str starts-with "record") and (not ($f.spec.readOnly? | default false)) }
+    | each {|f| {name: $f.name, spec: (spec fold-schema $f.spec $doc)} }
+    | where {|f| ($f.spec | is-not-empty) and (not ($f.spec.readOnly? | default false)) }
 }
 
-# Body field records from resolved props (see resolve-body-props).
-def body-fields-from-resolved [resolved: list, required: list, doc: record] {
+# Body field records from resolved props (see resolve-body-props); the value
+# facts are spec's `schema-facts`, an untyped field read as `any`.
+def body-fields-from-resolved [resolved: list, required: list, encoding: record, doc: record] {
   $resolved | each {|field|
-    # Defensive guard: a malformed spec may leave `.type` as a record (e.g.
-    # codat.io/accounting nests `definitions.itemType` one level too deep, so
-    # the JSON-Pointer resolves to `{type: {description, enum, type}}` instead
-    # of the inner schema). Records can't be coerced to a render-time type
-    # string, so fall back to "any". OAS 3.1 list-typed unions (e.g.
-    # `[string, null]`) are still handled by `normalize-type`. Logged as a
-    # warning so a legitimate generator regression doesn't degrade silently.
-    let raw_type = ($field.spec.type? | default "any")
-    let field_type = if (($raw_type | describe) | str starts-with "record") {
-      log warn $"field ($field.name): record-typed `.type` \(malformed spec\) → coerced to any"
-      "any"
-    } else {
-      spec normalize-type $raw_type
-    }
-    let items_type = if $field_type == "array" {
-      let items = (spec resolve-ref ($field.spec.items? | default {}) $doc)
-      spec normalize-type ($items.type? | default null)
-    } else { null }
-    let enum_vals = (spec clean-enum-values ($field.spec.enum? | default []))
-    let nullable = (spec is-nullable $field.spec)
-    let default_val = ($field.spec.default? | default null)
-    let format = ($field.spec.format? | default null)
-    let example = ($field.spec.example? | default null)
-    let deprecated = ($field.spec.deprecated? | default false)
-    let desc = (spec build-description ($field.spec.description? | default "") (value-notes $deprecated $nullable $format $default_val $example))
-    # Swagger 2 formData arrays carry a `collectionFormat` (synthesized onto
-    # the property by spec/swagger2); render joins csv/ssv/tsv/pipes lists
-    # before the form body is url-encoded. Null means "repeat the key".
-    let collection_style = if $field_type == "array" { $field.spec.collectionFormat? | default null } else { null }
+    let facts = (spec schema-facts $field.spec $doc)
+    let field_type = ($facts.type | default "any")
+    let desc = (spec build-description ($field.spec.description? | default "") (value-notes $facts.deprecated $facts.nullable $facts.format $facts.default $facts.example))
     {
       name: $field.name
       type: $field_type
-      items_type: $items_type
+      items_type: $facts.items_type
       required: ($field.name in $required)
-      nullable: $nullable
-      enum: $enum_vals
+      nullable: $facts.nullable
+      enum: (spec clean-enum-values $facts.enum)
       description: $desc
-      deprecated: $deprecated
-      format: $format
-      collection_style: $collection_style
+      deprecated: $facts.deprecated
+      format: $facts.format
+      # A form or multipart array is sent once per value ("multi") or joined
+      # into one by its encoding (csv/ssv/tsv/pipes); JSON keeps the list.
+      collection_style: (if $field_type == "array" { spec field-collection-style $encoding $field.name } else { null })
     }
   }
 }
@@ -203,13 +184,13 @@ def body-fields-from-resolved [resolved: list, required: list, doc: record] {
 def field-shapes-from-resolved [resolved: list, doc: record] {
   $resolved | each {|f|
     let fs = $f.spec
-    let ft = (spec normalize-type ($fs.type? | default ""))
-    if ($ft == "object") or (($ft == "" or $ft == "any") and ($fs.properties? | is-not-empty)) {
+    let ft = ((spec schema-facts $fs $doc).type | default "any")
+    if ($ft == "object") or (($ft == "any") and ($fs.properties? | is-not-empty)) {
       let sub_fields = (body-fields (merge-body-props $fs $doc) $doc).fields
       if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: false} }
     } else if $ft == "array" {
-      let items = (spec resolve-ref ($fs.items? | default {}) $doc)
-      if ($items.properties? | is-not-empty) or ($items.allOf? | is-not-empty) {
+      let items = (spec fold-schema ($fs.items? | default {}) $doc)
+      if ($items.properties? | is-not-empty) {
         let sub_fields = (body-fields (merge-body-props $items $doc) $doc).fields
         if ($sub_fields | is-empty) { null } else { {flag: $f.name, fields: $sub_fields, is_item: true} }
       } else { null }
@@ -464,7 +445,7 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
   # Merged for every sendable schema-bearing body (an opaque one still reports
   # its array variant); its fields only become flags when they can be encoded.
   let merged = if $has_schema { merge-body-props $body_schema $doc } else { {props: {}, required: [], has_array_variant: false} }
-  let fields = if $expand_fields { body-fields $merged $doc --shapes } else { {fields: [], shapes: []} }
+  let fields = if $expand_fields { body-fields $merged $doc $body_info.encoding --shapes } else { {fields: [], shapes: []} }
 
   # The request-side discriminator; the response side is extract-response-info's.
   let discriminator = (schema-discriminator $body_schema "request")
@@ -476,8 +457,8 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
   let body_scalar_type = if (not $has_schema) {
     "any"
   } else {
-    let normalized = (spec normalize-type ($body_schema.type? | default null))
-    if ($normalized == null) or ($normalized == "object") { "any" } else { $normalized }
+    let t = (spec schema-facts $body_schema $doc).type
+    if ($t == null) or ($t == "object") { "any" } else { $t }
   }
 
   {has_body: $has_body, content_type: $content_type, body_kind: $body_kind, body_fields: $fields.fields, field_shapes: $fields.shapes, discriminator: $discriminator, body_polymorphic_array: $merged.has_array_variant, body_scalar_type: $body_scalar_type}

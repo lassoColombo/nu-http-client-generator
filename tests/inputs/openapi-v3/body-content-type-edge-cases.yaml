@@ -47,6 +47,8 @@ paths:
                 count: {type: integer}
                 active: {type: boolean}        # -> oneof<nothing, bool>
                 nickname: {type: string, nullable: true}  # -> tri-state
+                # Optional[list[int]]: a nullable union reads as its one schema
+                scores: {anyOf: [{type: array, items: {type: integer}}, {type: 'null'}]}
                 createdAt: {type: string, readOnly: true} # excluded from request
       responses:
         '200': {description: ok}

@@ -421,6 +421,8 @@ def base-url-completer [] { ["https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
+# Completers for enum parameters
+def order-completer [] { ["asc" "desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -470,16 +472,20 @@ export def "search" [
   --bounds: record
   --verbose: oneof<nothing, bool>
   --q: string # A free-text query that may contain reserved chars (&, =, /).
+  --labels: list<string> # nullable
+  --page: int # nullable
+  --order: string@order-completer # default: asc
+  --codes: list<string>
 ]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/search"
-    query: [{name: tags, var: tags, style: multi}, {name: ids, var: ids, style: csv}, {name: fields, var: fields, style: ssv}, {name: cols, var: cols, style: pipes}, {name: filter, var: filter, style: deepObject}, {name: opts, var: opts, style: multi}, {name: range, var: range, style: csv}, {name: dims, var: dims, style: ssv}, {name: bounds, var: bounds, style: pipes}, {name: verbose, var: verbose}, {name: q, var: q}]
+    query: [{name: tags, var: tags, style: multi}, {name: ids, var: ids, style: csv}, {name: fields, var: fields, style: ssv}, {name: cols, var: cols, style: pipes}, {name: filter, var: filter, style: deepObject}, {name: opts, var: opts, style: multi}, {name: range, var: range, style: csv}, {name: dims, var: dims, style: ssv}, {name: bounds, var: bounds, style: pipes}, {name: verbose, var: verbose}, {name: q, var: q}, {name: labels, var: labels, style: multi}, {name: page, var: page}, {name: order, var: order}, {name: codes, var: codes, style: csv}]
     accept: ["application/json"]
     ok: [200]
     auth: bearer
   } {
-    tags: $tags, ids: $ids, fields: $fields, cols: $cols, filter: $filter, opts: $opts, range: $range, dims: $dims, bounds: $bounds, verbose: $verbose, q: $q
+    tags: $tags, ids: $ids, fields: $fields, cols: $cols, filter: $filter, opts: $opts, range: $range, dims: $dims, bounds: $bounds, verbose: $verbose, q: $q, labels: $labels, page: $page, order: $order, codes: $codes
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
   }
 }

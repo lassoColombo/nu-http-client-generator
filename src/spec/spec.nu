@@ -185,17 +185,17 @@ export def clean-enum-values [vals: list]: nothing -> list {
 }
 
 # Normalize OAS 3.1 type value: ["string", "null"] → "string", "string" → "string"
-export def normalize-type [type_val: any] {
+def normalize-type [type_val: any] {
   if ($type_val == null) { return null }
   if ($type_val | describe | str starts-with "list") {
-    $type_val | where { $in != "null" } | first | default "any"
+    $type_val | where { $in != "null" } | get -o 0 | default "any"
   } else {
     $type_val
   }
 }
 
 # Check if a schema is nullable (OAS 3.0 nullable:true or OAS 3.1 type array containing "null")
-export def is-nullable [schema: record] {
+def is-nullable [schema: record] {
   if ($schema.nullable? | default false) { return true }
   let t = ($schema.type? | default null)
   if ($t | describe | str starts-with "list") { "null" in $t } else { false }
@@ -389,6 +389,73 @@ export def merge-all-of [schema: any, doc: record, --visited: list<string> = []]
   }
 }
 
+# A schema reduced to the one shape its value takes: `$ref` followed, allOf
+# folded, and a nullable union (`anyOf`/`oneOf` of one schema and `{type:
+# "null"}`, what pydantic and OAS 3.1 tools write for `Optional[T]`) replaced
+# by that schema, marked `nullable` and with the outer keys (description,
+# default) kept over the variant's. A schema with its own `type`, and a real
+# union, come back unchanged. A non-record is {}.
+export def fold-schema [schema: any, doc: record]: nothing -> record {
+  let s = (merge-all-of (resolve-ref $schema $doc) $doc)
+  match $s { {} => {}, _ => { return {} } }
+  if ($s.type? != null) { return $s }
+  let variants = ($s.anyOf? | default ($s.oneOf? | default []) | each {|v| merge-all-of (resolve-ref $v $doc) $doc })
+  let is_null = {|v| ($v.type? == "null") or ($v.type? == ["null"]) }
+  let values = ($variants | where {|v| not (do $is_null $v) })
+  if (($values | length) != 1) or (($variants | length) != 2) { return $s }
+  $values | first | merge ($s | reject -o anyOf oneOf) | upsert nullable true
+}
+
+# The value facts of a schema (see fold-schema): {type, items_type, enum,
+# default, format, example, nullable, deprecated}. `type` is the OpenAPI type
+# (OAS 3.1 `[T, "null"]` read as T), null when the schema has none or a
+# malformed one; `items_type` is an array's item type, its items resolved the
+# same way. The one reader of value facts for params and body fields alike.
+export def schema-facts [schema: any, doc: record]: nothing -> record {
+  let s = (fold-schema $schema $doc)
+  let type_of = {|x|
+    let t = ($x.type? | default null)
+    if ($t == null) or (($t | describe) == "string") or ($t | describe | str starts-with "list") { normalize-type $t } else {
+      log warn $"a schema's `type` is a ($t | describe | str replace --regex '<.*' ''), not a type name \(malformed spec\); read as untyped"
+      null
+    }
+  }
+  let t = (do $type_of $s)
+  {
+    type: $t
+    items_type: (if $t == "array" { do $type_of (fold-schema ($s.items? | default {}) $doc) } else { null })
+    enum: ($s.enum? | default [])
+    default: $s.default?
+    format: $s.format?
+    example: $s.example?
+    nullable: (is-nullable $s)
+    deprecated: ($s.deprecated? | default false)
+  }
+}
+
+# How an array (or object) value is serialized: "multi" repeats the key, and
+# "csv"/"ssv"/"pipes"/"tsv" join the values with `,`/space/`|`/tab.
+# `tabDelimited` is no OpenAPI 3 style: it is the converted Swagger 2
+# `collectionFormat: tsv` (see swagger2.nu).
+def array-style [style: string, explode: bool]: nothing -> string {
+  if $explode { return "multi" }
+  match $style {
+    "spaceDelimited" => "ssv"
+    "pipeDelimited" => "pipes"
+    "tabDelimited" => "tsv"
+    _ => "csv"
+  }
+}
+
+# A form or multipart field's array serialization, from its media type's
+# `encoding` (a Swagger 2 formData `collectionFormat`, converted): "multi",
+# the default, sends the field once per value; a join style sends one value.
+export def field-collection-style [encoding: record, name: string]: nothing -> string {
+  let e = ($encoding | get -o $name | default {})
+  let style = ($e.style? | default "form")
+  array-style $style ($e.explode? | default ($style == "form"))
+}
+
 # Build a list of {name, type: descriptor} field entries from a properties map.
 #
 # Field names are kept RAW: render's `nu-type-string` sanitizes them to valid
@@ -510,52 +577,43 @@ export def op-base-url [op: record, path_item: record] {
 
 # ── Parameters, bodies, responses ───────────────────────────────────
 
-# A parameter's value facts, read from its `schema` (a `$ref` resolved).
-# A `content`-typed param (OAS 3 §4.8.12.5) is one serialized value whose
-# schema says nothing about the wire, so it reads as an empty schema: a
-# scalar `string`. `default`/`format`/`example` fall back to the param
-# itself, where some specs put them.
+# A parameter's value facts: its schema's (`schema-facts`), an untyped one
+# read as `string`, plus how the value is serialized. A `content`-typed param
+# (OAS 3 §4.8.12.5) is one serialized value whose schema says nothing about
+# the wire, so it reads as an empty schema: a scalar `string`.
+# `default`/`format`/`example` fall back to the param itself, where some specs
+# put them.
 export def param-facts [param: record, doc: record]: nothing -> record {
-  let raw = if ($param.content? | is-not-empty) { {} } else { resolve-ref ($param.schema? | default {}) $doc }
-  let schema = if (($raw | describe) | str starts-with "record") { $raw } else { {} }
-  # normalize-type: OAS 3.1 `type: [array, "null"]` is still an array
-  let t = (normalize-type ($schema.type? | default "string"))
+  let facts = (schema-facts (if ($param.content? | is-not-empty) { {} } else { $param.schema? | default {} }) $doc)
+  let t = ($facts.type | default "string")
   let style = ($param.style? | default "form")
-  let explode = ($param.explode? | default ($style == "form"))
   {
     type: $t
     # `list<string>` / `list<int>` in the signature instead of bare `list`;
     # null when the items have no usable primitive type.
-    items_type: (if $t == "array" { normalize-type ($schema.items?.type? | default null) } else { null })
-    enum: ($schema.enum? | default [])
+    items_type: $facts.items_type
+    enum: $facts.enum
     # For an object value the emitted serializer reads "multi" as exploded
     # `k=v` pairs and "csv" as `name=k,v,k,v` (OAS 3 §4.8.12.4).
-    # `tabDelimited` is no OpenAPI 3 style: it is the converted Swagger 2
-    # `collectionFormat: tsv` (see swagger2.nu).
     collection_style: (if $style == "deepObject" { "deepObject" } else if $t not-in ["array" "object"] { "scalar" } else {
-      match $style {
-        "form" => { if $explode { "multi" } else { "csv" } }
-        "spaceDelimited" => "ssv"
-        "pipeDelimited" => "pipes"
-        "tabDelimited" => "tsv"
-        _ => "csv"
-      }
+      array-style $style ($param.explode? | default ($style == "form"))
     })
-    default: ($schema.default? | default $param.default?)
-    format: ($schema.format? | default $param.format?)
-    example: ($schema.example? | default ($param.example? | default ($param | get -o "x-example")))
-    nullable: (is-nullable $schema)
+    default: ($facts.default | default $param.default?)
+    format: ($facts.format | default $param.format?)
+    example: ($facts.example | default ($param.example? | default ($param | get -o "x-example")))
+    nullable: $facts.nullable
   }
 }
 
-# The request body: {has_body, body_schema, content_type}. Prefers a media
-# type the client can encode; with none declared (text/plain, text/xml,
+# The request body: {has_body, body_schema, content_type, encoding}. Prefers a
+# media type the client can encode; with none declared (text/plain, text/xml,
 # application/vnd.X+json, …) the first one and its schema, so model can still
-# derive a typed `--body` flag.
+# derive a typed `--body` flag. `encoding` is the media type's per-field
+# encoding (see `field-collection-style`).
 export def body-info [op: record, doc: record]: nothing -> record {
   let request_body = $op.requestBody?
   if ($request_body | is-empty) {
-    return {has_body: false, body_schema: {}, content_type: $CT_JSON}
+    return {has_body: false, body_schema: {}, content_type: $CT_JSON, encoding: {}}
   }
   let content = ((resolve-ref $request_body $doc).content? | default {})
   let preferred = ($CT_PRIORITY | where {|ct| $content | get -o $ct | is-not-empty } | get -o 0)
@@ -566,9 +624,11 @@ export def body-info [op: record, doc: record]: nothing -> record {
   # The schema must come from the media type the client will send, not the
   # first one declared: `application/xml` listed before `application/json`
   # would otherwise expose the XML schema's fields on a JSON request.
-  let s = ($content | get -o $ct | default ($content | get -o $declared | default {}) | get -o schema)
+  let media = ($content | get -o $ct | default ($content | get -o $declared | default {}))
+  let s = ($media | get -o schema)
   let schema = if ($s | is-not-empty) { resolve-ref $s $doc } else { {} }
-  {has_body: true, body_schema: $schema, content_type: $ct}
+  let encoding = ($media | get -o encoding)
+  {has_body: true, body_schema: $schema, content_type: $ct, encoding: (if ($encoding | describe | str starts-with "record") { $encoding } else { {} })}
 }
 
 # The media types the success responses declare (the `--accept` values),

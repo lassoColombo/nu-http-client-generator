@@ -458,7 +458,7 @@ export def "create-json" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record # shape: {name: string, count?: int, active?: bool, nickname?: string}
+  --body: record # shape: {name: string, count?: int, active?: bool, nickname?: string, scores?: list<int>}
 ]: any -> any {
   $in | http-request {
     method: post

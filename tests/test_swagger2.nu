@@ -49,10 +49,10 @@ def "collectionFormat becomes style and explode" [] {
 @test
 def "formData params become a multipart requestBody" [] {
     let o = (op (convert form-data-edge-cases) "/analysis" post)
-    let schema = $o.requestBody.content."multipart/form-data".schema
-    assert equal ($schema.properties | columns) [picture storeResult tags]
-    assert equal $schema.required [picture]
-    assert equal $schema.properties.tags.collectionFormat csv
+    let media = $o.requestBody.content."multipart/form-data"
+    assert equal ($media.schema.properties | columns) [picture storeResult tags]
+    assert equal $media.schema.required [picture]
+    assert equal $media.encoding {tags: {style: form, explode: false}} "an array's collectionFormat (csv by default) is its encoding"
 }
 
 @test

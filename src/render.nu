@@ -557,9 +557,10 @@ def body-descriptor [cmd: record]: nothing -> record {
   let fields = if not $per_field { [] } else {
     $cmd.body_fields | enumerate | each {|it|
       let f = $it.item
-      # Swagger 2 formData arrays with a csv/ssv/tsv/pipes collectionFormat
-      # are sent as one joined value; `url build-query` would otherwise repeat
-      # the key and the multipart envelope JSON-stringify the list.
+      # A form or multipart array whose encoding is csv/ssv/tsv/pipes (a
+      # Swagger 2 formData `collectionFormat`) is sent as one joined value;
+      # `url build-query` would otherwise repeat the key and the multipart
+      # envelope JSON-stringify the list.
       let join = if ($cmd.body_kind in [form multipart]) {
         match ($f.collection_style? | default null) { "csv" => ",", "ssv" => " ", "tsv" => "\t", "pipes" => "|", _ => null }
       } else { null }

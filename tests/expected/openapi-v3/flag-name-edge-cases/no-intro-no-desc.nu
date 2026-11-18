@@ -443,8 +443,8 @@ export def "widgets-list" [
   --notion-version: string
   --x-request-id: string
   --x-custom-header: string
-  --x-ids: list
-  --tags: list
+  --x-ids: list<string>
+  --tags: list<string>
 ]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get

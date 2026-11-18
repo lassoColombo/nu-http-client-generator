@@ -42,29 +42,33 @@ def map-values [f: closure]: record -> record {
 }
 
 # A non-body parameter as OpenAPI 3: its value facts are copied under
-# `schema`, and an array's `collectionFormat` (csv when absent, the Swagger 2
-# default) is spelled as `style`/`explode`. `tsv` has no OpenAPI 3 style; it becomes
-# `tabDelimited`, which spec's `param-facts` reads like the standard
-# delimiters. OpenAPI 3 keys a Swagger 2 document should not have (`schema`,
-# `style`, `explode`, `content`; the httpbin spec mixes them in) are replaced,
-# as the Swagger 2 reader always ignored them. A `$ref` is left alone (its
-# target is converted where it lives), and so are body and formData params,
-# which `request-body` turns into the requestBody.
+# `schema`, and an array's `collectionFormat` is spelled as `style`/`explode`
+# (`array-style`). OpenAPI 3 keys a Swagger 2 document should not have
+# (`schema`, `style`, `explode`, `content`; the httpbin spec mixes them in)
+# are replaced, as the Swagger 2 reader always ignored them. A `$ref` is left
+# alone (its target is converted where it lives), and so are body and
+# formData params, which `request-body` turns into the requestBody.
 def convert-param [p: any]: nothing -> any {
   if not (($p | describe) | str starts-with "record") { return $p }
   if ("$ref" in ($p | columns)) or (($p.in? | default "") in [body formData]) { return $p }
   let present = ($SCHEMA_KEYS | where {|k| $k in ($p | columns) })
   let schema = if ($present | is-empty) { {} } else { $p | select ...$present }
-  let style = if ($p.type? == "array") {
-    match ($p.collectionFormat? | default "csv") {
-      "multi" => {style: form, explode: true}
-      "ssv" => {style: spaceDelimited, explode: false}
-      "pipes" => {style: pipeDelimited, explode: false}
-      "tsv" => {style: tabDelimited, explode: false}
-      _ => {style: form, explode: false}
-    }
-  } else { {} }
-  $p | reject -o schema style explode content | insert schema $schema | merge $style
+  $p | reject -o schema style explode content | insert schema $schema | merge (array-style $p)
+}
+
+# An array param's `collectionFormat` (csv when absent, the Swagger 2
+# default) as OpenAPI 3 `style`/`explode`; {} for any other param. `tsv` has
+# no OpenAPI 3 style; it becomes `tabDelimited`, which spec reads like the
+# standard delimiters.
+def array-style [p: record]: nothing -> record {
+  if ($p.type? != "array") { return {} }
+  match ($p.collectionFormat? | default "csv") {
+    "multi" => {style: form, explode: true}
+    "ssv" => {style: spaceDelimited, explode: false}
+    "pipes" => {style: pipeDelimited, explode: false}
+    "tsv" => {style: tabDelimited, explode: false}
+    _ => {style: form, explode: false}
+  }
 }
 
 # The requestBody of one operation, from the body or formData params it
@@ -75,9 +79,10 @@ def convert-param [p: any]: nothing -> any {
 #
 # formData fields become an object schema, sent as multipart when a field is
 # a file or the op (else the document) `consumes` multipart, else urlencoded.
-# Each field keeps `items`, an array field its `collectionFormat` (csv by
-# default; model joins form arrays by it), and a `type: file` field stays
-# `file`, which render types as a path. A body param is sent as the first
+# Each field keeps `items`, an array field's `collectionFormat` becomes the
+# media type's `encoding` for it, as a param's becomes its style, and a
+# `type: file` field stays `file`, which render types as a path. A body
+# param is sent as the first
 # `consumes` type nushell can encode: JSON when listed (or `*/*`, which `http`
 # rejects as a content type), then merge-patch JSON (the safe Kubernetes PATCH
 # type), then the first concrete type.
@@ -94,16 +99,20 @@ def request-body [op: record, inherited: list, doc: record]: nothing -> any {
     let ct = if $has_file or ($spec.CT_MULTIPART in $consumes) { $spec.CT_MULTIPART } else { $spec.CT_FORM }
     mut props = {}
     mut required = []
+    mut encoding = {}
     for fp in $form {
       let prop = {type: ($fp.type? | default "string"), description: ($fp.description? | default ""), enum: ($fp.enum? | default [])}
       let prop = if ($fp.items? | is-not-empty) { $prop | insert items $fp.items } else { $prop }
-      let prop = if ($fp.type? | default "") == "array" { $prop | insert collectionFormat ($fp.collectionFormat? | default "csv") } else { $prop }
       $props = ($props | insert $fp.name $prop)
+      if ($fp.type? == "array") {
+        $encoding = ($encoding | insert $fp.name (array-style $fp))
+      }
       if ($fp.required? | default false) {
         $required = ($required | append $fp.name)
       }
     }
-    return {content: {$ct: {schema: {type: "object", properties: $props, required: $required}}}}
+    let media = {schema: {type: "object", properties: $props, required: $required}}
+    return {content: {$ct: (if ($encoding | is-empty) { $media } else { $media | insert encoding $encoding })}}
   }
 
   let bodies = ($params | where {|p| ($p.in? | default "") == "body" })
