@@ -59,24 +59,70 @@ export def load-spec [source: string, headers: record = {}] {
   }
 }
 
+# A plain YAML integer scalar — a block value, a sequence item or a flow item —
+# captured as `${1}` (what precedes it), `${2}` (the integer), `${3}` (what
+# follows). Quoted scalars never match: a quote is not in any context.
+const YAML_INT_SCALAR = '(?m)(^[ \t]*(?:-[ \t]+)*|:[ \t]+|[\[,][ \t]*)(-?[0-9]{19,})([ \t]*(?:$|[,\]}]|[ \t]#))'
+
+# Does nushell's `from yaml` refuse this integer? It refuses anything outside
+# i64 — and i64::MIN itself (0.117), which drf-spectacular writes as the
+# `minimum` of every BigIntegerField — so the bound is the same for both signs.
+# Compared as digit strings: `into int` saturates instead of failing.
+def yaml-int-unparseable [n: string]: nothing -> bool {
+  let digits = ($n | str trim --left --char '-')
+  let len = ($digits | str length)
+  $len > 19 or ($len == 19 and $digits >= "9223372036854775808")
+}
+
+# Parse YAML; when that fails, retry once with every integer `from yaml`
+# refuses quoted (`-9223372036854775808` → `"-9223372036854775808"`). No
+# nushell int holds it, and a string keeps every digit: as a float (what
+# `from json` makes of it) a uint64 `default` would go on the wire as
+# `18446744073709551616.0`. Only the failure path rewrites, so a spec that
+# parses is read byte for byte. A defect the rewrite does not cure surfaces as
+# the retry's error: the rewrite stays on its line, so the error's line
+# numbers are the spec's own.
+def parse-yaml [body: string]: nothing -> any {
+  try { $body | from yaml } catch {|err|
+    let unparseable = ($body | parse -r $YAML_INT_SCALAR | get capture1 | uniq | where {|n| yaml-int-unparseable $n })
+    if ($unparseable | is-empty) { error make $err.raw }
+    $unparseable | reduce --fold $body {|n, text|
+      let pattern = ($YAML_INT_SCALAR | str replace '(-?[0-9]{19,})' $"\(($n)\)")
+      $text | str replace -r -a $pattern '${1}"${2}"${3}'
+    } | from yaml
+  }
+}
+
+# The cause of a `from yaml` error, located in the spec ("unclosed bracket '['
+# at char 3 line 1 column 4"). nushell keeps it only in the rendered report's
+# cause line, drawn `->   x` in ASCII and `╰─▶ ×` in Unicode; its `msg`
+# ("Scanning YAML failed") is the fallback.
+def yaml-error-cause [err: record]: nothing -> string {
+  let causes = ($err.rendered | ansi strip | lines | parse -r '^\s*(?:`->|╰─▶)\s*[x×]\s+(?P<cause>.+)$' | get cause)
+  if ($causes | is-empty) { $err.msg } else { $causes | str join "; " }
+}
+
 # Parse a raw spec body, picking JSON or YAML based on the source URL's
 # extension and falling back to "try JSON then YAML" when there's no hint.
 def parse-spec-text [body: string, source: string]: nothing -> any {
   let parsed = if ($source | str ends-with ".json") {
     $body | from json
   } else if ($source | str ends-with ".yaml") or ($source | str ends-with ".yml") {
-    $body | from yaml
+    parse-yaml $body
   } else {
     try {
       $body | from json
     } catch {
       try {
-        $body | from yaml
-      } catch {
-        # YAML accepts bare HTML/text as a scalar string, so a successful parse
-        # here means we got real JSON or structured YAML — anything else is a
-        # server returning an error page (HTML, plain text) with HTTP 200.
-        error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
+        parse-yaml $body
+      } catch {|err|
+        # YAML accepts bare HTML/text as a scalar string, so a body YAML
+        # refuses is either an error page (HTML) served with HTTP 200 or a
+        # structured document with a real defect, which the YAML error locates.
+        if ($body | str trim | str starts-with "<") {
+          error make --unspanned { msg: $"could not parse spec from ($source): not valid JSON or YAML" }
+        }
+        error make --unspanned { msg: $"could not parse spec from ($source): invalid YAML: (yaml-error-cause $err)" }
       }
     }
   }

@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: Big Int Edge Cases
+  version: 1.0.0
+  # drf-spectacular writes i64's bounds on every BigIntegerField. nushell's
+  # `from yaml` refuses i64::MIN and anything past i64::MAX, so these used to
+  # fail the whole spec; the loader retries with them quoted, so every digit
+  # survives into completers, docs and required defaults on the wire.
+servers:
+  - url: https://api.example.com
+paths:
+  /devices/:
+    get:
+      operationId: listDevices
+      parameters:
+        - name: atl_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            maximum: 9223372036854775807
+            minimum: -9223372036854775808
+        - name: counter
+          in: query
+          schema:
+            type: integer
+            format: uint64
+            minimum: 0
+            maximum: 18446744073709551615
+        # Applied when omitted: the query must carry 18446744073709551615
+        # itself, not a rounded float.
+        - name: limit
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: uint64
+            default: 18446744073709551615
+        # Already quoted: a string the retry leaves alone.
+        - name: serial
+          in: query
+          schema:
+            type: string
+            enum: ['18446744073709551615', "-9223372036854775808"]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Device'}
+    post:
+      operationId: createDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Device'}
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Device'}
+components:
+  schemas:
+    Device:
+      type: object
+      required: [atl_id]
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        atl_id:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        quota:
+          type: integer
+          enum: [0, 18446744073709551615]
