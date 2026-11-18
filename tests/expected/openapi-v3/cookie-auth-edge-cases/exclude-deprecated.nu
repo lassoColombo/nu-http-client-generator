@@ -135,13 +135,20 @@ def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> an
   }
 }
 
-# Merge `extra` headers over `base`: the right side wins, as with `merge`,
-# except for `Cookie`. A request carries all its cookies in one header
-# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
-# A plain `merge` would let a cookie param drop a cookie-located auth token.
+# Merge `extra` headers over `base`: the right side wins, spelling included,
+# and names match whatever their case (`accept` replaces `Accept`; a plain
+# `merge` would send both). `Cookie` is the exception: a request carries all
+# its cookies in one header (RFC 6265 §5.4), so both sides' cookie strings
+# are kept, joined with `; `, or a cookie param would drop a cookie-located
+# auth token.
 def merge-headers [base: record, extra: record]: nothing -> record {
-  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
-  let merged = ($base | merge $extra | reject -o Cookie)
+  let is_cookie = {|k| ($k | str lowercase) == "cookie" }
+  let cookie = ([$base $extra] | each {|h| $h | transpose k v | where {|e| do $is_cookie $e.k } | get v } | flatten
+    | where {|c| $c | is-not-empty } | each { into string } | str join "; ")
+  let replaced = ($extra | columns | each { str lowercase })
+  let stale = ($base | columns | where {|k| (($k | str lowercase) in $replaced) or (do $is_cookie $k) })
+  let merged = ($base | reject -o ...$stale | merge $extra)
+  let merged = ($merged | reject -o ...($merged | columns | where {|k| do $is_cookie $k }))
   if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
 }
 
@@ -213,9 +220,11 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   let s = ($CLIENT.auth_schemes | where name == $scheme | get -o 0 | default {in: header, header_name: Authorization, prefix: Bearer})
   let value = if ($s.base64? | default false) { $token_val | encode base64 } else { $token_val }
+  # A query token is percent-encoded like any query value; a cookie goes out
+  # as given, like a cookie param: servers do not percent-decode cookies.
   match $s.in {
     "query" => {scheme: $scheme, headers: {}, query: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)", location: "query"}
-    "cookie" => {scheme: $scheme, headers: {Cookie: $"(encode-path-segment $s.header_name)=(encode-path-segment $value)"}, query: "", location: "cookie"}
+    "cookie" => {scheme: $scheme, headers: {Cookie: $"($s.header_name)=($value)"}, query: "", location: "cookie"}
     _ => {scheme: $scheme, headers: {$s.header_name: (if ($s.prefix | is-empty) { $value } else { $"($s.prefix) ($value)" })}, query: "", location: "header"}
   }
 }

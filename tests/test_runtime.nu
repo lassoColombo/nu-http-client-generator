@@ -185,6 +185,18 @@ def "merge-headers lets the right side win except for cookies" [] {
 }
 
 @test
+def "merge-headers matches names whatever their case" [] {
+    assert equal (rt 'merge-headers {Accept: a/b, X: 1} {accept: c/d}') {X: 1, accept: c/d} "the right side's spelling wins"
+    assert equal (rt 'merge-headers {cookie: "s=1"} {COOKIE: "l=it"}') {Cookie: "s=1; l=it"}
+}
+
+@test
+def "a header param spelled in lower case replaces the default Accept" [] {
+    let op = {method: get, path: "/a", header: [{name: accept, var: hdr_accept}], accept: [application/json], ok: [], auth: bearer}
+    assert equal (build $op {hdr_accept: text/csv}).req.headers {accept: text/csv}
+}
+
+@test
 def "merge-body-input keeps the flags when nothing is piped" [] {
     for mode in [record list scalar] {
         assert equal (rt $'merge-body-input null {b: 1} "($mode)"') {b: 1}
@@ -197,6 +209,7 @@ def "build-auth places the token where its scheme says" [] {
     assert equal (rt 'build-auth t x-api-key').headers {X-Api-Key: t}
     assert equal (rt 'build-auth "a b" "query-api key"') {scheme: "query-api key", headers: {}, query: "api%20key=a%20b", location: query}
     assert equal (rt 'build-auth t cookie-sid').headers {Cookie: "sid=t"}
+    assert equal (rt 'build-auth "ab+/c==" cookie-sid').headers {Cookie: "sid=ab+/c=="} "a cookie token is not percent-encoded"
     assert equal (rt 'build-auth "user:pass" basic-credentials').headers {Authorization: "Basic dXNlcjpwYXNz"}
     assert equal (rt 'build-auth t made-up').headers {Authorization: "Bearer t"} "an unknown scheme sends a bearer token"
 }
