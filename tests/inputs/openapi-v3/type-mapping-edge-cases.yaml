@@ -92,3 +92,22 @@ paths:
                   - {$ref: '#/components/schemas/Address'}
                 properties:
                   name: {type: string}
+  # Response field names that are not plain words keep their spelling in the
+  # type, quoted: `created-at` and `created_at` stay two fields (sanitizing
+  # both to `created_at` used to emit a duplicate key), `@odata.type` stays.
+  /events:
+    get:
+      operationId: getEvent
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created-at: {type: string}
+                  created_at: {type: string}
+                  '@odata.type': {type: string}
+                  9lives: {type: integer}
+                  "it's": {type: boolean}

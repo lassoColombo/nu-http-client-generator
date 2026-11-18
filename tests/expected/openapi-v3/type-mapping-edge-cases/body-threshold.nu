@@ -430,7 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "create-tags" "create-widget" "get-profile" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "create-tags" "create-widget" "get-profile" "get-event" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -550,6 +550,31 @@ export def "get-profile" [
   http-request {
     method: get
     path: "/profiles"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /events
+#
+# operationId: getEvent
+export def "get-event" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> oneof<record<created-at: string, created_at: string, "@odata.type": string, "9lives": int, "it's": bool>, string, nothing> {
+  http-request {
+    method: get
+    path: "/events"
     accept: ["application/json"]
     ok: [200]
     auth: bearer

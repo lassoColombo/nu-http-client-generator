@@ -107,8 +107,9 @@ export def nu-type-for [t: string, items_t?: string]: nothing -> string {
 # Nushell type syntax — the deep counterpart to `nu-type-for`. Both live here
 # because producing Nushell type text is the render layer's job. Owns the two
 # syntax decisions the descriptor deliberately leaves out: a list-of-record
-# collapses to `table<…>` (nicer than `list<record<…>>`), and record field
-# names are sanitized to valid Nushell type identifiers.
+# collapses to `table<…>` (nicer than `list<record<…>>`), and a record field
+# name is written bare when it is a plain word and quoted otherwise
+# (`"@odata.type"`), so `help` shows the key the response really has.
 export def nu-type-string [td: any]: nothing -> string {
   if not (($td | describe) | str starts-with "record") { return $td }
   let cols = ($td | columns)
@@ -121,8 +122,7 @@ export def nu-type-string [td: any]: nothing -> string {
     }
   } else if ("record" in $cols) {
     let fields = ($td.record | each {|f|
-      let safe_name = ($f.name | str replace --all --regex '[^a-zA-Z0-9_]' '_')
-      $"($safe_name): (nu-type-string $f.type)"
+      $"($f.name | str-literal): (nu-type-string $f.type)"
     } | str join ", ")
     if ($fields | is-empty) { "record" } else { $"record<($fields)>" }
   } else {
