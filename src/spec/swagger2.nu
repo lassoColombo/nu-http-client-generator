@@ -228,19 +228,23 @@ def strip-base-path-template [base_path: string]: nothing -> string {
 }
 
 # The servers: one per declared scheme (https when none) on `host` + `basePath`,
-# or the single parameterized host.
+# or the single parameterized host. Without `host` the API is on the host
+# serving the document, so the server is the relative `basePath`, which spec
+# anchors like an OpenAPI 3 relative server URL.
 def servers [doc: record]: nothing -> list<record> {
   let base_path = (strip-base-path-template ($doc.basePath? | default ""))
   let parameterized = (resolve-parameterized-host $doc)
   let urls = if ($parameterized != null) {
     [$"($parameterized)($base_path)"]
+  } else if ($doc.host? | is-empty) {
+    [$"/($base_path | str trim --left --char '/')"]
   } else {
-    let host = ($doc.host? | default $spec.DEFAULT_HOST)
+    let host = $doc.host
     let schemes = ($doc.schemes? | default [])
     let schemes = if ($schemes | is-empty) { ["https"] } else { $schemes }
     $schemes | each {|s| {scheme: $s, host: $host, path: $base_path} | url join }
   }
-  $urls | each {|u| {url: ($u | str trim --right --char '/')} }
+  $urls | each {|u| {url: ($u | str trim --right --char '/' | if ($in | is-empty) { "/" } else { $in })} }
 }
 
 # `type: basic` is OpenAPI 3's `http` scheme `basic`; apiKey and oauth2 read

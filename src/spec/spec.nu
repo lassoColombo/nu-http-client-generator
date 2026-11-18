@@ -13,7 +13,7 @@ export const CT_MULTIPART = "multipart/form-data"
 export const CT_FORM      = "application/x-www-form-urlencoded"
 export const CT_PRIORITY  = [$CT_JSON $CT_MULTIPART $CT_FORM]
 
-export const DEFAULT_HOST = "localhost"
+const DEFAULT_HOST = "localhost"
 
 export const RESPONSE_CODE_PRIORITY = ["200" "201" "202" "2XX" "default"]
 
@@ -39,20 +39,23 @@ export def fetch-text [url: string, headers: record = {}] {
 }
 
 # Load an OpenAPI/Swagger spec from a local file or a URL.
-# Returns {data: record, source: string}.
+# Returns {data: record, source: string, origin: string?}: `origin` is the
+# URL's `scheme://host[:port]`, null for a file (see `anchor-servers`).
 #
 # The URL path goes through `fetch-text` (raw fetch + UTF-8 decode) instead of
 # `http get`'s auto-parser — see that helper for the rationale.
 export def load-spec [source: string, headers: record = {}] {
   if ($source | str starts-with "http://") or ($source | str starts-with "https://") {
     let body = (fetch-text $source $headers)
-    {data: (parse-spec-text $body $source), source: $source}
+    let u = ($source | url parse)
+    let port = if ($u.port | is-empty) { "" } else { $":($u.port)" }
+    {data: (parse-spec-text $body $source), source: $source, origin: $"($u.scheme)://($u.host)($port)"}
   } else {
     # `open --raw` + parse-spec-text instead of `open`'s extension-driven
     # parser, so an extension-less spec (or `.txt`) still parses and a
     # non-spec file fails with the same clear error as the URL path.
     let expanded = ($source | path expand | into string)
-    {data: (parse-spec-text (open --raw $expanded) $expanded), source: $expanded}
+    {data: (parse-spec-text (open --raw $expanded) $expanded), source: $expanded, origin: null}
   }
 }
 
@@ -541,6 +544,38 @@ def resolve-server-url [server: record, overrides: record = {}] {
   let substituted = (resolve-server-template $raw ($server.variables? | default {}) $overrides)
   let absolute = if ($substituted | str starts-with "/") { $"http://($DEFAULT_HOST)($substituted)" } else { $substituted }
   $absolute | str trim --right --char '/'
+}
+
+# Anchor the document's relative server URLs on the origin it was fetched
+# from: a server URL is relative to the document's location (OAS 3 §4.8.5),
+# and a document without root `servers` is served from `/`. Every `servers`
+# list (root, path items, operations) is rewritten; an absolute or
+# scheme-relative (`//host`) URL is left alone. A spec read from a file has no
+# origin and keeps the `http://localhost` fallback of `resolve-server-url`.
+export def anchor-servers [doc: record, origin: string]: nothing -> record {
+  let anchor = {|servers|
+    $servers | each {|s|
+      let u = ($s.url? | default "")
+      if ($u | str starts-with "/") and not ($u | str starts-with "//") { $s | update url $"($origin)($u)" } else { $s }
+    }
+  }
+  # Anchor the `servers` of a path item or operation that has its own.
+  let anchor_own = {|v| match $v { {servers: [..$_]} => ($v | update servers (do $anchor $v.servers)), _ => $v } }
+  let root = ($doc.servers? | default [])
+  let paths = ($doc.paths? | default {})
+  let paths = if ($paths | is-empty) { $paths } else {
+    $paths | transpose path item | each {|e|
+      let item = (do $anchor_own $e.item)
+      let item = match $item {
+        {} if ($item | is-not-empty) => ($item | transpose k v | each {|m| {k: $m.k, v: (if $m.k in [get put post delete options head patch] { do $anchor_own $m.v } else { $m.v })} } | transpose -r -d)
+        _ => $item
+      }
+      {path: $e.path, item: $item}
+    } | transpose -r -d
+  }
+  $doc
+  | upsert servers (do $anchor (if ($root | is-empty) { [{url: "/"}] } else { $root }))
+  | upsert paths $paths
 }
 
 # The base URL: the first root server, else `http://localhost`.

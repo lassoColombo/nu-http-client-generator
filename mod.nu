@@ -29,11 +29,14 @@ def check-spec-generatable [loaded: record] {
   error make --unspanned { msg: $"not a valid OpenAPI/Swagger spec: missing 'paths' field \(source: ($loaded.source)\)" }
 }
 
-# Shared pipeline: bring a Swagger 2.0 document to OpenAPI 3, extract auth
-# metadata, build the command model. Returns {commands, auth_schemes,
-# base_url, all_urls}.
-def process-spec [doc: record, config: record] {
+# Shared pipeline: bring a Swagger 2.0 document to OpenAPI 3, anchor its
+# relative servers on the URL it was fetched from, extract auth metadata,
+# build the command model. `loaded` is `spec load-spec`'s record. Returns
+# {commands, auth_schemes, base_url, all_urls}.
+def process-spec [loaded: record, config: record] {
+  let doc = $loaded.data
   let doc = if (spec detect $doc) == "swagger" { swagger2 to-openapi3 $doc } else { $doc }
+  let doc = if ($loaded.origin == null) { $doc } else { spec anchor-servers $doc $loaded.origin }
   let auth_schemes = (spec auth-schemes $doc)
   {
     commands: (model command-list $doc $auth_schemes (spec root-auth $doc $auth_schemes) $config)
@@ -113,7 +116,7 @@ export def main [
   let module_name = if ($name | is-not-empty) { $name } else {
     $"($loaded.data.info?.title? | default ($loaded.source | path parse | get stem))"
   }
-  let result = (process-spec $loaded.data $config)
+  let result = (process-spec $loaded $config)
   # An error, not a warning: the caller asked for a file and would otherwise
   # get exit status 0 and no output. `preview` keeps returning [] since an
   # empty preview is a legitimate answer.
@@ -139,7 +142,7 @@ export def preview [
   check-spec-generatable $loaded
   let config = (filter-config $tags $prefixes $methods $exclude_deprecated $name_fn) | merge {body_threshold: 0}
 
-  let result = (process-spec $loaded.data $config)
+  let result = (process-spec $loaded $config)
   if ($result.commands | is-empty) {
     log warn $"spec at ($loaded.source) yields no commands after filtering — nothing to preview"
     return []

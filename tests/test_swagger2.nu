@@ -29,6 +29,13 @@ def "servers come from host, basePath and schemes" [] {
 }
 
 @test
+def "without a host the server is the relative basePath" [] {
+    let doc = {swagger: "2.0", info: {title: t, version: "1"}, basePath: "/api/v2/", schemes: [http], paths: {}}
+    assert equal (swagger2 to-openapi3 $doc).servers [{url: "/api/v2"}]
+    assert equal (swagger2 to-openapi3 ($doc | reject basePath)).servers [{url: "/"}]
+}
+
+@test
 def "a parameterized host is the single server" [] {
     let doc = (convert parameterized-host-edge-cases)
     assert equal $doc.servers [{url: "https://{searchServiceName}.search.windows.net"}]
