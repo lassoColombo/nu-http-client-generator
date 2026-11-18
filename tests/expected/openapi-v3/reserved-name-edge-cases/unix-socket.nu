@@ -403,6 +403,9 @@ def base-url-completer [] { ["https://example.com/api"] }
 def auth-scheme-completer [] { ["bearer"] }
 def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
+# Completers for enum parameters
+def base-url-completer-1 [] { ["eu" "us"] }
+def auth-scheme-completer-1 [] { ["plain" "signed"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -443,16 +446,18 @@ export def "search-by-env" [
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --qp-env: string # (spec name: env)
   --qp-in: string # (spec name: in)
+  --qp-base-url: string@base-url-completer-1 # (spec name: baseUrl)
+  --qp-auth-scheme: string@auth-scheme-completer-1 # (spec name: authScheme)
 ]: nothing -> any {
   http-request {
     method: get
     path: "/search"
-    query: [{name: env, var: qp_env}, {name: in, var: qp_in}]
+    query: [{name: env, var: qp_env}, {name: in, var: qp_in}, {name: baseUrl, var: qp_base_url}, {name: authScheme, var: qp_auth_scheme}]
     accept: ["application/json"]
     ok: [200]
     auth: bearer
   } {
-    qp_env: $qp_env, qp_in: $qp_in
+    qp_env: $qp_env, qp_in: $qp_in, qp_base_url: $qp_base_url, qp_auth_scheme: $qp_auth_scheme
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
   }
 }

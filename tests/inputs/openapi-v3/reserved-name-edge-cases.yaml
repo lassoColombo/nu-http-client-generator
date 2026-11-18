@@ -22,6 +22,18 @@ paths:
           required: false
           schema:
             type: string
+        # Enum params named like the module's fixed completers get numbered
+        # completers (`base-url-completer-1`), not a second definition.
+        - name: baseUrl
+          in: query
+          schema:
+            type: string
+            enum: [eu, us]
+        - name: authScheme
+          in: query
+          schema:
+            type: string
+            enum: [plain, signed]
       responses:
         '200':
           description: ok

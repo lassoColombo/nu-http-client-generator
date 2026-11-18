@@ -313,8 +313,11 @@ def completer-key [q: record]: nothing -> record {
 }
 
 # Collect all unique enum sets and map each (flag_name, enum_values) to a completer name.
+# The module's fixed completers count as taken, so an enum param named
+# `baseUrl` gets `base-url-completer-1` instead of a second
+# `base-url-completer` (a `duplicate_command_def`).
 export def collect-completers [commands: list] {
-  let initial = {completers: {}, mapping: {}, name_counts: {}}
+  let initial = {completers: {}, mapping: {}, name_counts: {base-url: 1, auth-scheme: 1, unix-socket: 1}}
   let final = ($commands | reduce -f $initial {|cmd, state|
     let accept_source = if ($cmd.accept_types | length) > 1 { [{name: "accept", enum: $cmd.accept_types}] } else { [] }
     # A collapsed body (`--body: record`) declares no per-field flags, so its
