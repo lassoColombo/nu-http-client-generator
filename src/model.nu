@@ -582,6 +582,11 @@ export def command-list [doc: record, auth_schemes: list, root_auth: record, con
       if not $matches { return null }
     }
 
+    # A path item must be an object; YAML `/a:` with nothing under it is null.
+    if not (($path_entry.methods | describe) | str starts-with "record") {
+      log warn $"path '($path_entry.path)' is not a path item object, skipping it"
+      return null
+    }
     let methods = (resolve-path-item $path_entry $doc)
 
     $methods | transpose method op | where {|m|
@@ -639,6 +644,12 @@ export def command-list [doc: record, auth_schemes: list, root_auth: record, con
       let extra_path_params = $template_placeholders | where {|ph| not ($ph in $declared) } | each {|ph|
         {name: $ph, type: "any", items_type: null, enum: [], greedy: false}
       }
+      # A declared path param the template does not hold has nowhere to go:
+      # it would be a required positional the URL never reads.
+      let unplaced = ($params.path_params | where {|p| ($clean_path | str index-of $"{($p.name)}") < 0 } | get name | uniq)
+      if ($unplaced | is-not-empty) {
+        log warn $"($method | str uppercase) ($path_entry.path): path param\(s\) ($unplaced | str join ', ') not in the path template, dropped"
+      }
       # Order path params as the URL template does. Path-param emission and
       # positional order are taken straight from this list, so a spec that
       # declares params in a different order (e.g. alphabetical) than the URL
@@ -647,10 +658,9 @@ export def command-list [doc: record, auth_schemes: list, root_auth: record, con
       # One positional per name: two params binding the same variable would
       # silently keep only the later value, so a spec that declares a name
       # twice (`Key` and `Key+`) keeps the first.
-      let params = $params | update path_params ($params.path_params | append $extra_path_params | sort-by {|p|
-        let idx = ($clean_path | str index-of $"{($p.name)}")
-        if $idx < 0 { 999999 } else { $idx }
-      } | uniq-by name | each {|p| $p | update greedy ($p.greedy or ($p.name in $greedy_names)) })
+      let params = $params | update path_params ($params.path_params | where {|p| $p.name not-in $unplaced } | append $extra_path_params
+        | sort-by {|p| $clean_path | str index-of $"{($p.name)}" }
+        | uniq-by name | each {|p| $p | update greedy ($p.greedy or ($p.name in $greedy_names)) })
       let body = (extract-body-info $method $op $doc $"($method | str uppercase) ($path_entry.path)")
       let resp = (extract-response-info $method $op $doc)
       let derived_name = (derive-command-name $op $method (if ($fixed_query | is-empty) { $clean_path } else { $"($clean_path)?($fixed_query)" }))

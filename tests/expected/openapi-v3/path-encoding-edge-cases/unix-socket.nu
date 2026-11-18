@@ -434,7 +434,7 @@ def format-completer [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-lines" "get-branch" "get-region-status" "get-user-org" "get-reports" "batch-update-document" "get-metadata" "export-report" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-lines" "get-branch" "get-region-status" "get-user-org" "get-reports" "batch-update-document" "get-metadata" "export-report" "get-report" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -679,6 +679,35 @@ export def "export-report" [
     auth: bearer
   } {
     format: $format
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /reports/{reportId}
+#
+# operationId: getReport
+export def "get-report" [
+  report_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/reports/{reportId}"
+    path_params: [{name: reportId, var: report_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    report_id: $report_id
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
   }
 }

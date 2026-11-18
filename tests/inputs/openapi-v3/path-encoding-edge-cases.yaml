@@ -86,3 +86,21 @@ paths:
           schema: {type: string, enum: [json, xml]}
       responses:
         '200': {description: ok}
+  # A path param declared but absent from the template is dropped (with a
+  # warning) instead of becoming a required positional the URL never reads.
+  /reports/{reportId}:
+    get:
+      operationId: getReport
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: ghost
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: ok}
+  # A path key with nothing under it (YAML null) is skipped with a warning.
+  /unfinished:

@@ -650,3 +650,31 @@ export def "export-report" [
     base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
+
+# GET /reports/{reportId}
+#
+# operationId: getReport
+export def "get-report" [
+  report_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/reports/{reportId}"
+    path_params: [{name: reportId, var: report_id}]
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    report_id: $report_id
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}

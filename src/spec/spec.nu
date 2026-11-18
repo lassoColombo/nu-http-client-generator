@@ -598,7 +598,7 @@ export def all-urls [doc: record]: nothing -> list<string> {
     } | flatten)
     [(resolve-server-url $s)] ++ $variants
   } | flatten)
-  let overrides = ($doc.paths? | default {} | drop-vendor-extensions | values | each {|item|
+  let overrides = ($doc.paths? | default {} | drop-vendor-extensions | values | where {|item| ($item | describe) | str starts-with "record" } | each {|item|
     let op_servers = ($item | items {|method, op|
       if ($method in [get post put patch delete head options]) and (($op | describe) | str starts-with "record") { $op.servers? | default [] } else { [] }
     } | flatten)
