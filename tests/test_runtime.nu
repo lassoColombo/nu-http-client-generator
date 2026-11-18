@@ -274,7 +274,7 @@ def "build-request assembles a JSON body from its fields and pipeline input" [] 
     }
     let r = (build $op {name: n, tag: null, id: 3} {extra: 1, name: piped})
     assert equal $r.req.body {extra: 1, name: n, id: 3} "a flag wins over the piped record"
-    assert equal $r.wire $r.req.body
+    assert equal $r.wire '{"extra":1,"name":"n","id":3}'
     assert equal $r.req.content_type application/json
     assert equal (build $op {name: null, tag: null, id: null} {id: 9}).req.body {id: 9} "a piped record satisfies a required field"
     let args = ($ARGS | merge {name: null, tag: null, id: null} | to nuon)
@@ -282,7 +282,36 @@ def "build-request assembles a JSON body from its fields and pipeline input" [] 
 }
 
 @test
-def "build-request encodes form, json-text and opaque bodies for the wire" [] {
+def "build-request encodes every JSON value, empty and scalar ones included" [] {
+    let op = {
+        method: put, path: "/j", content_type: application/json
+        body: {kind: json, accepts: scalar}
+        accept: [application/json], ok: [], auth: bearer
+    }
+    assert equal (build $op {body: []}).wire "[]"
+    assert equal (build $op {body: {}}).wire "{}"
+    assert equal (build $op {body: 5}).wire "5"
+    assert equal (build $op {body: false}).wire "false"
+    assert equal (build $op {body: '{"pre":1}'}).wire '{"pre":1}' "a string is already JSON text"
+    assert equal (build $op {body: null}).wire null "no body sends nothing"
+    let patch = ($op | merge {content_type: application/merge-patch+json, body: {kind: json, fields: [{name: a, var: a}]}})
+    assert equal (build $patch {a: 1}).wire '{"a":1}' "a +json type is JSON"
+}
+
+@test
+def "a per-field body without flags or input is no body, a piped empty record is one" [] {
+    let op = {
+        method: post, path: "/p", content_type: application/json
+        body: {kind: json, fields: [{name: a, var: a}]}
+        accept: [application/json], ok: [], auth: bearer
+    }
+    let r = (build $op {a: null})
+    assert equal [$r.req.body $r.wire] [null null]
+    assert equal (build $op {a: null} {}).wire "{}"
+}
+
+@test
+def "build-request encodes form and opaque bodies for the wire" [] {
     let form = {
         method: post, path: "/f", content_type: application/x-www-form-urlencoded
         body: {kind: form, fields: [{name: tags, var: tags, join: ","}, {name: n, var: n}]}
@@ -291,11 +320,12 @@ def "build-request encodes form, json-text and opaque bodies for the wire" [] {
     let r = (build $form {tags: [a b], n: "x y"})
     assert equal $r.req.body {tags: "a,b", n: "x y"} "a csv form array is one joined value"
     assert equal $r.wire ({tags: "a,b", n: "x y"} | url build-query)
-    let patch = ($form | merge {content_type: application/merge-patch+json, body: {kind: json-text, fields: [{name: a, var: a}]}})
-    assert equal (build $patch {a: 1}).wire '{"a":1}'
     let opaque = ($form | merge {content_type: text/plain, body: {kind: opaque, accepts: scalar}})
     let r = (build $opaque {body: null} "raw text")
     assert equal [$r.req.body $r.wire] ["raw text" "raw text"] "a piped scalar is the body"
+    assert equal (build $opaque {body: 42}).wire "42"
+    let args = ($ARGS | merge {body: {a: 1}} | to nuon)
+    assert (rt-error $"build-request ($opaque | to nuon) ($args) null" | str contains "a text/plain body must be a string or binary")
 }
 
 @test
@@ -311,7 +341,9 @@ def "a Content-Type header param picks the body encoding at call time" [] {
     assert equal $r.req.content_type application/x-www-form-urlencoded
     assert equal $r.req.headers.Content-Type application/x-www-form-urlencoded
     let r = (build $op {content_type: null, a: 1})
-    assert equal [$r.wire $r.req.content_type] [{a: 1} application/json]
+    assert equal [$r.wire $r.req.content_type] ['{"a":1}' application/json]
+    let r = (build $op {content_type: "application/vnd.api+json; charset=utf-8", a: 1})
+    assert equal $r.wire '{"a":1}' "a +json type with parameters is JSON"
 }
 
 @test

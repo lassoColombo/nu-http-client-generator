@@ -168,6 +168,23 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
+# The body kind of a media type a Content-Type header param picks at call
+# time (the descriptor's own kind was decided at generation time, the same
+# way): json for `application/json` and the `+json` suffix types, form,
+# multipart, or opaque. Parameters such as a charset are ignored.
+def body-kind [content_type: string]: nothing -> string {
+  let media = ($content_type | split row ";" | first | str trim | str lowercase)
+  if ($media == "application/json") or ($media | str ends-with "+json") {
+    "json"
+  } else if $media == "application/x-www-form-urlencoded" {
+    "form"
+  } else if $media == "multipart/form-data" {
+    "multipart"
+  } else {
+    "opaque"
+  }
+}
+
 # Merge multiple auth records (AND-form security: every scheme must be sent).
 def merge-auth [parts: list]: nothing -> record {
   let active = ($parts | where {|p| $p.location != "none" })
@@ -211,7 +228,7 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 #   query               [{name, var, style?, required?, default?}]
 #   header, cookie      [{name, var, array?, required?, default?}]
 #   content_type        the request media type (none for GET/HEAD/OPTIONS)
-#   body                {kind: json|json-text|form|multipart|opaque, accepts?,
+#   body                {kind: json|form|multipart|opaque, accepts?,
 #                        fields?: [{name, var, join?, required?}], files?}
 #   accept, ok          the response media types, the success status codes
 #   base_url            the operation's own server
@@ -260,21 +277,25 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
 
   # The body: its per-field flags assembled into a record (a csv/ssv/tsv/pipes
   # form array joined into one value), else the `--body` value; then pipeline
-  # input merged in. A required field that is a flag is checked after the
-  # merge, on a record only: a polymorphic body may be a piped list.
+  # input merged in. No field flag and nothing piped is no body, while an
+  # explicit `--body {}` or a piped `{}` is sent. A required field that is a
+  # flag is checked after the merge, unless the body is not a record: a
+  # polymorphic body may be a piped list.
   let body = ($op.body? | default null)
   let req_body = if ($body == null) { null } else {
     let assembled = if ($body.fields? | is-empty) { $args.body? } else {
-      $body.fields | reduce --fold {} {|f, acc|
+      let fields = ($body.fields | reduce --fold {} {|f, acc|
         let v = ($args | get $f.var)
         let v = if ($f.join? != null) and ($v | describe | str starts-with "list") { $v | compact | each { into string } | str join $f.join } else { $v }
         $acc | upsert $f.name $v
-      } | compact
+      } | compact)
+      if ($fields | is-empty) { null } else { $fields }
     }
     merge-body-input $input $assembled ($body.accepts? | default "record")
   }
   for f in ($body.fields? | default [] | where {|f| $f.required? | default false }) {
-    if ($req_body | describe | str starts-with "record") and (($req_body | get -o $f.name) == null) {
+    let checked = ($req_body | default {})
+    if ($checked | describe | str starts-with "record") and (($checked | get -o $f.name) == null) {
       error make --unspanned { msg: $"required body field '($f.name)' missing: pass --($f.var | str replace --all '_' '-') or pipe a record" }
     }
   }
@@ -297,26 +318,36 @@ def build-request [op: record, args: record, input: any]: nothing -> record {
   }
   let headers = if ($CLIENT.default_headers | is-empty) { $headers } else { merge-headers $CLIENT.default_headers $headers }
 
-  # The wire body. multipart/form-data is an RFC 7578 envelope with file
-  # fields read from disk (not under --dry-run); a non-record multipart body
-  # is sent verbatim. A Content-Type header param picks the encoding at call
-  # time; otherwise the body kind does: form → urlencoded, json-text (a `+json`
-  # type, which `http` accepts only as a string) → `to json`.
-  let form_encode = {|b| if ($b | describe | str starts-with "record") { $b | compact | url build-query } else if ($b == null) { "" } else { $b | into string } }
-  let json_encode = {|b| if ($b | describe) =~ '^(record|list|table)' { $b | to json -r } else { $b } }
+  # The wire body: null (nothing to send), a string or binary. The encoding is
+  # the body kind, unless a Content-Type header param picks the media type at
+  # call time. JSON is encoded here, not by `http`, which encodes a record
+  # only under `application/json` and refuses a scalar. A form is urlencoded;
+  # multipart/form-data is an RFC 7578 envelope with file fields read from disk
+  # (not under --dry-run), and a non-record multipart body is sent verbatim.
+  # An opaque type takes the caller's own wire form.
   let ct_param = ($op.header? | default [] | where {|h| ($h.name | str lowercase) == "content-type" } | get -o 0)
-  let content_type = if ($body != null) and ($ct_param != null) { $args | get $ct_param.var | default $op.content_type } else { $op.content_type? }
-  let kind = ($body.kind? | default "none")
+  let ct_arg = if ($body == null) or ($ct_param == null) { null } else { $args | get $ct_param.var }
+  let content_type = ($ct_arg | default $op.content_type?)
+  let kind = if ($body == null) { "none" } else if ($ct_arg != null) { body-kind $ct_arg } else { $body.kind }
   let req_body = if $kind == "multipart" { $req_body | default {} } else { $req_body }
-  let mp = if $kind != "multipart" { null } else if ($req_body | describe | str starts-with "record") {
+  let shape = ($req_body | describe | str replace --regex '<.*' '')
+  let mp = if $kind != "multipart" { null } else if $shape == "record" {
     build-multipart-body $req_body ($body.files? | default []) $args.dry_run
   } else {
-    {body: $req_body, content_type: "multipart/form-data"}
+    {body: $req_body, content_type: $content_type}
   }
-  let wire = if $kind == "multipart" { $mp.body } else if ($body != null) and ($ct_param != null) {
-    if $content_type == "application/x-www-form-urlencoded" { do $form_encode $req_body } else if ($content_type =~ '\+json\s*(;|$)') { do $json_encode $req_body } else { $req_body }
-  } else {
-    match $kind { "form" => (do $form_encode $req_body), "json-text" => (do $json_encode $req_body), _ => $req_body }
+  let wire = if ($req_body == null) { null } else {
+    match $kind {
+      "json" => (if $shape in [string binary] { $req_body } else { $req_body | to json -r })
+      "form" => (if $shape == "record" { $req_body | compact | url build-query } else { $req_body | into string })
+      "multipart" => $mp.body
+      _ => {
+        if $shape in [record list table] {
+          error make --unspanned { msg: $"a ($content_type) body must be a string or binary: serialize it first" }
+        }
+        if $shape in [string binary] { $req_body } else { $req_body | into string }
+      }
+    }
   }
 
   let bodyless = ($op.method in [get head options])
@@ -345,53 +376,40 @@ def http-request [op: record, args: record]: any -> any {
 # Send a built request with `http <method>` and unwrap the response
 # (`handle-response`; a successful HEAD returns just the headers).
 #
-# nushell's `http` encodes a record or list body itself (JSON here, under
-# `--content-type`), and refuses a string or binary body under the form and
-# multipart types, which it would encode itself. Every other body arrives
-# already encoded by `build-request` (form, multipart, `+json` text, opaque),
-# so it goes out as is with its Content-Type a plain header. An empty body
-# goes out as "" without one.
+# The body arrives encoded by `build-request` (a string or binary), so it goes
+# out as is with its Content-Type a plain header: nushell's `http` refuses a
+# string or binary body under `--content-type` form or multipart, which it
+# would encode itself. No body goes out as "" without a Content-Type.
 #
 # A request with a `unix_socket` (clients generated with one) connects over
 # it unless it is empty; `--unix-socket` has no "off" value, so each call has
 # two forms.
 def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> any {
   let sock = ($req.unix_socket? | default "")
-  let shape = if ($body | is-empty) { "empty" } else { match $body { {} => "data", [..$_] => "data", _ => "encoded" } }
-  let headers = if $shape != "encoded" { $req.headers } else {
+  let headers = if ($body == null) { $req.headers } else {
     let stale = ($req.headers | columns | where {|k| ($k | str lowercase) == "content-type" })
     $req.headers | reject -o ...$stale | insert Content-Type $req.content_type
   }
-  let body = if $shape == "empty" { "" } else { $body }
+  let body = ($body | default "")
   let resp = if ($sock | is-empty) {
-    match [$req.method $shape] {
-      [get, _] => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
-      [head, _] => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
-      [options, _] => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
-      [post, data] => (http post --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [post, _] => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [put, data] => (http put --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [put, _] => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [patch, data] => (http patch --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [patch, _] => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
-      [delete, empty] => (http delete --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
-      [delete, data] => (http delete --headers $headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
-      [delete, _] => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw $req.url)
     }
   } else {
-    match [$req.method $shape] {
-      [get, _] => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
-      [head, _] => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
-      [options, _] => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
-      [post, data] => (http post --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [post, _] => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [put, data] => (http put --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [put, _] => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [patch, data] => (http patch --headers $headers --content-type $req.content_type --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [patch, _] => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
-      [delete, empty] => (http delete --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
-      [delete, data] => (http delete --headers $headers --content-type $req.content_type --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
-      [delete, _] => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+    match $req.method {
+      get => (http get --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
+      head => (http head --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      options => (http options --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --unix-socket $sock $req.url)
+      post => (http post --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      put => (http put --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      patch => (http patch --headers $headers --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url $body)
+      delete => (http delete --headers $headers --data $body --full --allow-errors --max-time $req.timeout --insecure=$args.insecure --raw=$args.raw --unix-socket $sock $req.url)
     }
   }
   if ($req.method == "head") and (not $args.full) and (not $args.allow_errors) and (status-ok $resp.status $ok) { return $resp.headers }
@@ -806,7 +824,7 @@ export def "merge-patch" [
     method: patch
     path: "/merge-patch"
     content_type: "application/merge-patch+json"
-    body: {kind: json-text, fields: [{name: name, var: name}, {name: labels, var: labels}]}
+    body: {kind: json, fields: [{name: name, var: name}, {name: labels, var: labels}]}
     accept: ["application/json"]
     ok: [200]
     auth: bearer
@@ -835,7 +853,7 @@ export def "json-patch" [
     method: patch
     path: "/json-patch"
     content_type: "application/json-patch+json"
-    body: {kind: json-text, accepts: scalar}
+    body: {kind: json, accepts: scalar}
     accept: ["application/json"]
     ok: [200]
     auth: bearer

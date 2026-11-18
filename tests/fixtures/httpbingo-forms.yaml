@@ -3,9 +3,9 @@ info:
   title: httpbingo forms
   version: "1.0"
   description: >-
-    httpbingo.org's echo endpoints described as a form post and a multipart
-    upload, for test_integration.nu: a generated client must put both bodies
-    on the wire, not only into its --dry-run record.
+    httpbingo.org's echo endpoints described as a form post, a multipart
+    upload and JSON bodies, for test_integration.nu: a generated client must
+    put every body on the wire, not only into its --dry-run record.
 servers:
   - url: https://httpbingo.org
 paths:
@@ -33,5 +33,26 @@ paths:
               properties:
                 note: {type: string}
                 file: {type: string, format: binary}
+      responses:
+        '200': {description: the request, echoed}
+  /anything/json:
+    put:
+      operationId: putJson
+      requestBody:
+        content:
+          application/merge-patch+json:
+            schema:
+              type: object
+              properties:
+                name: {type: string}
+      responses:
+        '200': {description: the request, echoed}
+  /anything/count:
+    put:
+      operationId: putCount
+      requestBody:
+        content:
+          application/json:
+            schema: {type: integer}
       responses:
         '200': {description: the request, echoed}

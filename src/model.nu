@@ -444,29 +444,23 @@ def extract-body-info [method: string, op: record, doc: record, label: string] {
   # NOT expand record schemas into per-field flags: there is no canonical
   # Nushell-record-to-XML codec, no canonical record-to-octet-stream codec,
   # etc. Callers pre-serialize and either pass a string via --body or pipe
-  # one into the operation. Per-field flags would be misleading. JSON
-  # content-types expand: nushell's `http` encodes a record itself for
-  # `application/json`, and render encodes it for the `+json` suffix types
-  # (`application/merge-patch+json`), which `http` accepts only as a string.
-  # Multipart and form-urlencoded also expand — the renderer has dedicated
-  # `build-multipart-body` and `url build-query` codecs for them.
-  # `body_kind` is the one place this is decided, and render matches on it
-  # instead of re-reading content-type strings:
+  # one into the operation. Per-field flags would be misleading. JSON, form
+  # and multipart bodies expand: the runtime encodes each of them itself.
+  # `body_kind` is the one place this is decided, and the runtime matches on
+  # it instead of re-reading content-type strings:
   #   none      — no request body (or a GET/HEAD/OPTIONS that cannot send one)
-  #   json      — `application/json`; nushell's `http` encodes a record itself
-  #   json-text — a `+json` suffix type; render emits `to json -r`
-  #   form      — x-www-form-urlencoded; render emits `url build-query`
-  #   multipart — multipart/form-data; render emits `build-multipart-body`
+  #   json      — `application/json` or a `+json` suffix type; `to json -r`
+  #   form      — x-www-form-urlencoded; `url build-query`
+  #   multipart — multipart/form-data; `build-multipart-body`
   #   opaque    — anything else; the caller supplies the wire form
-  # Classified on the media type without parameters: nushell encodes a record
-  # for `application/json` (charset or not) but not for
-  # `application/json-patch+json`, which only the `+json` rule catches.
+  # Classified on the media type without parameters, so a charset does not
+  # hide `application/json`.
   let media_type = ($content_type | split row ';' | first | str trim)
-  let body_kind = if not $has_body { "none" } else if $media_type == $spec.CT_JSON { "json" } else if ($media_type | str ends-with "+json") { "json-text" } else if $media_type == $spec.CT_FORM { "form" } else if $media_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
+  let body_kind = if not $has_body { "none" } else if ($media_type == $spec.CT_JSON) or ($media_type | str ends-with "+json") { "json" } else if $media_type == $spec.CT_FORM { "form" } else if $media_type == $spec.CT_MULTIPART { "multipart" } else { "opaque" }
   # A body the command cannot send has no shape worth computing: render reads
   # every body field, scalar type and array variant under `has_body` only.
   let has_schema = $has_body and (($body_schema | describe) | str starts-with "record") and ($body_schema | is-not-empty)
-  let expand_fields = $has_schema and ($body_kind in ["json" "json-text" "form" "multipart"])
+  let expand_fields = $has_schema and ($body_kind in ["json" "form" "multipart"])
   # Merged for every sendable schema-bearing body (an opaque one still reports
   # its array variant); its fields only become flags when they can be encoded.
   let merged = if $has_schema { merge-body-props $body_schema $doc } else { {props: {}, required: [], has_array_variant: false} }

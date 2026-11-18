@@ -117,6 +117,24 @@ def "a multipart body reaches the server with its file" [] {
     assert equal $resp.files.file ["file body"]
 }
 
+# The body httpbingo echoes: `data` holds it as text for a JSON content type
+# and as a base64 data URL for any other.
+def echoed-body [resp: record]: nothing -> string {
+    if ($resp.data | str starts-with "data:") {
+        $resp.data | str replace --regex '^data:[^,]*,' '' | decode base64 | decode utf-8
+    } else {
+        $resp.data
+    }
+}
+
+@test
+def "JSON bodies reach the server, +json, scalar and empty ones included" [] {
+    let resp = run-cmd $in.forms "forms put-json --name n --max-time 15sec"
+    assert equal [(echoed-body $resp) ($resp.headers.Content-Type | first)] ['{"name":"n"}' application/merge-patch+json]
+    assert equal (echoed-body (run-cmd $in.forms "forms put-count --body 5 --max-time 15sec")) "5"
+    assert equal (echoed-body (run-cmd $in.forms "{} | forms put-json --max-time 15sec")) "{}"
+}
+
 # --- apis.guru REST tests (loaded from URL) ---
 
 @test
