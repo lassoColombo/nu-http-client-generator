@@ -717,7 +717,7 @@ def render-module-header [ctx: record, config: record] {
     (if $has_single_auth { [$'# Auth: --token flag or $env.($ctx.token_env_var)'] } else { [] })
     | append ($and_schemes | each {|s| flatten-description $"# Auth \(($s.spec_name)\): --token-($s.flag_slug) flag or $env.($s.env_var)" })
   )
-  # `help` is listed defensively: nushell 0.116's `scope` does not report it
+  # `help` is listed defensively: nushell's `scope` (0.117) does not report it
   # for custom commands, but hiding it costs nothing if a version does.
   let hidden_flags = ($SIGNATURE_FLAGS ++ [help] ++ (if $unix_socket_enabled { [unix-socket] } else { [] }) ++ ($and_schemes | each {|s| $"token-($s.flag_slug)" }))
 

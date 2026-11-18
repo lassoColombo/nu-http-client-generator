@@ -95,7 +95,7 @@ nu-http-client-generator --help
 | `-o, --output: path`       | `./{title}.nu`     | Where to write the generated module.                                                                                       |
 | `--name: string`           | spec `info.title`  | Module name. Used as the file stem (when `-o` is not set), as the prefix of the token env var, and as the command namespace. |
 | `--autocompletion-base-urls: list<string>` | spec servers | Extra base URLs in `--base-url`'s tab-completer. First becomes the baked default when `--default-base-url` is unset.         |
-| `--default-base-url: string` | spec / none      | Override the base URL embedded in the module.                                                                              |
+| `--default-base-url: string` | spec / none      | Override the base URL embedded in the module. A relative spec server (`/v1`), or none at all, resolves against the URL the spec was fetched from, or `http://localhost` for a local file. |
 | `--default-unix-socket: string` | none           | Talk to the API over this Unix socket by default. Bakes the socket into the client's `CLIENT` constant and a `--unix-socket` flag into every command (the Docker case). |
 | `--autocompletion-unix-sockets: list<string>` | none | Unix socket paths in the `--unix-socket` tab-completer. First becomes the baked default when `--default-unix-socket` is unset. |
 | `--spec-headers: record`   | `{}`               | Headers used when fetching a remote spec (e.g. `{Authorization: "Bearer …"}`). Does not appear in the generated client.    |
@@ -207,10 +207,12 @@ A few edge cases bake in transparently. File-typed body fields accept a path: th
 
 If you generated with `--body-threshold N`, any endpoint with more than N body fields collapses its per-field flags into the single `--body: record` form.
 
+The client encodes every body itself: JSON (including `+json` types such as `application/merge-patch+json`) with `to json`, so `--body 5`, `--body []` and a piped `{}` all reach the server as written. A command whose body flags were all left out, with nothing piped, sends no body at all.
+
 ### Auth
 
 At call time the client resolves a token by checking `--token` first, then `$env.<NAME>_TOKEN`. You can customize the default token name at generation time by using the `--token-env-var` flag.
-The scheme comes from `--auth-scheme` if set, otherwise the default the spec declared - or `bearer` if the spec didn't declare one. If the scheme resolves to `none` or no token turns up, the request goes out unauthenticated.
+The scheme comes from `--auth-scheme` if set, otherwise the default the spec declared - or `bearer` if the spec didn't declare one. If the scheme resolves to `none` or no token turns up, the request goes out unauthenticated. That is also how optional auth works: an operation whose `security` lists `{}` next to a scheme sends that scheme's token when one is given and nothing otherwise.
 
 The generator knows about `jwt`, `bearer`, `basic`, `private-token`, `query-*` (token in the query string), `cookie-*` (token in a cookie), and `none`. Anything else falls back to `Authorization: Bearer <token>`. Everything baked in at generation time sits in one `CLIENT` constant at the top of the module, so you can see it at a glance:
 
