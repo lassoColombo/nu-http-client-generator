@@ -1,11 +1,11 @@
-# Auto-generated client for Scalar Response Edge Cases v1.0.0
+# Auto-generated client for Response Type Edge Cases v1.0.0
 # Source: <spec>
-# Auth: --token flag or $env.SCALAR_RESPONSE_EDGE_CASES_TOKEN
+# Auth: --token flag or $env.RESPONSE_TYPE_EDGE_CASES_TOKEN
 
 const CLIENT = {
   base_url: "https://api.example.com"
-  token_env_var: "SCALAR_RESPONSE_EDGE_CASES_TOKEN"
-  timeout: 5min
+  token_env_var: "RESPONSE_TYPE_EDGE_CASES_TOKEN"
+  timeout: 30min
   default_headers: {}
   auth_schemes: []
 }
@@ -437,8 +437,11 @@ export def commands []: nothing -> table {
     get-profile: "record<id: int, name: string>"
     get-etag: "string"
     list-profiles: "table<id: int, name: string>"
+    download: "binary"
+    get-azure-file: "binary"
+    get-swagger-file: "binary"
   }
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "list-profiles" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "list-profiles" "authorize" "get-report" "download" "get-azure-file" "get-swagger-file" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -632,6 +635,134 @@ export def "list-profiles" [
     method: get
     path: "/profiles"
     accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /authorize
+#
+# operationId: authorize
+export def "authorize" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/authorize"
+    accept: ["application/json"]
+    ok: [301]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /report
+#
+# operationId: getReport
+export def "get-report" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/report"
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /download
+#
+# Returns: binary
+# operationId: download
+export def "download" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/download"
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /azure-file
+#
+# Returns: binary
+# operationId: getAzureFile
+export def "get-azure-file" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/azure-file"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /swagger-file
+#
+# Returns: binary
+# operationId: getSwaggerFile
+export def "get-swagger-file" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/swagger-file"
+    accept: ["application/octet-stream"]
     ok: [200]
     auth: bearer
   } {

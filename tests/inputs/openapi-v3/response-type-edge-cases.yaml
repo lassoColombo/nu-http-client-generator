@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Scalar Response Edge Cases
+  title: Response Type Edge Cases
   version: 1.0.0
   description: >-
     Response typing. A client is lenient about what it receives: the signature
@@ -10,8 +10,13 @@ info:
     when a result is bound with `let`, and a real API's null or missing field
     must not fail the call. The documented type (`record<id: int, …>`, `int`)
     goes into the `Returns:` help line and the `commands` table instead.
-    Scalars (string, integer, boolean, text/plain), an object, an array of
-    objects and a schemaless response.
+    The documented type is what the client hands back: XML arrives as
+    nushell's generic `{tag, attributes, content}` tree, so an XML schema
+    documents nothing; a binary download (`format: binary`, Azure's
+    `type: object, format: file`, Swagger 2's `type: file`) is `binary`; and an
+    operation whose only success is a redirect is not typed by its `default`
+    error schema. Scalars (string, integer, boolean, text/plain), an object,
+    an array of objects and a schemaless response.
 servers:
   - url: https://api.example.com
 paths:
@@ -90,3 +95,58 @@ paths:
                   properties:
                     id: {type: integer}
                     name: {type: string}
+  # only a redirect succeeds: the `default` error envelope is not its type
+  /authorize:
+    get:
+      operationId: authorize
+      responses:
+        '301': {description: redirect to the provider}
+        default:
+          description: error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: {type: string}
+  # XML: nushell parses it into its own tree, so the schema documents nothing
+  /report:
+    get:
+      operationId: getReport
+      responses:
+        '200':
+          description: ok
+          content:
+            text/xml:
+              schema:
+                type: object
+                properties:
+                  id: {type: integer}
+  # binary downloads in the three spellings specs use
+  /download:
+    get:
+      operationId: download
+      responses:
+        '200':
+          description: ok
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+  /azure-file:
+    get:
+      operationId: getAzureFile
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {type: object, format: file}
+  /swagger-file:
+    get:
+      operationId: getSwaggerFile
+      responses:
+        '200':
+          description: ok
+          content:
+            application/octet-stream:
+              schema: {type: file}

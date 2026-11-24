@@ -1,14 +1,13 @@
-# Auto-generated client for Scalar Response Edge Cases v1.0.0
+# Auto-generated client for Response Type Edge Cases v1.0.0
 # Source: <spec>
-# Auth: --token flag or $env.SCALAR_RESPONSE_EDGE_CASES_TOKEN
+# Auth: --token flag or $env.RESPONSE_TYPE_EDGE_CASES_TOKEN
 
 const CLIENT = {
   base_url: "https://api.example.com"
-  token_env_var: "SCALAR_RESPONSE_EDGE_CASES_TOKEN"
-  timeout: 30min
+  token_env_var: "RESPONSE_TYPE_EDGE_CASES_TOKEN"
+  timeout: 5min
   default_headers: {}
   auth_schemes: []
-  unix_socket: "/var/run/docker.sock"
 }
 
 # The request runtime, emitted verbatim into every generated client.
@@ -426,12 +425,11 @@ def http-send [req: record, body: any, args: record, ok: list<int>]: nothing -> 
 
 def base-url-completer [] { ["https://api.example.com"] }
 def auth-scheme-completer [] { ["bearer"] }
-def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.sock" "/tmp/podman.sock"] }
 
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
-  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
   let return_types = {
     get-token: "string"
     get-count: "int"
@@ -439,8 +437,11 @@ export def commands []: nothing -> table {
     get-profile: "record<id: int, name: string>"
     get-etag: "string"
     list-profiles: "table<id: int, name: string>"
+    download: "binary"
+    get-azure-file: "binary"
+    get-swagger-file: "binary"
   }
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "list-profiles" "commands"] | sort) } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "list-profiles" "authorize" "get-report" "download" "get-azure-file" "get-swagger-file" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -474,7 +475,6 @@ export def "get-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
   http-request {
     method: get
@@ -483,7 +483,7 @@ export def "get-token" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -501,7 +501,6 @@ export def "get-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
   http-request {
     method: get
@@ -510,7 +509,7 @@ export def "get-count" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -528,7 +527,6 @@ export def "get-healthy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
   http-request {
     method: get
@@ -537,7 +535,7 @@ export def "get-healthy" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -555,7 +553,6 @@ export def "get-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
@@ -564,7 +561,7 @@ export def "get-profile" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -581,7 +578,6 @@ export def "get-ping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
   http-request {
     method: get
@@ -590,7 +586,7 @@ export def "get-ping" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -608,7 +604,6 @@ export def "get-etag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> any {
   http-request {
     method: get
@@ -617,7 +612,7 @@ export def "get-etag" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }
 
@@ -635,7 +630,6 @@ export def "list-profiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
 ]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
@@ -644,6 +638,134 @@ export def "list-profiles" [
     ok: [200]
     auth: bearer
   } {
-    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /authorize
+#
+# operationId: authorize
+export def "authorize" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/authorize"
+    accept: ["application/json"]
+    ok: [301]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /report
+#
+# operationId: getReport
+export def "get-report" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/report"
+    accept: ["text/xml"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /download
+#
+# Returns: binary
+# operationId: download
+export def "download" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/download"
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /azure-file
+#
+# Returns: binary
+# operationId: getAzureFile
+export def "get-azure-file" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/azure-file"
+    accept: ["application/json"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
+  }
+}
+
+# GET /swagger-file
+#
+# Returns: binary
+# operationId: getSwaggerFile
+export def "get-swagger-file" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  http-request {
+    method: get
+    path: "/swagger-file"
+    accept: ["application/octet-stream"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run
   }
 }

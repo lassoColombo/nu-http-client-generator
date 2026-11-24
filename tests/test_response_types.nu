@@ -14,7 +14,7 @@ use std/testing *
 
 use ../mod.nu
 
-const SPEC = "tests/inputs/openapi-v3/scalar-response-edge-cases.yaml"
+const SPEC = "tests/inputs/openapi-v3/response-type-edge-cases.yaml"
 
 const SHAPES = ["any" "oneof<record, string, nothing>" "oneof<list<any>, record, string, nothing>"]
 
@@ -72,6 +72,16 @@ def "the commands table reports the documented response type" [] {
     assert equal $types.get-healthy "bool"
     assert equal $types.get-etag "string" "a text/plain scalar is documented through the non-JSON media fallback"
     assert equal $types.get-ping "any" "no schema, no documented type"
+}
+
+@test
+def "the documented type is what the client hands back" [] {
+    let types = (run-cmd $in.client 'commands | select name return_type' | transpose -r -d)
+    assert equal $types.authorize "any" "a redirect-only operation is not typed by its default error schema"
+    assert equal $types.get-report "any" "an XML body is nushell's own tree, not the schema's record"
+    assert equal $types.download "binary" "format: binary"
+    assert equal $types.get-azure-file "binary" "Azure's type: object, format: file"
+    assert equal $types.get-swagger-file "binary" "Swagger 2's type: file"
 }
 
 @test

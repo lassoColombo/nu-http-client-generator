@@ -316,10 +316,13 @@ export def root-auth [spec: record, auth_schemes: list]: nothing -> record {
 # the priority codes first, then every other 2xx the operation declares, in
 # document order. `default` is the error envelope in practice (Azure ARM:
 # `200` without a schema + `default: ErrorResponse`), so it is only a
-# candidate when the operation declares NO 2xx response at all.
+# candidate when the operation declares no 2xx and no 3xx response at all:
+# an operation whose success is a redirect (an OAuth authorize) has no body
+# to type either.
 export def success-response-codes [responses: record]: nothing -> list<string> {
   let declared_2xx = ($responses | columns | where {|c| $c =~ '^2' })
-  let priority = if ($declared_2xx | is-empty) { $RESPONSE_CODE_PRIORITY } else { $RESPONSE_CODE_PRIORITY | where {|c| $c != "default" } }
+  let declared_3xx = ($responses | columns | where {|c| $c =~ '^3' })
+  let priority = if ($declared_2xx | is-empty) and ($declared_3xx | is-empty) { $RESPONSE_CODE_PRIORITY } else { $RESPONSE_CODE_PRIORITY | where {|c| $c != "default" } }
   $priority | append $declared_2xx | uniq
 }
 
@@ -342,7 +345,7 @@ export def get-success-codes [op: record]: nothing -> list<int> {
 # Nushell's type grammar, which is render's — so the two are split here.
 #
 # Descriptor grammar:
-#   scalar leaf : "any" | "string" | "int" | "float" | "bool" | "record" | "list"
+#   scalar leaf : "any" | "string" | "int" | "float" | "bool" | "binary" | "record" | "list"
 #   list        : {list: <descriptor>}
 #   record      : {record: [{name: string, type: <descriptor>}, ...]}
 export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0, --max-depth: int = 3, --visited: list<string> = []] {
@@ -366,6 +369,10 @@ export def schema-to-type-descriptor [schema: any, doc: record, --depth: int = 0
   let had_all_of = ($schema.allOf? | is-not-empty)
   let schema = (merge-all-of $schema $doc)
   let t = (normalize-type ($schema.type? | default null))
+  # A response that is a file is binary to the client: `format: binary`,
+  # Azure's `type: object, format: file` and Swagger 2's `type: file`. Only
+  # the whole body: a field of a JSON object cannot carry raw bytes.
+  if ($depth == 0) and (($t == "file") or (($schema.format? | default "") in ["binary" "file"])) { return "binary" }
   let props = ($schema.properties? | default {})
   let has_props = ($props | is-not-empty)
   let has_items = ($schema.items? | is-not-empty)
@@ -740,15 +747,16 @@ export def response-schemas [op: record, doc: record]: nothing -> list {
     if ($resp | is-empty) { return null }
     let content = ($resp.content? | default {})
     # Prefer application/json's schema; if this response has no JSON media
-    # (e.g. text/plain, application/xml, a vendor +json variant), fall back
-    # to the first media type that declares a schema. Without this, a
-    # non-JSON scalar response (`text/plain` `{type: string}`) derives `any`
-    # and loses the typed `oneof<…>` output annotation.
+    # (e.g. text/plain, a vendor +json variant), fall back to the first media
+    # type that declares a schema, so a `text/plain` `{type: string}` still
+    # documents `string`. XML is skipped: nushell parses it into its own
+    # `{tag, attributes, content}` tree, which no XML schema describes.
     let json_schema = ($content | get -o "application/json" | default {} | get -o schema)
     if ($json_schema | is-not-empty) {
       $json_schema
     } else {
-      $content | values | each {|m| $m | get -o schema } | get -o 0
+      $content | transpose media m | where {|e| not ($e.media | str downcase | split row ";" | first | str trim | $in =~ '(^(application|text)/xml$|\+xml$)') }
+      | each {|e| $e.m | get -o schema } | compact | get -o 0
     }
   }
 }
