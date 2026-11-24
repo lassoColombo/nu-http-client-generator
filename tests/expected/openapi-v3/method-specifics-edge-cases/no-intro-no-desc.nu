@@ -432,6 +432,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/csv"] }
 
 # HEAD /resource/{id}
 #
+# Returns: record
 # operationId: headResource
 export def "head-resource" [
   id: string
@@ -460,6 +461,7 @@ export def "head-resource" [
 
 # DELETE /resource/{id}
 #
+# Returns: record
 # operationId: deleteResource
 export def "delete-resource" [
   id: string
@@ -490,6 +492,7 @@ export def "delete-resource" [
 
 # OPTIONS /resource
 #
+# Returns: record
 # operationId: optionsResource
 export def "options-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,6 +546,7 @@ export def "hard-delete-resource" [
 
 # GET /query
 #
+# Returns: record
 # operationId: queryWithBody
 export def "query-with-body" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -569,6 +573,7 @@ export def "query-with-body" [
 # GET /report
 #
 # Docs: https://docs.example.com/report — Report format reference.
+# Returns: record
 # operationId: getReport
 export def "get-report" [
   --base-url(-b): string@base-url-completer # API base URL

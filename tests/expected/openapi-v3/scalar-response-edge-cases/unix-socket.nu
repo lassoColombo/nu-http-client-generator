@@ -432,7 +432,15 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
-  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "commands"] | sort) } | get name | first)
+  let return_types = {
+    get-token: "string"
+    get-count: "int"
+    get-healthy: "bool"
+    get-profile: "record<id: int, name: string>"
+    get-etag: "string"
+    list-profiles: "table<id: int, name: string>"
+  }
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "get-count" "get-healthy" "get-profile" "get-ping" "get-etag" "list-profiles" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -441,12 +449,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -454,6 +462,7 @@ export def commands []: nothing -> table {
 
 # GET /token
 #
+# Returns: string
 # operationId: getToken
 export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -466,7 +475,7 @@ export def "get-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/token"
@@ -480,6 +489,7 @@ export def "get-token" [
 
 # GET /count
 #
+# Returns: int
 # operationId: getCount
 export def "get-count" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,7 +502,7 @@ export def "get-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<int, string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/count"
@@ -506,6 +516,7 @@ export def "get-count" [
 
 # GET /healthy
 #
+# Returns: bool
 # operationId: getHealthy
 export def "get-healthy" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -518,7 +529,7 @@ export def "get-healthy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<bool, string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/healthy"
@@ -532,6 +543,7 @@ export def "get-healthy" [
 
 # GET /profile
 #
+# Returns: record<id: int, name: string>
 # operationId: getProfile
 export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,7 +556,7 @@ export def "get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<id: int, name: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/profile"
@@ -584,6 +596,7 @@ export def "get-ping" [
 
 # GET /etag
 #
+# Returns: string
 # operationId: getEtag
 export def "get-etag" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -596,11 +609,38 @@ export def "get-etag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/etag"
     accept: ["text/plain"]
+    ok: [200]
+    auth: bearer
+  } {
+    base_url: $base_url, token: $token, auth_scheme: $auth_scheme, insecure: $insecure, max_time: $max_time, raw: $raw, allow_errors: $allow_errors, full: $full, dry_run: $dry_run, unix_socket: $unix_socket
+  }
+}
+
+# GET /profiles
+#
+# Returns: table<id: int, name: string>
+# operationId: listProfiles
+export def "list-profiles" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
+]: nothing -> oneof<list<any>, record, string, nothing> {
+  http-request {
+    method: get
+    path: "/profiles"
+    accept: ["application/json"]
     ok: [200]
     auth: bearer
   } {

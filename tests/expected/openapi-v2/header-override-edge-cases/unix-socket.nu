@@ -434,6 +434,10 @@ def accept-completer [] { ["application/json" "application/yaml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    token-create: "record<access_token: string>"
+    widgets-list: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["token-create" "widgets-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -443,12 +447,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -457,6 +461,7 @@ export def commands []: nothing -> table {
 # OAuth token (Content-type as header param, no consumes)
 #
 # POST /oauth/token
+# Returns: record<access_token: string>
 # operationId: token_create
 export def "token-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +479,7 @@ export def "token-create" [
   --grant-type: string
   --username: string
   --password: string
-]: any -> oneof<record<access_token: string>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/oauth/token"
@@ -492,6 +497,7 @@ export def "token-create" [
 # Accept-overridable list
 #
 # GET /widgets
+# Returns: record
 # operationId: widgets_list
 export def "widgets-list" [
   --base-url(-b): string@base-url-completer # API base URL

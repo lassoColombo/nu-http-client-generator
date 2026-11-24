@@ -432,6 +432,7 @@ def order-completer [] { ["asc" "desc"] }
 
 # GET /search
 #
+# Returns: record
 # operationId: search
 export def "search" [
   --base-url(-b): string@base-url-completer # API base URL

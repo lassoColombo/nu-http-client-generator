@@ -433,6 +433,12 @@ def literal-quoted-completer [] { ["Ashburn, VA" "Latency"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    certificates-get: "record"
+    sites-list: "record"
+    sites-list-active: "record"
+    quoted-enum-get: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["certificates-get" "sites-list" "sites-list-active" "quoted-enum-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -442,12 +448,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -455,6 +461,7 @@ export def commands []: nothing -> table {
 
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
+# Returns: record
 # operationId: certificates_get
 export def "certificates-get" [
   thumbprint_algorithm: string
@@ -484,6 +491,7 @@ export def "certificates-get" [
 
 # GET /sites
 #
+# Returns: record
 # operationId: sites_list
 export def "sites-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -512,6 +520,7 @@ export def "sites-list" [
 
 # GET /sites/active
 #
+# Returns: record
 # operationId: sites_list_active
 export def "sites-list-active" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -540,6 +549,7 @@ export def "sites-list-active" [
 
 # GET /quoted-enum
 #
+# Returns: record
 # operationId: quoted_enum_get
 export def "quoted-enum-get" [
   --base-url(-b): string@base-url-completer # API base URL

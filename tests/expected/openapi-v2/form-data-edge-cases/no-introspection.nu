@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # POST /analysis
 #
+# Returns: record<id: string, faces: int>
 # operationId: performAnalysis
 export def "perform-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -444,7 +445,7 @@ export def "perform-analysis" [
   picture: string # Picture as base64 or URL
   --store-result: oneof<nothing, bool>
   --tags: list<string> # Joined with commas inside the multipart part
-]: any -> oneof<record<id: string, faces: int>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/analysis"

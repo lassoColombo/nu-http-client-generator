@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # GET /settings
 #
+# Returns: record
 # operationId: GET_ListAllSettings
 export def "get-list-all-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -455,6 +456,7 @@ export def "get-list-all-settings" [
 
 # GET /catalog/products
 #
+# Returns: record
 # operationId: catalogProductRenderListV1GetListGet
 export def "catalog-product-render-list-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -480,6 +482,7 @@ export def "catalog-product-render-list-v1-get-list-get" [
 
 # OPTIONS /events
 #
+# Returns: record
 # operationId: options_events
 export def "options-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,6 +508,7 @@ export def "options-events" [
 
 # DELETE /listings
 #
+# Returns: record
 # operationId: deleteall
 export def "deleteall" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -530,6 +534,7 @@ export def "deleteall" [
 
 # GET /listings
 #
+# Returns: list<record>
 # operationId: listings
 export def "listings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,7 +546,7 @@ export def "listings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/listings"
@@ -580,6 +585,7 @@ export def "delete-by-name-bulk" [
 
 # GET /airlines
 #
+# Returns: list<record>
 # operationId: getairlines
 export def "getairlines" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -591,7 +597,7 @@ export def "getairlines" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/airlines"
@@ -633,6 +639,7 @@ export def "delete-marketing-events-archive" [
 
 # POST /keys/{name}:macSign
 #
+# Returns: record
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.macSign
 export def "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" [
   name: string
@@ -663,6 +670,7 @@ export def "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" [
 
 # PATCH /profiles/{id}
 #
+# Returns: record
 # operationId: profiles_partial_update
 export def "profiles-partial-update" [
   id: string

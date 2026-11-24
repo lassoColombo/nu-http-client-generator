@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # GET /books
 #
+# Returns: list<record>
 # operationId: getBooks
 export def "get-books" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +442,7 @@ export def "get-books" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/books"
@@ -455,6 +456,7 @@ export def "get-books" [
 
 # GET /books/{bookId}
 #
+# Returns: record
 # operationId: getBook
 export def "get-book" [
   book_id: string
@@ -539,6 +541,7 @@ export def "create-tome-v1" [
 
 # DELETE /scrolls/{isbn}
 #
+# Returns: record
 # operationId: removeScroll
 export def "remove-scroll" [
   isbn: string
@@ -567,6 +570,7 @@ export def "remove-scroll" [
 
 # DELETE /v1/scrolls/{position}
 #
+# Returns: record
 # operationId: deleteScroll
 export def "delete-scroll" [
   position: string
@@ -595,6 +599,7 @@ export def "delete-scroll" [
 
 # PUT /v1/blocks/{dashboardId}/{id}
 #
+# Returns: record
 # operationId: replaceBlockV1
 export def "replace-block-v1" [
   dashboard_id: string
@@ -626,6 +631,7 @@ export def "replace-block-v1" [
 
 # PUT /v2/blocks/{pageId}/{id}
 #
+# Returns: record
 # operationId: replaceBlockV2
 export def "replace-block-v2" [
   page_id: string
@@ -657,6 +663,7 @@ export def "replace-block-v2" [
 
 # PUT /v1/catalogs/{type}/{typeId}/{id}
 #
+# Returns: record
 # operationId: replaceCatalogV1
 export def "replace-catalog-v1" [
   type: string
@@ -689,6 +696,7 @@ export def "replace-catalog-v1" [
 
 # PUT /v2/catalogs/{kind}/{kindId}/{id}
 #
+# Returns: record
 # operationId: replaceCatalogV2
 export def "replace-catalog-v2" [
   kind: string

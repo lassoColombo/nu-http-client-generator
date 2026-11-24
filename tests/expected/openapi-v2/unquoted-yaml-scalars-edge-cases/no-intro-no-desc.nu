@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # GET /things
 #
+# Returns: list<string>
 # operationId: listThings
 export def "list-things" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +442,7 @@ export def "list-things" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<string>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/things"

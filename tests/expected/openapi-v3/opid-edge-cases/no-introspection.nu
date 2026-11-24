@@ -459,6 +459,7 @@ export def "delete-accounts-account-bank-accounts-id" [
 
 # GET /accounts/{a}
 #
+# Returns: record
 # operationId: GetAccountsAccount
 export def "get-accounts-account" [
   a: string
@@ -487,6 +488,7 @@ export def "get-accounts-account" [
 
 # POST /account_links
 #
+# Returns: record
 # operationId: PostAccountLinks
 export def "post-account-links" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -515,6 +517,7 @@ export def "post-account-links" [
 
 # POST /chat/completions
 #
+# Returns: record
 # operationId: createChatCompletion
 export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,6 +546,7 @@ export def "create-chat-completion" [
 
 # GET /blocks/{id}
 #
+# Returns: record
 # operationId: retrieveABlock
 export def "retrieve-a-block" [
   id: string
@@ -571,6 +575,7 @@ export def "retrieve-a-block" [
 
 # GET /repos
 #
+# Returns: record
 # operationId: repos/list-for-user
 export def "repos-list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL

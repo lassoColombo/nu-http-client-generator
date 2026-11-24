@@ -433,6 +433,7 @@ def accept-completer [] { ["application/json" "application/yaml"] }
 # OAuth token (Content-type as header param, no consumes)
 #
 # POST /oauth/token
+# Returns: record<access_token: string>
 # operationId: token_create
 export def "token-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -449,7 +450,7 @@ export def "token-create" [
   --grant-type: string
   --username: string
   --password: string
-]: any -> oneof<record<access_token: string>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/oauth/token"
@@ -467,6 +468,7 @@ export def "token-create" [
 # Accept-overridable list
 #
 # GET /widgets
+# Returns: record
 # operationId: widgets_list
 export def "widgets-list" [
   --base-url(-b): string@base-url-completer # API base URL

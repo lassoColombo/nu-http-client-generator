@@ -3,20 +3,19 @@ info:
   title: Scalar Response Edge Cases
   version: 1.0.0
   description: >-
-    Operations whose 200 response body is a SCALAR leaf (string / integer /
-    boolean / number). A scalar response annotation is a parse-time lie because
-    every generated command is polymorphic over its flags — record under
-    --dry-run/--full, string under --raw, nothing on 204 — so the output type is
-    emitted as `oneof<scalar, string, record, nothing>` (issue 52, resolving
-    D-10). Before issue 52 these were loosened to bare `any` (47.A), which fixed
-    the parse error but erased the response type from `help`/`commands`. This
-    spec is the golden coverage for that whole path. Also includes a
-    record-response op (must keep its rich annotation, NOT become oneof) and a
-    no-schema op (genuinely `any`) as negative controls.
+    Response typing. A client is lenient about what it receives: the signature
+    declares only the response's shape (`oneof<record, string, nothing>` for an
+    object, `oneof<list<any>, record, string, nothing>` for an array, `any` for
+    a scalar or no schema), because nushell checks the declared output type
+    when a result is bound with `let`, and a real API's null or missing field
+    must not fail the call. The documented type (`record<id: int, …>`, `int`)
+    goes into the `Returns:` help line and the `commands` table instead.
+    Scalars (string, integer, boolean, text/plain), an object, an array of
+    objects and a schemaless response.
 servers:
   - url: https://api.example.com
 paths:
-  # string response -> oneof<string, record, nothing>
+  # scalar responses -> `any`, documented as `Returns: string` / `int` / `bool`
   /token:
     get:
       operationId: getToken
@@ -26,7 +25,6 @@ paths:
           content:
             application/json:
               schema: {type: string}
-  # integer response -> oneof<int, string, record, nothing>
   /count:
     get:
       operationId: getCount
@@ -36,7 +34,6 @@ paths:
           content:
             application/json:
               schema: {type: integer}
-  # boolean response -> oneof<bool, string, record, nothing>
   /healthy:
     get:
       operationId: getHealthy
@@ -46,7 +43,7 @@ paths:
           content:
             application/json:
               schema: {type: boolean}
-  # NEGATIVE CONTROL: record response keeps its rich annotation (not a oneof).
+  # object response -> oneof<record, string, nothing>, documented as record<id: int, name: string>
   /profile:
     get:
       operationId: getProfile
@@ -60,14 +57,14 @@ paths:
                 properties:
                   id: {type: integer}
                   name: {type: string}
-  # NEGATIVE CONTROL: no response schema -> genuinely `any`, unchanged.
+  # no response schema -> `any`, no Returns line
   /ping:
     get:
       operationId: getPing
       responses:
         '200': {description: ok}
-  # text/plain scalar response (no application/json media) -> must still derive
-  # the typed oneof<string, record, nothing>, via the non-JSON media fallback.
+  # text/plain scalar response (no application/json media): still documented
+  # as `Returns: string`, via the non-JSON media fallback.
   /etag:
     get:
       operationId: getEtag
@@ -77,3 +74,19 @@ paths:
           content:
             text/plain:
               schema: {type: string}
+  # array of objects -> oneof<list<any>, record, string, nothing>, documented as table<id: int, name: string>
+  /profiles:
+    get:
+      operationId: listProfiles
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: integer}
+                    name: {type: string}

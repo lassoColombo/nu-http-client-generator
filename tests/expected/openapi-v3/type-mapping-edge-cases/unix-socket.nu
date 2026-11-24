@@ -434,6 +434,13 @@ def kind-completer [] { ["large" "medium" "small"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    get-token: "string"
+    create-tags: "table<street: string, city: string, zip: string>"
+    create-widget: "record"
+    get-profile: "record<name: string, street: string, city: string, zip: string>"
+    get-event: "record<created-at: string, created_at: string, \"@odata.type\": string, \"9lives\": int, \"it's\": bool>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-token" "create-tags" "create-widget" "get-profile" "get-event" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -443,12 +450,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -456,6 +463,7 @@ export def commands []: nothing -> table {
 
 # GET /token
 #
+# Returns: string
 # operationId: getToken
 export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,7 +476,7 @@ export def "get-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/token"
@@ -482,6 +490,7 @@ export def "get-token" [
 
 # POST /tags
 #
+# Returns: table<street: string, city: string, zip: string>
 # operationId: createTags
 export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -497,7 +506,7 @@ export def "create-tags" [
   --names: list<string>
   --weights: list<int>
   --addresses: list # item shape: {street?: string, city?: string, zip?: string}
-]: any -> oneof<table<street: string, city: string, zip: string>, string, record, nothing> {
+]: any -> oneof<list<any>, record, string, nothing> {
   $in | http-request {
     method: post
     path: "/tags"
@@ -513,6 +522,7 @@ export def "create-tags" [
 
 # POST /widgets
 #
+# Returns: record
 # operationId: createWidget
 export def "create-widget" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,6 +558,7 @@ export def "create-widget" [
 
 # GET /profiles
 #
+# Returns: record<name: string, street: string, city: string, zip: string>
 # operationId: getProfile
 export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +571,7 @@ export def "get-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<name: string, street: string, city: string, zip: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/profiles"
@@ -574,6 +585,7 @@ export def "get-profile" [
 
 # GET /events
 #
+# Returns: record<created-at: string, created_at: string, "@odata.type": string, "9lives": int, "it's": bool>
 # operationId: getEvent
 export def "get-event" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +598,7 @@ export def "get-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<created-at: string, created_at: string, "@odata.type": string, "9lives": int, "it's": bool>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/events"

@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # GET /widgets
 #
+# Returns: record
 # operationId: widgets_list
 export def "widgets-list" [
   --base-url(-b): string@base-url-completer # API base URL

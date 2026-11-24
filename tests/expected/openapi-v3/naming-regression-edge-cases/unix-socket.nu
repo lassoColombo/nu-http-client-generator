@@ -432,6 +432,16 @@ def unix-socket-completer [] { ["/var/run/docker.sock" "/run/user/1000/docker.so
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    get-list-all-settings: "record"
+    catalog-product-render-list-v1-get-list-get: "record"
+    options-events: "record"
+    deleteall: "record"
+    listings: "list<record>"
+    getairlines: "list<record>"
+    cloudkms-projects-locations-key-rings-crypto-keys-mac-sign: "record"
+    profiles-partial-update: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-list-all-settings" "catalog-product-render-list-v1-get-list-get" "options-events" "deleteall" "listings" "delete-by-name-bulk" "getairlines" "delete-marketing-events-archive" "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" "profiles-partial-update" "sendgrid" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -441,12 +451,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -454,6 +464,7 @@ export def commands []: nothing -> table {
 
 # GET /settings
 #
+# Returns: record
 # operationId: GET_ListAllSettings
 export def "get-list-all-settings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -480,6 +491,7 @@ export def "get-list-all-settings" [
 
 # GET /catalog/products
 #
+# Returns: record
 # operationId: catalogProductRenderListV1GetListGet
 export def "catalog-product-render-list-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -506,6 +518,7 @@ export def "catalog-product-render-list-v1-get-list-get" [
 
 # OPTIONS /events
 #
+# Returns: record
 # operationId: options_events
 export def "options-events" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,6 +545,7 @@ export def "options-events" [
 
 # DELETE /listings
 #
+# Returns: record
 # operationId: deleteall
 export def "deleteall" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,6 +572,7 @@ export def "deleteall" [
 
 # GET /listings
 #
+# Returns: list<record>
 # operationId: listings
 export def "listings" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -570,7 +585,7 @@ export def "listings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/listings"
@@ -610,6 +625,7 @@ export def "delete-by-name-bulk" [
 
 # GET /airlines
 #
+# Returns: list<record>
 # operationId: getairlines
 export def "getairlines" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,7 +638,7 @@ export def "getairlines" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/airlines"
@@ -665,6 +681,7 @@ export def "delete-marketing-events-archive" [
 
 # POST /keys/{name}:macSign
 #
+# Returns: record
 # operationId: cloudkms.projects.locations.keyRings.cryptoKeys.macSign
 export def "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" [
   name: string
@@ -696,6 +713,7 @@ export def "cloudkms-projects-locations-key-rings-crypto-keys-mac-sign" [
 
 # PATCH /profiles/{id}
 #
+# Returns: record
 # operationId: profiles_partial_update
 export def "profiles-partial-update" [
   id: string

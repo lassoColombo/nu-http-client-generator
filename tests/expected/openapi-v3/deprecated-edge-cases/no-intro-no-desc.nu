@@ -491,6 +491,7 @@ export def "create-item" [
 
 # GET /items/{id}
 #
+# Returns: record
 # operationId: getItem
 export def "get-item" [
   id: string

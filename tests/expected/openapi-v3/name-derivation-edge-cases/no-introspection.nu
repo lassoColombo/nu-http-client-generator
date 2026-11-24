@@ -458,6 +458,7 @@ export def "container-delete" [
 
 # GET /configs
 #
+# Returns: record
 # operationId: ConfigList
 export def "config-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -483,6 +484,7 @@ export def "config-list" [
 
 # POST /images/build
 #
+# Returns: record
 # operationId: ImageBuild
 export def "image-build" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,6 +538,7 @@ export def "system-ping" [
 
 # GET /configmaps/{name}
 #
+# Returns: record
 # operationId: readNamespacedConfigMap
 export def "read-namespaced-config-map" [
   name: string
@@ -564,6 +567,7 @@ export def "read-namespaced-config-map" [
 
 # PUT /configmaps/{name}
 #
+# Returns: record
 # operationId: replaceNamespacedConfigMap
 export def "replace-namespaced-config-map" [
   name: string
@@ -594,6 +598,7 @@ export def "replace-namespaced-config-map" [
 
 # GET /configmaps
 #
+# Returns: record
 # operationId: watchNamespacedConfigMap
 export def "watch-namespaced-config-map" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,6 +624,7 @@ export def "watch-namespaced-config-map" [
 
 # POST /blocks/{id}/children
 #
+# Returns: record
 # operationId: appendBlockChildren
 export def "append-block-children" [
   id: string
@@ -649,6 +655,7 @@ export def "append-block-children" [
 
 # POST /certificates
 #
+# Returns: record
 # operationId: Add
 export def "add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,6 +684,7 @@ export def "add" [
 
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
+# Returns: record
 # operationId: GetCertificate
 export def "get-certificate" [
   thumbprint_algorithm: string
@@ -706,6 +714,7 @@ export def "get-certificate" [
 
 # GET /namespaces/{namespace}/configmaps/{name}/status
 #
+# Returns: record
 # operationId: readCoreV1NamespacedConfigMapStatus
 export def "read-core-v1-namespaced-config-map-status" [
   namespace: string

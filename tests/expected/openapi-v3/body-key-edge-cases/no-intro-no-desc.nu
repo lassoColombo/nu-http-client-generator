@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # POST /things
 #
+# Returns: record
 # operationId: things_create
 export def "things-create" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -464,6 +465,7 @@ export def "things-create" [
 
 # GET /things/{insight_id:}
 #
+# Returns: record
 # operationId: insights_get
 export def "insights-get" [
   insight_id: string

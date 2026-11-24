@@ -435,6 +435,10 @@ def quota-completer [] { ["0" "18446744073709551615"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    list-devices: "table<id: int, atl_id: int, quota: int>"
+    create-device: "record<id: int, atl_id: int, quota: int>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-devices" "create-device" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -444,12 +448,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -457,6 +461,7 @@ export def commands []: nothing -> table {
 
 # GET /devices/
 #
+# Returns: table<id: int, atl_id: int, quota: int>
 # operationId: listDevices
 export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -473,7 +478,7 @@ export def "list-devices" [
   --counter: int # format: uint64
   --limit: int # required, format: uint64, default: 18446744073709551615
   --serial: string@serial-completer
-]: nothing -> oneof<table<id: int, atl_id: int, quota: int>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/devices/"
@@ -489,6 +494,7 @@ export def "list-devices" [
 
 # POST /devices/
 #
+# Returns: record<id: int, atl_id: int, quota: int>
 # operationId: createDevice
 export def "create-device" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -503,7 +509,7 @@ export def "create-device" [
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   atl_id: int # format: int64
   --quota: int@quota-completer
-]: any -> oneof<record<id: int, atl_id: int, quota: int>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/devices/"

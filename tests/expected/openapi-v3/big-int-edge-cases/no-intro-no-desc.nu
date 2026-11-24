@@ -433,6 +433,7 @@ def quota-completer [] { ["0" "18446744073709551615"] }
 
 # GET /devices/
 #
+# Returns: table<id: int, atl_id: int, quota: int>
 # operationId: listDevices
 export def "list-devices" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +449,7 @@ export def "list-devices" [
   --counter: int
   --limit: int
   --serial: string@serial-completer
-]: nothing -> oneof<table<id: int, atl_id: int, quota: int>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/devices/"
@@ -464,6 +465,7 @@ export def "list-devices" [
 
 # POST /devices/
 #
+# Returns: record<id: int, atl_id: int, quota: int>
 # operationId: createDevice
 export def "create-device" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -477,7 +479,7 @@ export def "create-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   atl_id: int
   --quota: int@quota-completer
-]: any -> oneof<record<id: int, atl_id: int, quota: int>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/devices/"

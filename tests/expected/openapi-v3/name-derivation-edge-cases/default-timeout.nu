@@ -430,6 +430,17 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    config-list: "record"
+    image-build: "record"
+    read-namespaced-config-map: "record"
+    replace-namespaced-config-map: "record"
+    watch-namespaced-config-map: "record"
+    append-block-children: "record"
+    add: "record"
+    get-certificate: "record"
+    read-core-v1-namespaced-config-map-status: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["container-delete" "config-list" "image-build" "system-ping" "read-namespaced-config-map" "replace-namespaced-config-map" "watch-namespaced-config-map" "append-block-children" "add" "get-certificate" "read-core-v1-namespaced-config-map-status" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -439,12 +450,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -480,6 +491,7 @@ export def "container-delete" [
 
 # GET /configs
 #
+# Returns: record
 # operationId: ConfigList
 export def "config-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,6 +517,7 @@ export def "config-list" [
 
 # POST /images/build
 #
+# Returns: record
 # operationId: ImageBuild
 export def "image-build" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -558,6 +571,7 @@ export def "system-ping" [
 
 # GET /configmaps/{name}
 #
+# Returns: record
 # operationId: readNamespacedConfigMap
 export def "read-namespaced-config-map" [
   name: string
@@ -586,6 +600,7 @@ export def "read-namespaced-config-map" [
 
 # PUT /configmaps/{name}
 #
+# Returns: record
 # operationId: replaceNamespacedConfigMap
 export def "replace-namespaced-config-map" [
   name: string
@@ -616,6 +631,7 @@ export def "replace-namespaced-config-map" [
 
 # GET /configmaps
 #
+# Returns: record
 # operationId: watchNamespacedConfigMap
 export def "watch-namespaced-config-map" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,6 +657,7 @@ export def "watch-namespaced-config-map" [
 
 # POST /blocks/{id}/children
 #
+# Returns: record
 # operationId: appendBlockChildren
 export def "append-block-children" [
   id: string
@@ -671,6 +688,7 @@ export def "append-block-children" [
 
 # POST /certificates
 #
+# Returns: record
 # operationId: Add
 export def "add" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -699,6 +717,7 @@ export def "add" [
 
 # GET /certificates(thumbprintAlgorithm={thumbprintAlgorithm},thumbprint={thumbprint})
 #
+# Returns: record
 # operationId: GetCertificate
 export def "get-certificate" [
   thumbprint_algorithm: string
@@ -728,6 +747,7 @@ export def "get-certificate" [
 
 # GET /namespaces/{namespace}/configmaps/{name}/status
 #
+# Returns: record
 # operationId: readCoreV1NamespacedConfigMapStatus
 export def "read-core-v1-namespaced-config-map-status" [
   namespace: string

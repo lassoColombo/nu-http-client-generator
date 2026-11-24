@@ -434,6 +434,16 @@ def status-completer [] { ["available" "sold"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    create-tree: "record<value: string, children: list<any>>"
+    get-aliased: "record<name: string, count: int>"
+    get-pet: "record<status: string>"
+    list-clusters: "record<Clusters: list<string>, Marker: string>"
+    create-outer: "record<leaf_field: string, mid_field: int, outer_field: bool>"
+    get-kinded: "record<kind: string>"
+    create-deep: "record<deep_field: string>"
+    create-kinded: "record<id: string>"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-tree" "get-aliased" "create-aliased" "list-pets" "get-pet" "list-pet-photos" "list-clusters" "create-outer" "get-kinded" "create-deep" "create-kinded" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -443,12 +453,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -456,6 +466,7 @@ export def commands []: nothing -> table {
 
 # POST /trees
 #
+# Returns: record<value: string, children: list<any>>
 # operationId: createTree
 export def "create-tree" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,7 +481,7 @@ export def "create-tree" [
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --value: string
   --children: list # item shape: {value?: string, children?: list}
-]: any -> oneof<record<value: string, children: list<any>>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/trees"
@@ -486,6 +497,7 @@ export def "create-tree" [
 
 # GET /aliased
 #
+# Returns: record<name: string, count: int>
 # operationId: getAliased
 export def "get-aliased" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +511,7 @@ export def "get-aliased" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   --page: int # Page number (shared parameter ref).
-]: nothing -> oneof<record<name: string, count: int>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/aliased"
@@ -574,6 +586,7 @@ export def "list-pets" [
 
 # GET /pets/{petId}
 #
+# Returns: record<status: string>
 # operationId: getPet
 export def "get-pet" [
   pet_id: string
@@ -587,7 +600,7 @@ export def "get-pet" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<status: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/pets/{petId}"
@@ -632,6 +645,7 @@ export def "list-pet-photos" [
 
 # POST /clusters
 #
+# Returns: record<Clusters: list<string>, Marker: string>
 # operationId: listClusters
 export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -646,7 +660,7 @@ export def "list-clusters" [
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   created_after: string # The creation date and time beginning value filter. (format: date-time)
   --cluster-states: list<string> # The cluster state filters to apply.
-]: any -> oneof<record<Clusters: list<string>, Marker: string>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/clusters"
@@ -662,6 +676,7 @@ export def "list-clusters" [
 
 # POST /outer
 #
+# Returns: record<leaf_field: string, mid_field: int, outer_field: bool>
 # operationId: createOuter
 export def "create-outer" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,7 +692,7 @@ export def "create-outer" [
   leaf_field: string
   --mid-field: int
   --outer-field: oneof<nothing, bool>
-]: any -> oneof<record<leaf_field: string, mid_field: int, outer_field: bool>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/outer"
@@ -694,6 +709,7 @@ export def "create-outer" [
 # GET /kinded
 #
 # Discriminator (response): kind = cat, dog
+# Returns: record<kind: string>
 # operationId: getKinded
 export def "get-kinded" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,7 +722,7 @@ export def "get-kinded" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<kind: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/kinded"
@@ -720,6 +736,7 @@ export def "get-kinded" [
 
 # POST /deep
 #
+# Returns: record<deep_field: string>
 # operationId: createDeep
 export def "create-deep" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +750,7 @@ export def "create-deep" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
   deep_field: string
-]: any -> oneof<record<deep_field: string>, string, nothing> {
+]: any -> oneof<record, string, nothing> {
   $in | http-request {
     method: post
     path: "/deep"
@@ -750,6 +767,7 @@ export def "create-deep" [
 # POST /kinded-created
 #
 # Discriminator (response): kind = cat, dog
+# Returns: record<id: string>
 # operationId: createKinded
 export def "create-kinded" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -762,7 +780,7 @@ export def "create-kinded" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unix-socket(-U): string@unix-socket-completer # Connect to the API over a Unix socket instead of TCP
-]: nothing -> oneof<record<id: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: post
     path: "/kinded-created"

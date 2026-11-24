@@ -430,6 +430,16 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-books: "list<record>"
+    get-book: "record"
+    remove-scroll: "record"
+    delete-scroll: "record"
+    replace-block-v1: "record"
+    replace-block-v2: "record"
+    replace-catalog-v1: "record"
+    replace-catalog-v2: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-books" "get-book" "create-tome" "create-tome-v1" "remove-scroll" "delete-scroll" "replace-block-v1" "replace-block-v2" "replace-catalog-v1" "replace-catalog-v2" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -439,12 +449,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -452,6 +462,7 @@ export def commands []: nothing -> table {
 
 # GET /books
 #
+# Returns: list<record>
 # operationId: getBooks
 export def "get-books" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -463,7 +474,7 @@ export def "get-books" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<list<record>, string, record, nothing> {
+]: nothing -> oneof<list<any>, record, string, nothing> {
   http-request {
     method: get
     path: "/books"
@@ -477,6 +488,7 @@ export def "get-books" [
 
 # GET /books/{bookId}
 #
+# Returns: record
 # operationId: getBook
 export def "get-book" [
   book_id: string
@@ -561,6 +573,7 @@ export def "create-tome-v1" [
 
 # DELETE /scrolls/{isbn}
 #
+# Returns: record
 # operationId: removeScroll
 export def "remove-scroll" [
   isbn: string
@@ -589,6 +602,7 @@ export def "remove-scroll" [
 
 # DELETE /v1/scrolls/{position}
 #
+# Returns: record
 # operationId: deleteScroll
 export def "delete-scroll" [
   position: string
@@ -617,6 +631,7 @@ export def "delete-scroll" [
 
 # PUT /v1/blocks/{dashboardId}/{id}
 #
+# Returns: record
 # operationId: replaceBlockV1
 export def "replace-block-v1" [
   dashboard_id: string
@@ -648,6 +663,7 @@ export def "replace-block-v1" [
 
 # PUT /v2/blocks/{pageId}/{id}
 #
+# Returns: record
 # operationId: replaceBlockV2
 export def "replace-block-v2" [
   page_id: string
@@ -679,6 +695,7 @@ export def "replace-block-v2" [
 
 # PUT /v1/catalogs/{type}/{typeId}/{id}
 #
+# Returns: record
 # operationId: replaceCatalogV1
 export def "replace-catalog-v1" [
   type: string
@@ -711,6 +728,7 @@ export def "replace-catalog-v1" [
 
 # PUT /v2/catalogs/{kind}/{kindId}/{id}
 #
+# Returns: record
 # operationId: replaceCatalogV2
 export def "replace-catalog-v2" [
   kind: string

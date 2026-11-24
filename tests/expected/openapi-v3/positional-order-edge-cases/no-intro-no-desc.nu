@@ -430,6 +430,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # GET /items/{petId}/sub/{accountId}/{zoneId}
 #
+# Returns: record
 # operationId: getItemSub
 export def "get-item-sub" [
   pet_id: string
@@ -460,6 +461,7 @@ export def "get-item-sub" [
 
 # GET /mixed/{b}/{a}
 #
+# Returns: record
 # operationId: getMixed
 export def "get-mixed" [
   b: string

@@ -238,7 +238,7 @@ export def "get-pet-by-id" [
   pet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   # …the other generator flags
-]: nothing -> oneof<record<id: int, name: string, …>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/pet/{petId}"
@@ -296,6 +296,8 @@ Unless you generated with `--no-introspection`, the module exposes a `commands` 
 petstore commands | where name =~ "pet" | select name return_type
 petstore commands | get params | first 5
 ```
+
+The documented response type (`record<id: int, name: string, …>`) is in `return_type` and in each command's `help` (`Returns: …`), not in its signature. The signature declares only the shape (`oneof<record, string, nothing>` for an object, `oneof<list<any>, record, string, nothing>` for an array, `any` otherwise): nushell checks a declared output type whenever a result is bound with `let`, and a client should not fail a successful call because the API sent a `null` or left out a field its spec documents.
 
 ---
 

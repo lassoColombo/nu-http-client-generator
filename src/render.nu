@@ -130,6 +130,24 @@ export def nu-type-string [td: any]: nothing -> string {
   }
 }
 
+# The output type a command declares for a response type string: only its
+# shape. nushell checks a declared output type when the result is bound with
+# `let` (never when it is piped), so naming fields would fail the call on a
+# real API's null or missing field, and on every --dry-run/--full record. The
+# documented type goes into the `Returns:` help line and the `commands` table
+# instead. `string` is --raw, `record` --dry-run/--full, `nothing` a 204; a
+# scalar stays `any`, since a scalar member would reject whatever the API
+# really sends.
+def output-shape [type_str: string]: nothing -> string {
+  if ($type_str | str starts-with "record") {
+    "oneof<record, string, nothing>"
+  } else if ($type_str =~ '^(table|list)\b') {
+    "oneof<list<any>, record, string, nothing>"
+  } else {
+    "any"
+  }
+}
+
 # A duration as Nushell source: the unit form when it is a single unit
 # (`30min`), else the nuon nanosecond form — `into string` renders `90sec` as
 # `1min 30sec`, which is not a literal.
@@ -726,13 +744,19 @@ def render-module-header [ctx: record, config: record] {
   # is ambiguous when two generated clients share an operationId, while two
   # modules with the same whole set are the same client. Both sides are
   # sorted at runtime so the comparison never depends on the generating
-  # nushell's `sort` order.
+  # nushell's `sort` order. The signature declares only a response's shape
+  # (`output-shape`), so the documented types travel as data.
   let introspection_code = if not $config.no_introspection {
     let cmd_names = ($ctx.commands | get name | append "commands" | each {|n| $n | to nuon } | str join ' ')
+    let return_types = ($ctx.commands | each {|c| {name: $c.name, type: (nu-type-string $c.return_type)} } | where type != "any")
+    let return_types_lines = if ($return_types | is-empty) { ["  let return_types = {}"] } else {
+      ["  let return_types = {"] ++ ($return_types | each {|r| $"    ($r.name | str-literal): ($r.type | to nuon)" }) ++ ["  }"]
+    }
     [
       "# List all available API commands with their parameters"
       'export def commands []: nothing -> table {'
       $"  let builtin_flags = [($hidden_flags | each { to nuon } | str join ' ')]"
+      ...$return_types_lines
       $"  let mod_name = \(scope modules | where { \($in.commands | get name | sort\) == \([($cmd_names)] | sort\) } | get name | first\)"
       '  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)'
       '  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)'
@@ -742,12 +766,12 @@ def render-module-header [ctx: record, config: record] {
       '      | where parameter_type not-in ["input" "output"]'
       '      | where parameter_name not-in $builtin_flags'
       '      | select parameter_name parameter_type syntax_shape is_optional description'
-      '    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")'
+      '    let name = ($cmd.name | str replace $"($mod_name) " "")'
       '    {'
-      '      name: ($cmd.name | str replace $"($mod_name) " "")'
+      '      name: $name'
       '      description: $cmd.description'
       '      extra_description: $cmd.extra_description'
-      '      return_type: $return_type'
+      '      return_type: ($return_types | get -o $name | default "any")'
       '      params: $params'
       '    }'
       '  }'
@@ -814,6 +838,10 @@ def render-command [cmd: record, mapping: record, config: record] {
       }
     }
   }
+  let return_str = (nu-type-string $cmd.return_type)
+  if $return_str != "any" {
+    $extra ++= [$"# Returns: ($return_str)"]
+  }
   if ($cmd.operation_id | is-not-empty) {
     $extra ++= [$"# operationId: ($cmd.operation_id)"]
   }
@@ -839,27 +867,7 @@ def render-command [cmd: record, mapping: record, config: record] {
   $cmd_lines ++= [$'export def "($cmd.name)" [']
   $cmd_lines ++= [$sig_result.signature]
   let input_type = if $cmd.has_body { "any" } else { "nothing" }
-  # Any concrete response type is a parse-time lie: the command is polymorphic
-  # over its flags — a *record* under --dry-run/--full, a *string* under
-  # --raw, *nothing* on 204, and the response type on a normal call. Nushell
-  # type-checks the downstream pipe against the declared output at parse time,
-  # so a bare `-> string` makes `cmd | get …` a parse error and a bare
-  # `-> record<…>` makes `cmd --raw | from json` one, while plain `any` erases
-  # the response type from `help` and the `commands` table. So every non-`any`
-  # type is wrapped in a `oneof<…>` of the real flag-driven shapes: the
-  # documented type first, then `string` (--raw), `record` (--dry-run/--full)
-  # and `nothing` (204). A record-typed response already admits the dry-run
-  # record, and a bare `record` next to `record<…>` would make nushell widen
-  # the whole member to `record`, erasing the documented fields from `help`
-  # and `commands`; so it is left out there. `http-request` is `any -> any`,
-  # so the annotation is never runtime-checked against the actual body —
-  # purely a parse-time + doc improvement.
-  let return_str = (nu-type-string $cmd.return_type)
-  let output_type = if $return_str == "any" { "any" } else {
-    let record_member = if ($return_str | str starts-with "record") { [] } else { ["record"] }
-    $"oneof<([$return_str "string"] ++ $record_member ++ ["nothing"] | uniq | str join ', ')>"
-  }
-  $cmd_lines ++= [$"]: ($input_type) -> ($output_type) {"]
+  $cmd_lines ++= [$"]: ($input_type) -> (output-shape $return_str) {"]
 
   $cmd_lines ++= [(build-call $cmd $config)]
   $cmd_lines ++= ["}"]

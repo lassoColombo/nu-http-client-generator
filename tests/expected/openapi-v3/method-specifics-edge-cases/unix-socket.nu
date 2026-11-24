@@ -434,6 +434,13 @@ def accept-completer [] { ["application/json" "application/xml" "text/csv"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "unix-socket"]
+  let return_types = {
+    head-resource: "record"
+    delete-resource: "record"
+    options-resource: "record"
+    query-with-body: "record"
+    get-report: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["head-resource" "delete-resource" "options-resource" "hard-delete-resource" "query-with-body" "get-report" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -443,12 +450,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -456,6 +463,7 @@ export def commands []: nothing -> table {
 
 # HEAD /resource/{id}
 #
+# Returns: record
 # operationId: headResource
 export def "head-resource" [
   id: string
@@ -485,6 +493,7 @@ export def "head-resource" [
 
 # DELETE /resource/{id}
 #
+# Returns: record
 # operationId: deleteResource
 export def "delete-resource" [
   id: string
@@ -516,6 +525,7 @@ export def "delete-resource" [
 
 # OPTIONS /resource
 #
+# Returns: record
 # operationId: optionsResource
 export def "options-resource" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -571,6 +581,7 @@ export def "hard-delete-resource" [
 
 # GET /query
 #
+# Returns: record
 # operationId: queryWithBody
 export def "query-with-body" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -598,6 +609,7 @@ export def "query-with-body" [
 # GET /report
 #
 # Docs: https://docs.example.com/report — Report format reference.
+# Returns: record
 # operationId: getReport
 export def "get-report" [
   --base-url(-b): string@base-url-completer # API base URL

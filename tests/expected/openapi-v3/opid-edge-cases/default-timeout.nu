@@ -430,6 +430,13 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
+  let return_types = {
+    get-accounts-account: "record"
+    post-account-links: "record"
+    create-chat-completion: "record"
+    retrieve-a-block: "record"
+    repos-list-for-user: "record"
+  }
   let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-accounts-account-bank-accounts-id" "get-accounts-account" "post-account-links" "create-chat-completion" "retrieve-a-block" "repos-list-for-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
@@ -439,12 +446,12 @@ export def commands []: nothing -> table {
       | where parameter_type not-in ["input" "output"]
       | where parameter_name not-in $builtin_flags
       | select parameter_name parameter_type syntax_shape is_optional description
-    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    let name = ($cmd.name | str replace $"($mod_name) " "")
     {
-      name: ($cmd.name | str replace $"($mod_name) " "")
+      name: $name
       description: $cmd.description
       extra_description: $cmd.extra_description
-      return_type: $return_type
+      return_type: ($return_types | get -o $name | default "any")
       params: $params
     }
   }
@@ -481,6 +488,7 @@ export def "delete-accounts-account-bank-accounts-id" [
 
 # GET /accounts/{a}
 #
+# Returns: record
 # operationId: GetAccountsAccount
 export def "get-accounts-account" [
   a: string
@@ -509,6 +517,7 @@ export def "get-accounts-account" [
 
 # POST /account_links
 #
+# Returns: record
 # operationId: PostAccountLinks
 export def "post-account-links" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -537,6 +546,7 @@ export def "post-account-links" [
 
 # POST /chat/completions
 #
+# Returns: record
 # operationId: createChatCompletion
 export def "create-chat-completion" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,6 +575,7 @@ export def "create-chat-completion" [
 
 # GET /blocks/{id}
 #
+# Returns: record
 # operationId: retrieveABlock
 export def "retrieve-a-block" [
   id: string
@@ -593,6 +604,7 @@ export def "retrieve-a-block" [
 
 # GET /repos
 #
+# Returns: record
 # operationId: repos/list-for-user
 export def "repos-list-for-user" [
   --base-url(-b): string@base-url-completer # API base URL

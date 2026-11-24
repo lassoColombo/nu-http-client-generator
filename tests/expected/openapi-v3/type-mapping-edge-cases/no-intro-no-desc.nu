@@ -432,6 +432,7 @@ def kind-completer [] { ["large" "medium" "small"] }
 
 # GET /token
 #
+# Returns: string
 # operationId: getToken
 export def "get-token" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -443,7 +444,7 @@ export def "get-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<string, record, nothing> {
+]: nothing -> any {
   http-request {
     method: get
     path: "/token"
@@ -457,6 +458,7 @@ export def "get-token" [
 
 # POST /tags
 #
+# Returns: table<street: string, city: string, zip: string>
 # operationId: createTags
 export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,7 +473,7 @@ export def "create-tags" [
   --names: list<string>
   --weights: list<int>
   --addresses: list
-]: any -> oneof<table<street: string, city: string, zip: string>, string, record, nothing> {
+]: any -> oneof<list<any>, record, string, nothing> {
   $in | http-request {
     method: post
     path: "/tags"
@@ -487,6 +489,7 @@ export def "create-tags" [
 
 # POST /widgets
 #
+# Returns: record
 # operationId: createWidget
 export def "create-widget" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,6 +524,7 @@ export def "create-widget" [
 
 # GET /profiles
 #
+# Returns: record<name: string, street: string, city: string, zip: string>
 # operationId: getProfile
 export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,7 +536,7 @@ export def "get-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<name: string, street: string, city: string, zip: string>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/profiles"
@@ -546,6 +550,7 @@ export def "get-profile" [
 
 # GET /events
 #
+# Returns: record<created-at: string, created_at: string, "@odata.type": string, "9lives": int, "it's": bool>
 # operationId: getEvent
 export def "get-event" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -557,7 +562,7 @@ export def "get-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> oneof<record<created-at: string, created_at: string, "@odata.type": string, "9lives": int, "it's": bool>, string, nothing> {
+]: nothing -> oneof<record, string, nothing> {
   http-request {
     method: get
     path: "/events"
